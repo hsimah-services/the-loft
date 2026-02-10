@@ -1,0 +1,41 @@
+services:
+  vpn:
+    image: ghcr.io/bubuntux/nordvpn
+    container_name: transmission-vpn
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      - TOKEN=e9f2abc07bb171936c2ae731ad48b890355431956a037a7382a886d75eaddc03
+      - CONNECT=NETHERLANDS
+      - TECHNOLOGY=NordLynx
+      - NETWORK=192.168.86.0/24
+    ports:
+      - 9091:9091
+      - 8080:8080
+      - 51413:51413
+      - 51413:51413/udp
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+    restart: unless-stopped
+  transmission:
+    image: lscr.io/linuxserver/transmission:latest
+    container_name: transmission
+    environment:
+      - PUID=1003
+      - PGID=988
+      - TZ=Etc/UTC
+      - TRANSMISSION_WEB_HOME=
+      - USER=
+      - PASS=
+      - WHITELIST=
+      - PEERPORT=
+      - HOST_WHITELIST=
+    volumes:
+      - /opt/transmission:/config
+      - /mammoth/downloads/transmission:/downloads
+      - /mammoth/transmission/torrents:/watch
+    restart: unless-stopped
+    network_mode: service:vpn
+    depends_on:
+      - vpn
