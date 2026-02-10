@@ -1,0 +1,21 @@
+services:
+  plex:
+    container_name: plex
+    image: plexinc/pms-docker:latest
+    restart: unless-stopped
+    environment:
+      - PLEX_UID=1003
+      - PLEX_GID=988
+      - TZ=America/Los_Angeles
+      - PLEX_CLAIM=${PLEX_CLAIM}
+    network_mode: host
+    volumes:
+      - /opt/plex/config:/config
+      - /mammoth/plex/transcode:/transcode
+      - /mammoth/library/movies:/data/Movies
+      - /mammoth/library/tv:/data/TV
+      - /mammoth/library/music:/data/Music
+      - /mammoth/library/videos:/data/Videos
+      - /mammoth/library/stand-up:/data/Stand Up
+    devices:
+      - /dev/dri:/dev/dri

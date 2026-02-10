@@ -1,0 +1,16 @@
+services:
+  lidarr:
+    image: lscr.io/linuxserver/lidarr:latest
+    container_name: lidarr
+    environment:
+      - PUID=1003
+      - PGID=1003
+      - TZ=America/Los_Angeles
+    volumes:
+      - /opt/lidarr:/config
+      - /mammoth/library/music:/music
+      - /mammoth/downloads/transmission:/downloads
+    ports:
+      - 8686:8686
+    restart: unless-stopped
+    network_mode: host

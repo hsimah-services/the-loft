@@ -6,7 +6,7 @@ services:
       - NET_ADMIN
       - NET_RAW
     environment:
-      - TOKEN=e9f2abc07bb171936c2ae731ad48b890355431956a037a7382a886d75eaddc03
+      - TOKEN=${TRANSMISSION_VPN_TOKEN}
       - CONNECT=NETHERLANDS
       - TECHNOLOGY=NordLynx
       - NETWORK=192.168.86.0/24
