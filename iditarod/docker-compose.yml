@@ -1,20 +1,15 @@
 services:
   runner:
-    image: myoung34/github-runner:latest
+    build: .
     restart: unless-stopped
     environment:
-      RUNNER_SCOPE: "repo"
-      RUNNER_NAME: "iditarod"
-      REPO_URL: "${REPO_URL}"
       ACCESS_TOKEN: "${ACCESS_TOKEN}"
-      RUNNER_WORKDIR: "/tmp/runner/work"
-      LABELS: "self-hosted,linux,x64"
-      DISABLE_AUTO_UPDATE: "true"
+      REPO_URL: "${REPO_URL}"
+      RUNNER_NAME: "${RUNNER_NAME:-iditarod}"
+      RUNNER_LABELS: "${RUNNER_LABELS:-self-hosted,linux,x64}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - runner-work:/tmp/runner/work
-    security_opt:
-      - label:disable
 
 volumes:
   runner-work:
