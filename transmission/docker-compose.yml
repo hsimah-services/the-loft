@@ -23,7 +23,7 @@ services:
     container_name: transmission
     environment:
       - PUID=1003
-      - PGID=988
+      - PGID=1003
       - TZ=Etc/UTC
       - TRANSMISSION_WEB_HOME=
       - USER=

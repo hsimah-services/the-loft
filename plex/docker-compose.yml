@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     environment:
       - PLEX_UID=1003
-      - PLEX_GID=988
+      - PLEX_GID=1003
       - TZ=America/Los_Angeles
       - PLEX_CLAIM=${PLEX_CLAIM}
     network_mode: host

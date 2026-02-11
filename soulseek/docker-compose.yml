@@ -27,8 +27,8 @@ services:
       - /mammoth/library/music:/data/Soulseek Shared Folder
       - /opt/soulseek/logs:/data/Soulseek Chat Logs
     environment:
+      - PUID=1003
       - PGID=1003
-      - PUID=988
     network_mode: service:vpn
     depends_on:
       - vpn
