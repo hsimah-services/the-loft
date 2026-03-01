@@ -161,6 +161,7 @@ CONFIG_DIRS=(
   /opt/soulseek/logs
   /opt/pupyrus/html
   /opt/pupyrus/db
+  /opt/iditarod
 )
 
 for dir in "${CONFIG_DIRS[@]}"; do

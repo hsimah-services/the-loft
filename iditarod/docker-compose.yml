@@ -1,0 +1,16 @@
+services:
+  iditarod:
+    build: .
+    container_name: iditarod
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/hsimah/projects/space-needle:/home/hsimah/projects/space-needle:ro
+      - /opt/pupyrus/html:/opt/pupyrus/html
+      - runner-work:/home/runner/actions-runner/_work
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+
+volumes:
+  runner-work:
