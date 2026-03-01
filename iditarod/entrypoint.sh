@@ -8,7 +8,7 @@ GITHUB_ACCESS_TOKEN="${GITHUB_ACCESS_TOKEN:?GITHUB_ACCESS_TOKEN is required}"
 RUNNER_NAME="${RUNNER_NAME:-space-needle}"
 RUNNER_LABELS="${RUNNER_LABELS:-space-needle,self-hosted,linux}"
 
-RUNNER_HOME="/home/runner/actions-runner"
+RUNNER_HOME="/home/runner"
 REPO_URL="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}"
 API_BASE="https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/actions/runners"
 
