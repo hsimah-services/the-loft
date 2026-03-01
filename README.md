@@ -16,6 +16,7 @@ Home server running media services, download clients, and WordPress in Docker.
 | Transmission | `linuxserver/transmission` | 9091 (via VPN) | `/opt/transmission` | Torrent client |
 | Soulseek | `realies/soulseek` | 6080 (via VPN) | `/opt/soulseek` | P2P music |
 | Pupyrus | `wordpress` + `mariadb` | 80 | `/opt/pupyrus` | WordPress site |
+| Iditarod | `actions/actions-runner` | — | `/opt/iditarod` | Self-hosted GitHub Actions runner |
 
 Transmission and Soulseek route through NordVPN (NordLynx) containers.
 
@@ -51,6 +52,7 @@ Transmission and Soulseek route through NordVPN (NordLynx) containers.
   /jackett                        Jackett configuration
   /transmission                   Transmission configuration
   /soulseek                       Soulseek configuration
+  /iditarod                       GitHub Actions runner workdir
   /config-tracking                Git-tracked config snapshots
 ```
 
@@ -102,6 +104,7 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Transmission | `TRANSMISSION_VPN_TOKEN` (NordVPN token) |
 | Soulseek | `SOULSEEK_TOKEN` (NordVPN token) |
 | Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `WORDPRESS_ADMIN_PASSWORD` |
+| Iditarod | `GITHUB_ORG`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS` |
 
 ## Config Tracking
 
