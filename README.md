@@ -1,6 +1,6 @@
 # space-needle
 
-Home server running media services, download clients, and a CI runner in Docker.
+Home server running media services, download clients, and WordPress in Docker.
 
 ## Architecture
 
@@ -15,7 +15,7 @@ Home server running media services, download clients, and a CI runner in Docker.
 | Jackett | `linuxserver/jackett` | 9117 | `/opt/jackett` | Indexer proxy |
 | Transmission | `linuxserver/transmission` | 9091 (via VPN) | `/opt/transmission` | Torrent client |
 | Soulseek | `realies/soulseek` | 6080 (via VPN) | `/opt/soulseek` | P2P music |
-| Iditarod | custom (actions-runner) | none | volume | GitHub Actions runner |
+| Pupyrus | `wordpress` + `mariadb` | 80 | `/opt/pupyrus` | WordPress site |
 
 Transmission and Soulseek route through NordVPN (NordLynx) containers.
 
@@ -77,7 +77,7 @@ cd /home/hsimah/projects/space-needle
 cp plex/.env.example plex/.env
 cp transmission/.env.example transmission/.env
 cp soulseek/.env.example soulseek/.env
-cp iditarod/.env.example iditarod/.env
+cp pupyrus/.env.example pupyrus/.env
 
 # Edit each .env file with real values
 # Then run setup as root:
@@ -101,7 +101,7 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Plex | `PLEX_CLAIM` (one-time claim token) |
 | Transmission | `TRANSMISSION_VPN_TOKEN` (NordVPN token) |
 | Soulseek | `SOULSEEK_TOKEN` (NordVPN token) |
-| Iditarod | `ACCESS_TOKEN` (GitHub PAT), `REPO_URL` |
+| Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `WORDPRESS_ADMIN_PASSWORD` |
 
 ## Config Tracking
 

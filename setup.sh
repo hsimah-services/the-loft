@@ -159,6 +159,8 @@ CONFIG_DIRS=(
   /opt/transmission
   /opt/soulseek
   /opt/soulseek/logs
+  /opt/pupyrus/html
+  /opt/pupyrus/db
 )
 
 for dir in "${CONFIG_DIRS[@]}"; do
@@ -223,7 +225,7 @@ usermod -aG docker adminhabl 2>/dev/null || true
 # ─── 11. Deploy services ─────────────────────────────────────────────────────
 info "Deploying services..."
 
-SERVICES=(plex radarr sonarr lidarr jackett transmission soulseek iditarod)
+SERVICES=(plex radarr sonarr lidarr jackett transmission soulseek pupyrus iditarod)
 
 for service in "${SERVICES[@]}"; do
   compose_file="${REPO_DIR}/${service}/docker-compose.yml"
@@ -242,6 +244,27 @@ for service in "${SERVICES[@]}"; do
   info "Starting ${service}..."
   docker compose -f "$compose_file" up -d
 done
+
+# ─── 11a. WordPress setup ───────────────────────────────────────────────────
+if docker ps --format '{{.Names}}' | grep -q '^pupyrus$'; then
+  info "Configuring WordPress..."
+  compose_file="${REPO_DIR}/pupyrus/docker-compose.yml"
+  source "${REPO_DIR}/pupyrus/.env"
+
+  if docker compose -f "$compose_file" --profile cli run --rm cli wp core is-installed 2>/dev/null; then
+    info "WordPress already installed"
+  else
+    info "Installing WordPress..."
+    docker compose -f "$compose_file" --profile cli run --rm cli \
+      wp core install \
+        --url="http://localhost" \
+        --title="Pupyrus" \
+        --admin_user="adminhabl" \
+        --admin_password="${WORDPRESS_ADMIN_PASSWORD}" \
+        --admin_email="hamishblake+papyrus@gmail.com"
+    info "WordPress installed"
+  fi
+fi
 
 # ─── 12. Config tracking ─────────────────────────────────────────────────────
 info "Setting up config tracking..."
