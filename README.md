@@ -101,7 +101,7 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Plex | `PLEX_CLAIM` (one-time claim token) |
 | Transmission | `TRANSMISSION_VPN_TOKEN` (NordVPN token) |
 | Soulseek | `SOULSEEK_TOKEN` (NordVPN token) |
-| Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD` |
+| Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `WORDPRESS_ADMIN_PASSWORD` |
 
 ## Config Tracking
 

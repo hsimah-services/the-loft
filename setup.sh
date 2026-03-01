@@ -245,6 +245,27 @@ for service in "${SERVICES[@]}"; do
   docker compose -f "$compose_file" up -d
 done
 
+# ─── 11a. WordPress setup ───────────────────────────────────────────────────
+if docker ps --format '{{.Names}}' | grep -q '^pupyrus$'; then
+  info "Configuring WordPress..."
+  compose_file="${REPO_DIR}/pupyrus/docker-compose.yml"
+  source "${REPO_DIR}/pupyrus/.env"
+
+  if docker compose -f "$compose_file" --profile cli run --rm cli wp core is-installed 2>/dev/null; then
+    info "WordPress already installed"
+  else
+    info "Installing WordPress..."
+    docker compose -f "$compose_file" --profile cli run --rm cli \
+      wp core install \
+        --url="http://localhost" \
+        --title="Pupyrus" \
+        --admin_user="adminhabl" \
+        --admin_password="${WORDPRESS_ADMIN_PASSWORD}" \
+        --admin_email="hamishblake+papyrus@gmail.com"
+    info "WordPress installed"
+  fi
+fi
+
 # ─── 12. Config tracking ─────────────────────────────────────────────────────
 info "Setting up config tracking..."
 

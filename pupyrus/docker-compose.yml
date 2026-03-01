@@ -10,6 +10,11 @@ services:
     volumes:
       - /opt/pupyrus/db:/var/lib/mysql
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   wordpress:
     image: wordpress:latest
@@ -26,3 +31,18 @@ services:
     restart: unless-stopped
     depends_on:
       - db
+
+  cli:
+    image: wordpress:cli
+    environment:
+      - WORDPRESS_DB_HOST=db
+      - WORDPRESS_DB_USER=${MYSQL_USER}
+      - WORDPRESS_DB_PASSWORD=${MYSQL_PASSWORD}
+      - WORDPRESS_DB_NAME=${MYSQL_DATABASE}
+    volumes:
+      - /opt/pupyrus/html:/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles:
+      - cli
