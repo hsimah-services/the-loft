@@ -4,7 +4,7 @@
 set -euo pipefail
 
 TRACKING_DIR="/opt/config-tracking"
-SERVICES=(plex radarr sonarr lidarr jackett transmission soulseek)
+SERVICES=(plex radarr sonarr lidarr jackett transmission soulseek pupyrus)
 
 RSYNC_EXCLUDES=(
   --exclude='*.db'
@@ -19,6 +19,11 @@ RSYNC_EXCLUDES=(
   --exclude='*.pid'
   --exclude='*.lock'
   --exclude='*.log'
+  --exclude='ib_logfile*'
+  --exclude='ibdata*'
+  --exclude='undo_*'
+  --exclude='aria_log*'
+  --exclude='mysql/'
 )
 
 # Max file size to track (1MB)

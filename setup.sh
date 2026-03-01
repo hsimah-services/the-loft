@@ -159,6 +159,8 @@ CONFIG_DIRS=(
   /opt/transmission
   /opt/soulseek
   /opt/soulseek/logs
+  /opt/pupyrus/html
+  /opt/pupyrus/db
 )
 
 for dir in "${CONFIG_DIRS[@]}"; do
@@ -223,7 +225,7 @@ usermod -aG docker adminhabl 2>/dev/null || true
 # ─── 11. Deploy services ─────────────────────────────────────────────────────
 info "Deploying services..."
 
-SERVICES=(plex radarr sonarr lidarr jackett transmission soulseek iditarod)
+SERVICES=(plex radarr sonarr lidarr jackett transmission soulseek pupyrus iditarod)
 
 for service in "${SERVICES[@]}"; do
   compose_file="${REPO_DIR}/${service}/docker-compose.yml"
