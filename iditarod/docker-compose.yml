@@ -6,7 +6,7 @@ services:
     env_file: .env
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /home/hsimah/projects/space-needle:/home/hsimah/projects/space-needle:ro
+      - /opt/pupyrus:/opt/pupyrus:ro
       - /opt/pupyrus/html:/opt/pupyrus/html
       - runner-work:/home/runner/actions-runner/_work
     environment:

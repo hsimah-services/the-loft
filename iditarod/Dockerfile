@@ -16,6 +16,9 @@ RUN apt-get update -qq \
     && apt-get install -y -qq docker-ce-cli docker-compose-plugin > /dev/null \
     && rm -rf /var/lib/apt/lists/*
 
+# Match host docker group GID so runner can use the mounted socket
+RUN groupmod -g 988 docker && usermod -aG docker runner
+
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
