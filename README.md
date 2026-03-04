@@ -54,7 +54,6 @@ Transmission and Soulseek share a single NordVPN (NordLynx) container (`media-vp
   /transmission                   Transmission configuration
   /soulseek                       Soulseek configuration
   /iditarod                       GitHub Actions runner workdir
-  /config-tracking                Git-tracked config snapshots
 ```
 
 All `/opt` config dirs are owned `littledog:pack-member` (755).
@@ -86,21 +85,24 @@ cp pupyrus/.env.example pupyrus/.env
 sudo bash setup.sh
 ```
 
-### Updating a service
+### Deploying changes
+
+Edit compose files on your laptop, push to GitHub, then SSH to the server:
 
 ```bash
-cd /home/hsimah/projects/space-needle/<service>
-docker compose pull
-docker compose up -d
+# Just pull latest config (no restart)
+./deploy.sh
+
+# Pull and restart a specific service group
+./deploy.sh media     # Transmission, Soulseek, Radarr, Sonarr, Lidarr, Jackett
+./deploy.sh plex
+./deploy.sh pupyrus
+./deploy.sh iditarod
 ```
 
-For media services (Transmission, Soulseek, Radarr, Sonarr, Lidarr, Jackett), use the `media` directory:
+The script uses `git pull --ff-only` so it fails cleanly if the local branch has diverged.
 
-```bash
-cd /home/hsimah/projects/space-needle/media
-docker compose pull
-docker compose up -d
-```
+A CI workflow validates all `docker-compose.yml` files on every push.
 
 ## Environment Files
 
@@ -113,20 +115,3 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `WORDPRESS_ADMIN_PASSWORD` |
 | Iditarod | `GITHUB_ORG`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS` |
 
-## Config Tracking
-
-A systemd timer runs every 6 hours, rsyncing small config files from `/opt/<service>/` into `/opt/config-tracking/<service>/` and committing changes. Databases, caches, logs, and files over 1MB are excluded.
-
-### Manual trigger
-
-```bash
-sudo systemctl start config-tracker.service
-```
-
-### Viewing history
-
-```bash
-cd /opt/config-tracking
-git log --oneline
-git diff HEAD~1
-```

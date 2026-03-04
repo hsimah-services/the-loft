@@ -267,33 +267,7 @@ if docker ps --format '{{.Names}}' | grep -q '^pupyrus$'; then
   fi
 fi
 
-# ─── 12. Config tracking ─────────────────────────────────────────────────────
-info "Setting up config tracking..."
-
-TRACKING_DIR="/opt/config-tracking"
-mkdir -p "$TRACKING_DIR"
-
-# Init git repo if needed
-if [[ ! -d "${TRACKING_DIR}/.git" ]]; then
-  git -C "$TRACKING_DIR" init
-  info "Initialized config tracking repo"
-fi
-
-# Install gitignore
-cp "${REPO_DIR}/config-tracking/.gitignore-configs" "${TRACKING_DIR}/.gitignore"
-
-# Install tracker script
-cp "${REPO_DIR}/config-tracking/config-tracker.sh" "${TRACKING_DIR}/config-tracker.sh"
-chmod +x "${TRACKING_DIR}/config-tracker.sh"
-
-# Install systemd units
-cp "${REPO_DIR}/config-tracking/config-tracker.service" /etc/systemd/system/
-cp "${REPO_DIR}/config-tracking/config-tracker.timer" /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now config-tracker.timer
-info "Config tracking timer enabled"
-
-# ─── 13. Verification summary ────────────────────────────────────────────────
+# ─── 12. Verification summary ─────────────────────────────────────────────────
 echo ""
 echo "============================================"
 echo "  space-needle setup complete"
@@ -324,10 +298,6 @@ fi
 echo ""
 info "Docker containers:"
 docker ps --format "  {{.Names}}: {{.Status}}" 2>/dev/null || warn "  Could not list containers"
-
-echo ""
-info "Config tracker timer:"
-systemctl status config-tracker.timer --no-pager 2>/dev/null | head -5 || warn "  Timer not found"
 
 echo ""
 info "Done. Remember to:"

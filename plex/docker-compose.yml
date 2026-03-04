@@ -4,9 +4,9 @@ services:
     image: plexinc/pms-docker:latest
     restart: unless-stopped
     environment:
-      - PLEX_UID=1003
-      - PLEX_GID=1003
-      - TZ=America/Los_Angeles
+      - PLEX_UID=${PUID}
+      - PLEX_GID=${PGID}
+      - TZ=${TZ}
       - PLEX_CLAIM=${PLEX_CLAIM}
     network_mode: host
     volumes:

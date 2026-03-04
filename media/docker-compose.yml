@@ -28,9 +28,9 @@ services:
     image: lscr.io/linuxserver/transmission:latest
     container_name: transmission
     environment:
-      - PUID=1003
-      - PGID=1003
-      - TZ=America/Los_Angeles
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
     volumes:
       - /opt/transmission:/config
       - /mammoth/downloads/transmission:/downloads
@@ -43,8 +43,8 @@ services:
     image: realies/soulseek
     container_name: soulseek
     environment:
-      - PUID=1003
-      - PGID=1003
+      - PUID=${PUID}
+      - PGID=${PGID}
     volumes:
       - /opt/soulseek:/data/.SoulseekQt
       - /mammoth/downloads/soulseek:/data/Soulseek Downloads
@@ -59,9 +59,9 @@ services:
     image: lscr.io/linuxserver/radarr:latest
     container_name: radarr
     environment:
-      - PUID=1003
-      - PGID=1003
-      - TZ=America/Los_Angeles
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
     volumes:
       - /opt/radarr:/config
       - /mammoth/library/movies:/movies
@@ -73,9 +73,9 @@ services:
     image: lscr.io/linuxserver/sonarr:latest
     container_name: sonarr
     environment:
-      - PUID=1003
-      - PGID=1003
-      - TZ=America/Los_Angeles
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
     volumes:
       - /opt/sonarr:/config
       - /mammoth/library/tv:/tv
@@ -87,9 +87,9 @@ services:
     image: lscr.io/linuxserver/lidarr:latest
     container_name: lidarr
     environment:
-      - PUID=1003
-      - PGID=1003
-      - TZ=America/Los_Angeles
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
     volumes:
       - /opt/lidarr:/config
       - /mammoth/library/music:/music
@@ -101,9 +101,9 @@ services:
     image: lscr.io/linuxserver/jackett:latest
     container_name: jackett
     environment:
-      - PUID=1003
-      - PGID=1003
-      - TZ=America/Los_Angeles
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
       - AUTO_UPDATE=true
     volumes:
       - /opt/jackett:/config
