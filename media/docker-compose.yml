@@ -13,7 +13,7 @@ services:
     ports:
       # Transmission
       - 9091:9091
-      - 8080:8080
+      # - 8080:8080  # unknown — uncomment if needed
       - 51413:51413
       - 51413:51413/udp
       # Soulseek
@@ -30,11 +30,10 @@ services:
     environment:
       - PUID=1003
       - PGID=1003
-      - TZ=Etc/UTC
+      - TZ=America/Los_Angeles
     volumes:
       - /opt/transmission:/config
       - /mammoth/downloads/transmission:/downloads
-      - /mammoth/transmission/torrents:/watch
     restart: unless-stopped
     network_mode: service:vpn
     depends_on:
