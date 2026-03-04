@@ -9,16 +9,17 @@ Home server running media services, download clients, and WordPress in Docker.
 | Service | Image | Ports | Config | Purpose |
 |---------|-------|-------|--------|---------|
 | Plex | `plexinc/pms-docker` | host network | `/opt/plex/config` | Media server |
+| Media VPN | `bubuntux/nordvpn` | 9091, 6080 | — | Shared NordLynx VPN for Transmission + Soulseek |
+| Transmission | `linuxserver/transmission` | 9091 (via VPN) | `/opt/transmission` | Torrent client |
+| Soulseek | `realies/soulseek` | 6080 (via VPN) | `/opt/soulseek` | P2P music |
 | Radarr | `linuxserver/radarr` | 7878 (host) | `/opt/radarr` | Movie management |
 | Sonarr | `linuxserver/sonarr` | 8989 (host) | `/opt/sonarr` | TV management |
 | Lidarr | `linuxserver/lidarr` | 8686 (host) | `/opt/lidarr` | Music management |
 | Jackett | `linuxserver/jackett` | 9117 | `/opt/jackett` | Indexer proxy |
-| Transmission | `linuxserver/transmission` | 9091 (via VPN) | `/opt/transmission` | Torrent client |
-| Soulseek | `realies/soulseek` | 6080 (via VPN) | `/opt/soulseek` | P2P music |
 | Pupyrus | `wordpress` + `mariadb` | 80 | `/opt/pupyrus` | WordPress site |
 | Iditarod | `actions/actions-runner` | — | `/opt/iditarod` | Self-hosted GitHub Actions runner |
 
-Transmission and Soulseek route through NordVPN (NordLynx) containers.
+Transmission and Soulseek share a single NordVPN (NordLynx) container (`media-vpn`) and are managed together in `media/docker-compose.yml` along with Radarr, Sonarr, Lidarr, and Jackett.
 
 ### Users & Groups
 
@@ -77,8 +78,7 @@ cd /home/hsimah/projects/space-needle
 
 # Copy .env.example files and fill in secrets
 cp plex/.env.example plex/.env
-cp transmission/.env.example transmission/.env
-cp soulseek/.env.example soulseek/.env
+cp media/.env.example media/.env
 cp pupyrus/.env.example pupyrus/.env
 
 # Edit each .env file with real values
@@ -94,6 +94,14 @@ docker compose pull
 docker compose up -d
 ```
 
+For media services (Transmission, Soulseek, Radarr, Sonarr, Lidarr, Jackett), use the `media` directory:
+
+```bash
+cd /home/hsimah/projects/space-needle/media
+docker compose pull
+docker compose up -d
+```
+
 ## Environment Files
 
 Each service that needs secrets has a `.env.example` template. Copy it to `.env` and fill in real values. The `.env` files are gitignored.
@@ -101,8 +109,7 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Service | Required Variables |
 |---------|--------------------|
 | Plex | `PLEX_CLAIM` (one-time claim token) |
-| Transmission | `TRANSMISSION_VPN_TOKEN` (NordVPN token) |
-| Soulseek | `SOULSEEK_TOKEN` (NordVPN token) |
+| Media | `NORDVPN_TOKEN` (NordVPN token for shared VPN) |
 | Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `WORDPRESS_ADMIN_PASSWORD` |
 | Iditarod | `GITHUB_ORG`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS` |
 
