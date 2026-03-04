@@ -226,7 +226,7 @@ usermod -aG docker adminhabl 2>/dev/null || true
 # ─── 11. Deploy services ─────────────────────────────────────────────────────
 info "Deploying services..."
 
-SERVICES=(plex radarr sonarr lidarr jackett transmission soulseek pupyrus iditarod)
+SERVICES=(plex media pupyrus iditarod)
 
 for service in "${SERVICES[@]}"; do
   compose_file="${REPO_DIR}/${service}/docker-compose.yml"
