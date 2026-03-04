@@ -1,0 +1,21 @@
+name: Validate
+on: push
+
+jobs:
+  validate-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create placeholder .env files
+        run: |
+          for f in $(find . -name '.env.example'); do
+            cp "$f" "${f%.example}"
+          done
+
+      - name: Validate docker-compose files
+        run: |
+          for f in $(find . -name 'docker-compose.yml'); do
+            echo "Validating $f..."
+            docker compose -f "$f" config --quiet
+          done
