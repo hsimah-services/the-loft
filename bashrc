@@ -72,7 +72,10 @@ if ! shopt -oq posix; then
   fi
 fi
 
+# ── Repo root (resolved at source time) ───────────────────────────────────────
+__REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # ── Aliases ────────────────────────────────────────────────────────────────────
-alias space-needle-ctl='/srv/space-needle/space-needle-ctl'
-alias nano='nano --rcfile=/srv/space-needle/nanorc'
+alias space-needle-ctl="${__REPO_DIR}/space-needle-ctl"
+alias nano="nano --rcfile=${__REPO_DIR}/nanorc"
 alias adminhabl='su - adminhabl'
