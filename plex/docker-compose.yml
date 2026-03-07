@@ -3,6 +3,11 @@ services:
     container_name: plex
     image: plexinc/pms-docker:latest
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
     environment:
       - PLEX_UID=${PUID}
       - PLEX_GID=${PGID}

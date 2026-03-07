@@ -3,6 +3,11 @@ services:
     build: .
     container_name: iditarod
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
     env_file: .env
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
