@@ -1,6 +1,12 @@
 # space-needle shared bashrc — sourced by hsimah and adminhabl
 # Source from ~/.bashrc:  source /srv/space-needle/bashrc
 
+# If not running interactively, don't do anything
+case $- in
+    *i*) ;;
+      *) return;;
+esac
+
 # ── Colors ─────────────────────────────────────────────────────────────────────
 export CLICOLOR=1
 export LS_COLORS='di=1;34:ln=1;36:so=1;35:pi=33:ex=1;32:bd=1;33:cd=1;33:su=1;31:sg=1;31:tw=1;34:ow=1;34'
@@ -57,8 +63,15 @@ shopt -s checkwinsize
 shopt -s cdspell
 shopt -s dirspell 2>/dev/null
 
-# ── Aliases ────────────────────────────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "${SCRIPT_DIR}/bash_aliases" ]]; then
-  source "${SCRIPT_DIR}/bash_aliases"
+# ── Bash completion ──────────────────────────────────────────────────────────
+if ! shopt -oq posix; then
+  if [[ -f /usr/share/bash-completion/bash_completion ]]; then
+    source /usr/share/bash-completion/bash_completion
+  elif [[ -f /etc/bash_completion ]]; then
+    source /etc/bash_completion
+  fi
 fi
+
+# ── Aliases ────────────────────────────────────────────────────────────────────
+alias space-needle-ctl='/srv/space-needle/space-needle-ctl'
+alias adminhabl='su - adminhabl'

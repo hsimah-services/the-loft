@@ -16,6 +16,7 @@ usage() {
   echo "Commands:"
   echo "  --all              Deploy all services in sequence"
   echo "  --health [service] Run health checks (all services, or one)"
+  echo "  --update           Pull latest config from git"
   echo "  <service>          Deploy a single service"
   echo ""
   echo "Services: ${SERVICES[*]}"
@@ -207,6 +208,12 @@ case "$1" in
       echo "${overall} service(s) had check failures."
       exit 1
     fi
+    ;;
+  --update)
+    echo "Updating space-needle..."
+    git -C "$REPO_DIR" checkout main
+    git -C "$REPO_DIR" pull --ff-only
+    echo "Updated to $(git -C "$REPO_DIR" rev-parse --short HEAD)."
     ;;
   -h|--help)
     usage

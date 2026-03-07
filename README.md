@@ -118,27 +118,30 @@ Edit compose files on your laptop, push to GitHub, then SSH to the server:
 
 ```bash
 # Show usage
-./space-needle
+./space-needle-ctl
 
 # Deploy all services in sequence with health checks
-./space-needle --all
+./space-needle-ctl --all
 
 # Deploy a single service with health checks
-./space-needle media     # Transmission, Soulseek, Radarr, Sonarr, Lidarr, Jackett
-./space-needle plex
-./space-needle pupyrus
-./space-needle iditarod
+./space-needle-ctl media     # Transmission, Soulseek, Radarr, Sonarr, Lidarr, Jackett
+./space-needle-ctl plex
+./space-needle-ctl pupyrus
+./space-needle-ctl iditarod
 
 # Run health checks without deploying
-./space-needle --health          # all services
-./space-needle --health plex     # single service
+./space-needle-ctl --health          # all services
+./space-needle-ctl --health plex     # single service
+
+# Pull latest config from git
+./space-needle-ctl --update
 ```
 
 After each deploy, the script verifies:
 1. **Container check** — all containers in the compose file are "running" (retries for up to 30s)
 2. **Web UI check** — HTTP endpoints respond (Plex `:32400`, Radarr `:7878`, Sonarr `:8989`, Lidarr `:8686`, Jackett `:9117`, WordPress `:80`). VPN-dependent services (Transmission `:9091`, Soulseek `:6080`) are checked but failures are treated as warnings.
 
-The `--health` flag runs the same checks without pulling or restarting containers.
+`--health` runs checks without pulling or restarting. `--update` checks out `main` and does a fast-forward pull.
 
 A CI workflow validates all `docker-compose.yml` files on every push.
 
