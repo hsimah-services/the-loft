@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# space-needle — deploy services and run health checks
+# space-needle-ctl — manage space-needle services
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -14,17 +14,43 @@ usage() {
   echo "Usage: $0 <command> [<service>]"
   echo ""
   echo "Commands:"
-  echo "  --all              Deploy all services in sequence"
-  echo "  --health [service] Run health checks (all services, or one)"
-  echo "  --update           Pull latest config from git"
-  echo "  <service>          Deploy a single service"
+  echo "  --deploy <service|--all>  Pull images and restart (with health checks)"
+  echo "  --start  <service|--all>  Start containers"
+  echo "  --stop   <service|--all>  Stop containers"
+  echo "  --health [service]        Run health checks (all services, or one)"
+  echo "  --update                  Pull latest config from git"
   echo ""
   echo "Services: ${SERVICES[*]}"
   exit 0
 }
 
+# ── Resolve compose file ──────────────────────────────────────────────────────
+compose_file_for() {
+  local service="$1"
+  local compose_file="${REPO_DIR}/${service}/docker-compose.yml"
+  if [[ ! -f "$compose_file" ]]; then
+    echo "ERROR: No docker-compose.yml found for '${service}'" >&2
+    return 1
+  fi
+  echo "$compose_file"
+}
+
+# ── Resolve target services ───────────────────────────────────────────────────
+# Returns SERVICES array if --all, or the single named service.
+resolve_targets() {
+  local arg="${1:-}"
+  if [[ -z "$arg" ]]; then
+    echo "ERROR: Missing <service|--all> argument." >&2
+    usage
+  fi
+  if [[ "$arg" == "--all" ]]; then
+    echo "${SERVICES[@]}"
+  else
+    echo "$arg"
+  fi
+}
+
 # ── Container health check ─────────────────────────────────────────────────────
-# Wait until all containers in the compose file report "running".
 check_containers() {
   local compose_file="$1"
   local service="$2"
@@ -32,7 +58,6 @@ check_containers() {
 
   echo "  Checking containers for ${service}..."
   while (( elapsed < HC_TIMEOUT )); do
-    # Get container states; filter out empty lines
     local states
     states=$(docker compose -f "$compose_file" ps --format '{{.State}}' 2>/dev/null | grep -v '^$' || true)
 
@@ -42,7 +67,6 @@ check_containers() {
       continue
     fi
 
-    # Check if every container is "running"
     local all_running=true
     while IFS= read -r state; do
       if [[ "$state" != "running" ]]; then
@@ -66,7 +90,6 @@ check_containers() {
 }
 
 # ── Web UI health check ────────────────────────────────────────────────────────
-# curl a URL and check for any HTTP response.
 check_url() {
   local url="$1"
   local label="$2"
@@ -104,7 +127,6 @@ check_web_ui() {
       check_url "http://localhost:8989" "Sonarr" || (( failed++ ))
       check_url "http://localhost:8686" "Lidarr" || (( failed++ ))
       check_url "http://localhost:9117" "Jackett" || (( failed++ ))
-      # VPN-dependent services — warn only
       check_url "http://localhost:9091" "Transmission" true
       check_url "http://localhost:6080" "Soulseek" true
       ;;
@@ -113,22 +135,17 @@ check_web_ui() {
       check_url "http://localhost:80" "WordPress" || (( failed++ ))
       ;;
     iditarod)
-      # No web UI
       ;;
   esac
 
   return "$failed"
 }
 
-# ── Health check a single service (no deploy) ─────────────────────────────────
+# ── Health check (no deploy) ──────────────────────────────────────────────────
 health_check_service() {
   local service="$1"
-  local compose_file="${REPO_DIR}/${service}/docker-compose.yml"
-
-  if [[ ! -f "$compose_file" ]]; then
-    echo "ERROR: No docker-compose.yml found for '${service}'"
-    return 1
-  fi
+  local compose_file
+  compose_file=$(compose_file_for "$service") || return 1
 
   echo "Health check: ${service}"
   local exit_code=0
@@ -144,15 +161,11 @@ health_check_service() {
   return "$exit_code"
 }
 
-# ── Deploy a single service ────────────────────────────────────────────────────
+# ── Deploy (pull + up + health check) ─────────────────────────────────────────
 deploy_service() {
   local service="$1"
-  local compose_file="${REPO_DIR}/${service}/docker-compose.yml"
-
-  if [[ ! -f "$compose_file" ]]; then
-    echo "ERROR: No docker-compose.yml found for '${service}'"
-    return 1
-  fi
+  local compose_file
+  compose_file=$(compose_file_for "$service") || return 1
 
   echo "Deploying ${service}..."
   docker compose -f "$compose_file" pull
@@ -171,25 +184,61 @@ deploy_service() {
   return "$exit_code"
 }
 
+# ── Start containers ──────────────────────────────────────────────────────────
+start_service() {
+  local service="$1"
+  local compose_file
+  compose_file=$(compose_file_for "$service") || return 1
+
+  echo "Starting ${service}..."
+  docker compose -f "$compose_file" up -d
+  echo "Started ${service}."
+  echo ""
+}
+
+# ── Stop containers ───────────────────────────────────────────────────────────
+stop_service() {
+  local service="$1"
+  local compose_file
+  compose_file=$(compose_file_for "$service") || return 1
+
+  echo "Stopping ${service}..."
+  docker compose -f "$compose_file" down
+  echo "Stopped ${service}."
+  echo ""
+}
+
+# ── Run a command across targets ──────────────────────────────────────────────
+run_for_targets() {
+  local cmd="$1"
+  shift
+  local targets
+  read -ra targets <<< "$(resolve_targets "${1:-}")"
+
+  local overall=0
+  for svc in "${targets[@]}"; do
+    "$cmd" "$svc" || (( overall++ ))
+  done
+  return "$overall"
+}
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 if [[ $# -eq 0 ]]; then
   usage
 fi
 
 case "$1" in
-  --all)
-    echo "Deploying all services: ${SERVICES[*]}"
-    echo ""
-    overall=0
-    for svc in "${SERVICES[@]}"; do
-      deploy_service "$svc" || (( overall++ ))
-    done
-    if (( overall == 0 )); then
-      echo "All services deployed successfully."
-    else
-      echo "${overall} service(s) had check failures."
+  --deploy)
+    run_for_targets deploy_service "${2:-}" || {
+      echo "Some deploys had check failures."
       exit 1
-    fi
+    }
+    ;;
+  --start)
+    run_for_targets start_service "${2:-}"
+    ;;
+  --stop)
+    run_for_targets stop_service "${2:-}"
     ;;
   --health)
     targets=("${SERVICES[@]}")
@@ -219,6 +268,7 @@ case "$1" in
     usage
     ;;
   *)
-    deploy_service "$1"
+    echo "Unknown command: $1"
+    usage
     ;;
 esac
