@@ -1,0 +1,21 @@
+# space-needle nanorc
+
+# Line numbers
+set linenumbers
+
+# Smooth scrolling
+set smooth
+
+# Show cursor position in status bar
+set constantshow
+
+# Use spaces instead of tabs
+set tabsize 2
+set tabstospaces
+
+# Enable mouse support
+set mouse
+
+# Syntax highlighting — include all available definitions
+include "/usr/share/nano/*.nanorc"
+include "/usr/share/nano/extra/*.nanorc"

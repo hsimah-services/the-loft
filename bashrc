@@ -74,4 +74,5 @@ fi
 
 # ── Aliases ────────────────────────────────────────────────────────────────────
 alias space-needle-ctl='/srv/space-needle/space-needle-ctl'
+alias nano='nano --rcfile=/srv/space-needle/nanorc'
 alias adminhabl='su - adminhabl'
