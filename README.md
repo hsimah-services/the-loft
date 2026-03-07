@@ -16,7 +16,7 @@ Home server running media services, download clients, and WordPress in Docker.
 | Sonarr | `linuxserver/sonarr` | 8989 (host) | `/opt/sonarr` | TV management |
 | Lidarr | `linuxserver/lidarr` | 8686 (host) | `/opt/lidarr` | Music management |
 | Jackett | `linuxserver/jackett` | 9117 | `/opt/jackett` | Indexer proxy |
-| Pupyrus | `wordpress` + `mariadb` | 80 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site |
+| Pupyrus | `wordpress` + `mariadb` + `redis` | 80 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
 | Iditarod | `actions/actions-runner` | — | `/opt/iditarod` | Self-hosted GitHub Actions runner |
 
 Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`media-vpn`). Radarr, Sonarr, and Lidarr use host networking. Jackett uses standard port mapping. All six are managed together in `media/docker-compose.yml`.
@@ -77,6 +77,7 @@ Docker log rotation is configured at two levels:
 | plex | 20m | 3 | Media scanning and transcoding |
 | db (mariadb) | 10m | 5 | Query logs can spike; longer retention |
 | wordpress | 5m | 3 | Relatively quiet |
+| redis | 5m | 3 | Low-volume object cache |
 | cli | 1m | 2 | Only runs occasionally |
 | iditarod | 5m | 3 | CI runner — logs mostly during builds |
 | radarr/sonarr/lidarr | 5m | 3 | Moderate media management logging |
@@ -138,6 +139,6 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 |---------|--------------------|
 | Plex | `PLEX_CLAIM` (one-time claim token), `PUID`, `PGID`, `TZ` |
 | Media | `NORDVPN_TOKEN` (NordVPN token for shared VPN), `PUID`, `PGID`, `TZ` |
-| Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `WORDPRESS_ADMIN_PASSWORD` |
+| Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `GRAPHQL_JWT_AUTH_SECRET_KEY` |
 | Iditarod | `GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS` |
 
