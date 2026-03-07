@@ -4,9 +4,6 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Pull latest
-git -C "$REPO_DIR" pull --ff-only
-
 # If no service specified, just pull
 if [[ $# -eq 0 ]]; then
   echo "Pulled latest. Usage: $0 <service> to also restart."
