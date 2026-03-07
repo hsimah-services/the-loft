@@ -3,7 +3,7 @@
 # Must be run as root on Debian/Ubuntu
 set -euo pipefail
 
-REPO_DIR="/home/hsimah/projects/space-needle"
+REPO_DIR="/srv/space-needle"
 
 # ─── Colors ───────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -180,7 +180,6 @@ MEDIA_DIRS=(
   /mammoth/downloads/transmission
   /mammoth/downloads/soulseek
   /mammoth/plex/transcode
-  /mammoth/transmission/torrents
 )
 
 for dir in "${MEDIA_DIRS[@]}"; do

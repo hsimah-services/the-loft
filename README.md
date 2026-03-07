@@ -16,10 +16,10 @@ Home server running media services, download clients, and WordPress in Docker.
 | Sonarr | `linuxserver/sonarr` | 8989 (host) | `/opt/sonarr` | TV management |
 | Lidarr | `linuxserver/lidarr` | 8686 (host) | `/opt/lidarr` | Music management |
 | Jackett | `linuxserver/jackett` | 9117 | `/opt/jackett` | Indexer proxy |
-| Pupyrus | `wordpress` + `mariadb` | 80 | `/opt/pupyrus` | WordPress site |
+| Pupyrus | `wordpress` + `mariadb` | 80 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site |
 | Iditarod | `actions/actions-runner` | — | `/opt/iditarod` | Self-hosted GitHub Actions runner |
 
-Transmission and Soulseek share a single NordVPN (NordLynx) container (`media-vpn`) and are managed together in `media/docker-compose.yml` along with Radarr, Sonarr, Lidarr, and Jackett.
+Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`media-vpn`). Radarr, Sonarr, and Lidarr use host networking. Jackett uses standard port mapping. All six are managed together in `media/docker-compose.yml`.
 
 ### Users & Groups
 
@@ -43,7 +43,6 @@ Transmission and Soulseek share a single NordVPN (NordLynx) container (`media-vp
     /transmission                 Transmission downloads
     /soulseek                     Soulseek downloads
   /plex/transcode                 Plex transcoding workspace
-  /transmission/torrents          Transmission watch directory
 
 /opt
   /plex/config                    Plex configuration
@@ -53,6 +52,9 @@ Transmission and Soulseek share a single NordVPN (NordLynx) container (`media-vp
   /jackett                        Jackett configuration
   /transmission                   Transmission configuration
   /soulseek                       Soulseek configuration
+  /soulseek/logs                  Soulseek chat logs
+  /pupyrus/html                   WordPress files
+  /pupyrus/db                     MariaDB data
   /iditarod                       GitHub Actions runner workdir
 ```
 
@@ -72,8 +74,8 @@ All `/mammoth` media dirs are owned `littledog:pack-member` (775).
 
 ```bash
 # Clone the repo
-git clone <repo-url> /home/hsimah/projects/space-needle
-cd /home/hsimah/projects/space-needle
+git clone <repo-url> /srv/space-needle
+cd /srv/space-needle
 
 # Copy .env.example files and fill in secrets
 cp plex/.env.example plex/.env
@@ -110,8 +112,8 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 
 | Service | Required Variables |
 |---------|--------------------|
-| Plex | `PLEX_CLAIM` (one-time claim token) |
-| Media | `NORDVPN_TOKEN` (NordVPN token for shared VPN) |
+| Plex | `PLEX_CLAIM` (one-time claim token), `PUID`, `PGID`, `TZ` |
+| Media | `NORDVPN_TOKEN` (NordVPN token for shared VPN), `PUID`, `PGID`, `TZ` |
 | Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `WORDPRESS_ADMIN_PASSWORD` |
-| Iditarod | `GITHUB_ORG`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS` |
+| Iditarod | `GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS` |
 
