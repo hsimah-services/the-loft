@@ -2,9 +2,11 @@
 
 # Line numbers
 set linenumbers
-
-# Smooth scrolling
-set smooth
+set numbercolor brightblack
+set titlecolor brightblack
+set statuscolor brightblack
+set keycolor brightblack
+set functioncolor brightblack
 
 # Show cursor position in status bar
 set constantshow
