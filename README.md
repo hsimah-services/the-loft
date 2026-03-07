@@ -61,6 +61,30 @@ Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`
 All `/opt` config dirs are owned `littledog:pack-member` (755).
 All `/mammoth` media dirs are owned `littledog:pack-member` (775).
 
+## Log Rotation
+
+Docker log rotation is configured at two levels:
+
+**Global default** (`daemon.json` installed to `/etc/docker/daemon.json`):
+- Driver: `json-file`, max-size: `10m`, max-file: `3` (30MB per container)
+
+**Per-service overrides** (in compose files):
+
+| Service | max-size | max-file | Reason |
+|---------|----------|----------|--------|
+| vpn | 20m | 5 | VPN reconnections and network events |
+| transmission | 20m | 3 | Transfer activity logging |
+| plex | 20m | 3 | Media scanning and transcoding |
+| db (mariadb) | 10m | 5 | Query logs can spike; longer retention |
+| wordpress | 5m | 3 | Relatively quiet |
+| cli | 1m | 2 | Only runs occasionally |
+| iditarod | 5m | 3 | CI runner — logs mostly during builds |
+| radarr/sonarr/lidarr | 5m | 3 | Moderate media management logging |
+| soulseek | 5m | 3 | Moderate logging |
+| jackett | 5m | 3 | Moderate logging |
+
+Worst-case total disk usage: ~500MB across all containers.
+
 ## Security Model
 
 - **SSH**: Only `hsimah` can SSH in (`AllowUsers hsimah` in sshd_config)

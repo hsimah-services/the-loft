@@ -5,6 +5,11 @@ services:
     cap_add:
       - NET_ADMIN
       - NET_RAW
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
     environment:
       - TOKEN=${NORDVPN_TOKEN}
       - CONNECT=NETHERLANDS
@@ -27,6 +32,11 @@ services:
   transmission:
     image: lscr.io/linuxserver/transmission:latest
     container_name: transmission
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
@@ -42,6 +52,11 @@ services:
   soulseek:
     image: realies/soulseek
     container_name: soulseek
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
@@ -58,6 +73,11 @@ services:
   radarr:
     image: lscr.io/linuxserver/radarr:latest
     container_name: radarr
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
@@ -72,6 +92,11 @@ services:
   sonarr:
     image: lscr.io/linuxserver/sonarr:latest
     container_name: sonarr
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
@@ -86,6 +111,11 @@ services:
   lidarr:
     image: lscr.io/linuxserver/lidarr:latest
     container_name: lidarr
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
@@ -100,6 +130,11 @@ services:
   jackett:
     image: lscr.io/linuxserver/jackett:latest
     container_name: jackett
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
     environment:
       - PUID=${PUID}
       - PGID=${PGID}

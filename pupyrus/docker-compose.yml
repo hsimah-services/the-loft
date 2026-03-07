@@ -2,6 +2,11 @@ services:
   db:
     image: mariadb:latest
     container_name: pupyrus-db
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     environment:
       - MARIADB_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - MARIADB_DATABASE=${MYSQL_DATABASE}
@@ -19,6 +24,11 @@ services:
   wordpress:
     image: wordpress:latest
     container_name: pupyrus
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
     environment:
       - WORDPRESS_DB_HOST=db
       - WORDPRESS_DB_USER=${MYSQL_USER}
@@ -34,6 +44,11 @@ services:
 
   cli:
     image: wordpress:cli
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "2"
     environment:
       - WORDPRESS_DB_HOST=db
       - WORDPRESS_DB_USER=${MYSQL_USER}

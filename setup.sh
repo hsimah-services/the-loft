@@ -222,6 +222,24 @@ fi
 usermod -aG docker littledog 2>/dev/null || true
 usermod -aG docker adminhabl 2>/dev/null || true
 
+# ─── 10a. Docker log rotation ────────────────────────────────────────────
+info "Configuring Docker log rotation..."
+
+DAEMON_JSON="/etc/docker/daemon.json"
+DAEMON_JSON_SRC="${REPO_DIR}/daemon.json"
+
+if [[ -f "$DAEMON_JSON_SRC" ]]; then
+  if [[ -f "$DAEMON_JSON" ]] && diff -q "$DAEMON_JSON" "$DAEMON_JSON_SRC" &>/dev/null; then
+    info "Docker daemon.json already up to date"
+  else
+    cp "$DAEMON_JSON_SRC" "$DAEMON_JSON"
+    info "Installed daemon.json, restarting Docker..."
+    systemctl restart docker
+  fi
+else
+  warn "daemon.json not found in repo, skipping log rotation config"
+fi
+
 # ─── 11. Deploy services ─────────────────────────────────────────────────────
 info "Deploying services..."
 
