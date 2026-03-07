@@ -117,17 +117,28 @@ sudo bash setup.sh
 Edit compose files on your laptop, push to GitHub, then SSH to the server:
 
 ```bash
-# Just pull latest config (no restart)
-./deploy.sh
+# Show usage
+./space-needle
 
-# Pull and restart a specific service group
-./deploy.sh media     # Transmission, Soulseek, Radarr, Sonarr, Lidarr, Jackett
-./deploy.sh plex
-./deploy.sh pupyrus
-./deploy.sh iditarod
+# Deploy all services in sequence with health checks
+./space-needle --all
+
+# Deploy a single service with health checks
+./space-needle media     # Transmission, Soulseek, Radarr, Sonarr, Lidarr, Jackett
+./space-needle plex
+./space-needle pupyrus
+./space-needle iditarod
+
+# Run health checks without deploying
+./space-needle --health          # all services
+./space-needle --health plex     # single service
 ```
 
-The script uses `git pull --ff-only` so it fails cleanly if the local branch has diverged.
+After each deploy, the script verifies:
+1. **Container check** — all containers in the compose file are "running" (retries for up to 30s)
+2. **Web UI check** — HTTP endpoints respond (Plex `:32400`, Radarr `:7878`, Sonarr `:8989`, Lidarr `:8686`, Jackett `:9117`, WordPress `:80`). VPN-dependent services (Transmission `:9091`, Soulseek `:6080`) are checked but failures are treated as warnings.
+
+The `--health` flag runs the same checks without pulling or restarting containers.
 
 A CI workflow validates all `docker-compose.yml` files on every push.
 

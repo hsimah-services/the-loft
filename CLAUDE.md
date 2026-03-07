@@ -7,7 +7,7 @@
 
 ## README Maintenance
 
-After making any changes to the repository (docker-compose files, env files, setup.sh, deploy.sh, directory structure, services, etc.), review the README.md and update it to reflect the current state. This includes but is not limited to:
+After making any changes to the repository (docker-compose files, env files, setup.sh, space-needle, directory structure, services, etc.), review the README.md and update it to reflect the current state. This includes but is not limited to:
 - Services table (images, ports, config paths, purpose)
 - Storage layout (volume mounts, directories)
 - Environment variables table (per-service required variables)
