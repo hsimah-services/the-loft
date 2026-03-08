@@ -12,12 +12,23 @@ Provisioning guide for The Loft's Raspberry Pi 3 B+ fleet. Both devices (`viking
 | `fjord` | Snapcast client + GitHub Actions runner | TBD room in The Loft |
 
 Both Pis serve dual purposes:
-1. **Howlr audio clients** — run `snapclient` to play synchronized audio from space-needle's `snapserver` (future, added when howlr is implemented)
+1. **Howlr audio clients** — run `snapclient` via Docker Compose (`client` profile) to play synchronized audio from space-needle's `snapserver` (deployed later when server side is ready)
 2. **CI runners** — run iditarod (self-hosted GitHub Actions runner) for arm64 builds and repo automation
 
 ---
 
-## 2. OS Installation
+## 2. Prerequisites (on your laptop)
+
+1. **Create a GitHub PAT** (for iditarod)
+   - Go to GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
+   - Create a token with `repo` scope for `hsimah/the-loft`
+   - Save the token — you'll need it for the `.env` file
+
+2. **Generate an SSH deploy key** — done later on the Pi itself (Phase C)
+
+---
+
+## 3. OS Installation
 
 Use **Raspberry Pi Imager** to flash **Raspberry Pi OS Lite (64-bit, Bookworm)** onto each Pi's SD card.
 
@@ -32,8 +43,8 @@ Use **Raspberry Pi Imager** to flash **Raspberry Pi OS Lite (64-bit, Bookworm)**
 | Password | Set a temporary password (SSH key is primary) |
 | WiFi SSID | Your network SSID |
 | WiFi password | Your network password |
-| WiFi country | AU |
-| Locale | en_AU.UTF-8, timezone Australia/Sydney |
+| WiFi country | US |
+| Locale | en_US.UTF-8, timezone America/Los_Angeles |
 
 ### Write and boot
 
@@ -41,27 +52,22 @@ Use **Raspberry Pi Imager** to flash **Raspberry Pi OS Lite (64-bit, Bookworm)**
 2. Open Raspberry Pi Imager, select OS and storage
 3. Apply the settings above
 4. Write the image
-5. Insert SD card into the Pi and power on
+5. Remove SD card from laptop
+6. Insert SD card into the Pi and power on
 
 ---
 
-## 3. Initial SSH Access
+## 4. Initial SSH Access
 
-After first boot, the Pi should be reachable via mDNS:
+After first boot (~60 seconds), the Pi should be reachable via mDNS:
 
 ```bash
-# From your workstation
 ssh hsimah@viking.local
 # or
 ssh hsimah@fjord.local
 ```
 
-If mDNS doesn't resolve, find the Pi's IP from your router's DHCP lease table or use:
-
-```bash
-# Scan local network for SSH
-nmap -p 22 --open 192.168.1.0/24
-```
+If mDNS doesn't resolve, find the Pi's IP from your router's DHCP lease table.
 
 Once connected, verify the hostname:
 
@@ -72,44 +78,145 @@ uname -m    # should print aarch64
 
 ---
 
-## 4. Running setup.sh
+## 5. Deploy Key and Clone Repo
 
-The setup script handles everything from user creation to Docker installation. Clone the repo and run:
+1. Generate an SSH key on the Pi:
+   ```bash
+   ssh-keygen -t ed25519 -C "<hostname>-deploy-key" -f ~/.ssh/id_ed25519 -N ""
+   cat ~/.ssh/id_ed25519.pub
+   ```
+
+2. Copy the public key output, then on GitHub:
+   - Go to `hsimah/the-loft` → Settings → Deploy keys → Add deploy key
+   - Title: `viking` (or `fjord`)
+   - Key: paste the public key
+   - Allow write access: No (read-only is fine)
+
+3. Clone the repo:
+   ```bash
+   sudo git clone git@github.com:hsimah/the-loft.git /srv/the-loft
+   ```
+
+4. Fix ownership so your user can work in the repo:
+   ```bash
+   sudo chown -R hsimah:hsimah /srv/the-loft
+   ```
+
+---
+
+## 6. Configure .env Files
+
+### iditarod
 
 ```bash
-# Clone the repo
-sudo git clone <repo-url> /srv/$(hostname)
-
-# Copy .env files for iditarod
-cd /srv/$(hostname)/raspberry-pi/iditarod
-sudo cp .env.example .env
-sudo nano .env   # fill in GITHUB_ACCESS_TOKEN, adjust RUNNER_NAME/LABELS
-
-# Run setup as root
-sudo bash /srv/$(hostname)/raspberry-pi/setup.sh
+cd /srv/the-loft
+cp services/iditarod/.env.example services/iditarod/.env
+nano services/iditarod/.env
 ```
+
+Fill in:
+
+```bash
+GITHUB_OWNER=hsimah
+GITHUB_REPO=the-loft
+GITHUB_ACCESS_TOKEN=<your-PAT>
+RUNNER_NAME=viking          # or fjord
+RUNNER_LABELS=viking,self-hosted,linux,arm64   # or fjord,...
+DOCKER_GID=999
+```
+
+> Note: `DOCKER_GID` defaults to 999 which is typical for Debian. If Docker uses a different GID after install, you can update it — `setup.sh` will detect the correct value during build.
+
+### howlr (skip for now)
+
+Don't create `services/howlr/.env`. `setup.sh` will warn and skip howlr, which is correct until the server side on space-needle is ready.
+
+---
+
+## 7. Run setup.sh
+
+```bash
+cd /srv/the-loft
+sudo bash setup.sh
+```
+
+The script will:
+- Install system packages (git, curl, jq)
+- Skip storage mount (none configured in `hosts/viking/host.conf`)
+- Create groups (`pack-member`)
+- Create users (`littledog` with `audio` group, `adminhabl`, configure `hsimah`)
+- Harden SSH (`AllowUsers hsimah`, disable password auth)
+- Configure sudo for `adminhabl`
+- Set up shared bashrc sourcing
+- Install Docker CE
+- Configure Docker log rotation
+- Build and start iditarod (with correct Docker GID)
+- Warn and skip howlr (no `.env`)
 
 The script is idempotent — safe to re-run at any time.
 
 ---
 
-## 5. User & Group Model
+## 8. Post-Setup Verification
+
+### Set adminhabl password
+
+```bash
+sudo passwd adminhabl
+```
+
+### Verify SSH hardening
+
+```bash
+sudo sshd -T | grep -E 'allowusers|passwordauthentication'
+# Expected: allowusers hsimah / passwordauthentication no
+```
+
+### Verify Docker
+
+```bash
+sudo docker run --rm hello-world
+```
+
+### Verify iditarod
+
+```bash
+# Check container is running
+sudo docker ps --filter name=iditarod
+
+# Check logs for successful registration
+sudo docker logs iditarod
+```
+
+Then on GitHub: Settings → Actions → Runners — should show `viking` (or `fjord`) as "Idle".
+
+### Verify shared bashrc
+
+```bash
+exit
+ssh hsimah@viking.local
+# Prompt should show the shared format
+```
+
+---
+
+## 9. User & Group Model
 
 Identical to space-needle:
 
 | User | UID | Primary Group | Shell | Additional Groups | Role |
 |------|-----|---------------|-------|-------------------|------|
-| `littledog` | 1003 | `pack-member` (1003) | `/usr/sbin/nologin` | `docker` | Service account for containers |
+| `littledog` | 1003 | `pack-member` (1003) | `/usr/sbin/nologin` | `docker`, `audio` | Service account for containers |
 | `adminhabl` | auto | `adminhabl` | `/bin/bash` | `sudo`, `docker`, `pack-member` | Admin (passworded, no SSH) |
 | `hsimah` | auto | `hsimah` | `/bin/bash` | `pack-member` | SSH user, manages repo |
 
 **Differences from space-needle:**
-- `littledog` does **not** get `render` or `video` groups (no GPU workloads on Pis)
+- `littledog` gets `audio` group (for howlr sound output) but **not** `render` or `video` (no GPU workloads)
 - No Plex, media, or pupyrus services
 
 ---
 
-## 6. SSH Hardening
+## 10. SSH Hardening
 
 The setup script applies:
 
@@ -118,113 +225,53 @@ The setup script applies:
 | `AllowUsers hsimah` | Only hsimah can SSH in | Same as space-needle |
 | `PasswordAuthentication no` | Disabled | Key-only access; Pis are on WiFi and more exposed |
 
-After setup, verify:
-
-```bash
-sudo sshd -T | grep -E 'allowusers|passwordauthentication'
-# allowusers hsimah
-# passwordauthentication no
-```
-
 ---
 
-## 7. Docker
+## 11. Docker
 
 Docker CE is installed via the official apt repository (same method as space-needle). The setup script also installs:
 - `daemon.json` from the repo for log rotation (10m max-size, 3 files)
 - Docker group membership for `littledog` and `adminhabl`
 
-Verify after setup:
-
-```bash
-sudo docker version
-sudo docker run --rm hello-world
-```
-
 ---
 
-## 8. iditarod (GitHub Actions Runner)
-
-Each Pi runs its own iditarod instance, registered as a separate runner to the same repo.
-
-### Configuration
-
-Edit `/srv/<hostname>/raspberry-pi/iditarod/.env`:
-
-```bash
-GITHUB_OWNER=hsimah
-GITHUB_REPO=space-needle
-GITHUB_ACCESS_TOKEN=<PAT with repo scope>
-RUNNER_NAME=viking          # or fjord
-RUNNER_LABELS=self-hosted,linux,arm64,viking   # or fjord
-DOCKER_GID=999              # check with: getent group docker | cut -d: -f3
-```
-
-### Build and start
-
-The setup script handles this automatically, but to run manually:
-
-```bash
-cd /srv/$(hostname)/raspberry-pi/iditarod
-
-# Build with correct Docker GID
-sudo docker compose build --build-arg DOCKER_GID=$(getent group docker | cut -d: -f3)
-
-# Start
-sudo docker compose up -d
-```
-
-### Verify
-
-```bash
-# Check container is running
-sudo docker ps --filter name=iditarod
-
-# Check logs for successful registration
-sudo docker logs iditarod
-
-# Verify runner appears in GitHub
-# Settings → Actions → Runners — should show viking/fjord as "Idle"
-```
-
-**Important:** The PAT needs `repo` scope for repo-level runner registration. Use the repo-level API (`/repos/{owner}/{repo}/actions/runners/`), not org-level.
-
----
-
-## 9. Directory Structure
+## 12. Directory Structure
 
 Pis use a simpler layout than space-needle (no `/mammoth` volume, no `/opt` service configs):
 
 ```
-/srv/<hostname>/                    Git clone of space-needle repo
-  raspberry-pi/
-    setup.sh                        Pi provisioning script
+/srv/the-loft/                      Git clone of the repo
+  setup.sh                          Unified host provisioner
+  hosts/viking/host.conf            Host configuration (services, users, storage)
+  services/
     iditarod/
-      docker-compose.yml            Pi-specific compose
-      Dockerfile                    Pi-specific Dockerfile (parameterized GID)
+      docker-compose.yml            Compose file
+      Dockerfile                    Pi-compatible Dockerfile (parameterized GID)
       entrypoint.sh                 Runner entrypoint
       .env                          Secrets (gitignored)
+      .env.example                  Template
+    howlr/
+      docker-compose.yml            Compose file (client profile for Pis)
+      .env                          Secrets (gitignored, created later)
 ```
 
-No additional directories are created. All state lives in the Docker volume (`runner-work`).
+No additional directories are created. All iditarod state lives in the Docker volume (`runner-work`).
 
 ---
 
-## 10. Shared Shell Config (bashrc)
+## 13. Shared Shell Config (bashrc)
 
 The setup script adds a `source` line to both `hsimah` and `adminhabl`'s `~/.bashrc`:
 
 ```bash
-source /srv/<hostname>/bashrc
+source /srv/the-loft/bashrc
 ```
 
-This gives both users the shared prompt, aliases, key bindings, and nano config from the repo. The bashrc resolves `__REPO_DIR` dynamically via `BASH_SOURCE[0]` (line 76), so aliases like `space-needle-ctl` and `nano --rcfile` resolve correctly regardless of clone path.
-
-The `space-needle-ctl` alias will point to `/srv/<hostname>/space-needle-ctl`. Running it on a Pi to deploy space-needle services will harmlessly fail (those compose files reference space-needle paths), which is correct behavior.
+This gives both users the shared prompt, aliases, key bindings, and nano config from the repo. The bashrc resolves `__REPO_DIR` dynamically via `BASH_SOURCE[0]`, so aliases like `loft-ctl` and `nano --rcfile` resolve correctly regardless of clone path.
 
 ---
 
-## 11. WiFi Power Management
+## 14. WiFi Power Management
 
 WiFi power saving causes audio dropouts when snapclient is running. Disable it:
 
@@ -240,32 +287,32 @@ EOF
 sudo chmod +x /etc/NetworkManager/dispatcher.d/99-wifi-powersave
 ```
 
-**Note:** The setup script does NOT do this automatically — it's only relevant when howlr/snapclient is installed. Add this step when implementing howlr Phase 1.
-
-If the Pi uses wired Ethernet, this step is unnecessary (and `wlan0` won't exist).
+**Note:** Only needed when howlr/snapclient is deployed. Skip this step until then. If the Pi uses wired Ethernet, this step is unnecessary.
 
 ---
 
-## 12. Future: howlr (snapclient)
+## 15. Future: howlr (snapclient)
 
-When howlr is implemented (see `howlr/plan.md`), each Pi will additionally run `snapclient`:
+When the howlr server side is deployed on space-needle, each Pi will run `snapclient` via Docker Compose:
 
-```bash
-# Install snapclient (arm64 .deb from GitHub releases)
-wget https://github.com/badaix/snapcast/releases/download/v0.28.0/snapclient_0.28.0-1_arm64.deb
-sudo dpkg -i snapclient_0.28.0-1_arm64.deb
-sudo apt install -f -y
+1. Create the `.env` file:
+   ```bash
+   cp services/howlr/.env.example services/howlr/.env
+   nano services/howlr/.env
+   # Set SNAPSERVER_HOST, SOUND_DEVICE, HOST_ID
+   ```
 
-# Configure
-sudo nano /etc/default/snapclient
-# SNAPCLIENT_OPTS="--host <space-needle-ip> --soundcard <alsa-device> --hostID <room-name>"
+2. Re-run setup or start manually:
+   ```bash
+   cd /srv/the-loft
+   sudo bash setup.sh
+   # or manually:
+   sudo docker compose -f services/howlr/docker-compose.yml --profile client up -d
+   ```
 
-# Enable and start
-sudo systemctl enable snapclient
-sudo systemctl start snapclient
-```
+3. Apply WiFi power management fix (section 14)
 
-This will be scripted as part of howlr implementation. For now, the Pis run iditarod only.
+The howlr compose file uses profiles — Pis use the `client` profile (snapclient only), while space-needle uses the `server` profile (snapserver + shairport-sync + librespot).
 
 ---
 
@@ -273,13 +320,16 @@ This will be scripted as part of howlr implementation. For now, the Pis run idit
 
 Per-Pi provisioning checklist:
 
+- [ ] Create GitHub PAT with `repo` scope
 - [ ] Flash Raspberry Pi OS Lite 64-bit with hostname, SSH key, WiFi
 - [ ] Boot and verify SSH access via `<hostname>.local`
-- [ ] Clone repo to `/srv/<hostname>`
-- [ ] Copy `.env.example` to `.env` and fill in secrets
-- [ ] Run `sudo bash /srv/<hostname>/raspberry-pi/setup.sh`
+- [ ] Generate deploy key on Pi and add to GitHub repo
+- [ ] Clone repo to `/srv/the-loft`
+- [ ] Copy `services/iditarod/.env.example` to `services/iditarod/.env` and fill in secrets
+- [ ] Skip howlr `.env` (deploy later)
+- [ ] Run `sudo bash setup.sh` from `/srv/the-loft`
 - [ ] Set adminhabl password: `sudo passwd adminhabl`
 - [ ] Verify SSH hardening: `sudo sshd -T | grep -E 'allowusers|passwordauthentication'`
 - [ ] Verify Docker: `sudo docker run --rm hello-world`
-- [ ] Verify iditarod: check GitHub Settings → Actions → Runners
+- [ ] Verify iditarod: `sudo docker ps --filter name=iditarod` + check GitHub Runners
 - [ ] Verify shared bashrc: log out and back in, check prompt
