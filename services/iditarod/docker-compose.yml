@@ -1,6 +1,9 @@
 services:
   iditarod:
-    build: .
+    build:
+      context: .
+      args:
+        DOCKER_GID: ${DOCKER_GID:-999}
     container_name: iditarod
     restart: unless-stopped
     logging:
@@ -11,8 +14,6 @@ services:
     env_file: .env
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /opt/pupyrus:/opt/pupyrus:ro
-      - /opt/pupyrus/html:/opt/pupyrus/html
       - runner-work:/home/runner/actions-runner/_work
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock

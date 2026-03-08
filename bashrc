@@ -1,5 +1,5 @@
-# space-needle shared bashrc — sourced by hsimah and adminhabl
-# Source from ~/.bashrc:  source /srv/space-needle/bashrc
+# the-loft shared bashrc — sourced by hsimah and adminhabl
+# Source from ~/.bashrc:  source /srv/the-loft/bashrc
 
 # If not running interactively, don't do anything
 case $- in
@@ -76,6 +76,7 @@ fi
 __REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Aliases ────────────────────────────────────────────────────────────────────
-alias space-needle-ctl="${__REPO_DIR}/space-needle-ctl"
+alias loft-ctl="${__REPO_DIR}/loft-ctl"
+alias space-needle-ctl="${__REPO_DIR}/loft-ctl"  # backward compat
 alias nano="nano --rcfile=${__REPO_DIR}/nanorc"
 alias adminhabl='su - adminhabl'

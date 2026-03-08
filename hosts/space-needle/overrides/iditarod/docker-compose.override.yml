@@ -1,0 +1,5 @@
+services:
+  iditarod:
+    volumes:
+      - /opt/pupyrus:/opt/pupyrus:ro
+      - /opt/pupyrus/html:/opt/pupyrus/html

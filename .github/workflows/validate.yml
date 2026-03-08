@@ -13,9 +13,46 @@ jobs:
             cp "$f" "${f%.example}"
           done
 
-      - name: Validate docker-compose files
+      - name: Validate base docker-compose files
         run: |
-          for f in $(find . -name 'docker-compose.yml'); do
+          for f in $(find services/ -name 'docker-compose.yml'); do
             echo "Validating $f..."
             docker compose -f "$f" config --quiet
+          done
+
+      - name: Validate compose with overrides
+        run: |
+          for host_dir in hosts/*/; do
+            host=$(basename "$host_dir")
+            if [[ ! -d "${host_dir}overrides" ]]; then
+              continue
+            fi
+            for override_dir in "${host_dir}overrides"/*/; do
+              service=$(basename "$override_dir")
+              base="services/${service}/docker-compose.yml"
+              override="${override_dir}docker-compose.override.yml"
+              if [[ -f "$base" && -f "$override" ]]; then
+                echo "Validating ${base} + ${override} (host: ${host})..."
+                docker compose -f "$base" -f "$override" config --quiet
+              fi
+            done
+          done
+
+  validate-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax-check shell scripts
+        run: |
+          for f in setup.sh loft-ctl control-plane/*.sh; do
+            echo "Checking $f..."
+            bash -n "$f"
+          done
+
+      - name: Syntax-check host.conf files
+        run: |
+          for f in hosts/*/host.conf; do
+            echo "Checking $f..."
+            bash -n "$f"
           done

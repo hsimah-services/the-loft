@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# setup.sh — idempotent setup for space-needle home server
+# setup.sh — idempotent setup for any host in The Loft fleet
 # Must be run as root on Debian/Ubuntu
 set -euo pipefail
 
-REPO_DIR="/srv/space-needle"
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ─── Colors ───────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -28,28 +28,48 @@ if ! command -v apt-get &>/dev/null; then
   exit 1
 fi
 
-# ─── 2. System packages ──────────────────────────────────────────────────────
-info "Installing system packages..."
-apt-get update -qq
-apt-get install -y -qq git curl jq xfsprogs > /dev/null
+# ─── 1a. Load host config ─────────────────────────────────────────────────────
+HOST_NAME="$(hostname)"
+HOST_CONF="${REPO_DIR}/hosts/${HOST_NAME}/host.conf"
 
-# ─── 3. Storage mount ────────────────────────────────────────────────────────
-info "Configuring storage mount..."
-
-FSTAB_ENTRY="/dev/sda1 /mammoth xfs defaults 0 0"
-
-if ! grep -qF "/dev/sda1" /etc/fstab; then
-  echo "$FSTAB_ENTRY" >> /etc/fstab
-  info "Added /mammoth to fstab"
+if [[ ! -f "$HOST_CONF" ]]; then
+  error "No host config found at ${HOST_CONF}"
+  error "This host (${HOST_NAME}) is not configured in the fleet."
+  exit 1
 fi
 
-mkdir -p /mammoth
+source "$HOST_CONF"
+info "Host: ${HOST_NAME}"
+info "Repo dir: ${REPO_DIR}"
+info "Services: ${SERVICES[*]}"
 
-if ! mountpoint -q /mammoth; then
-  mount /mammoth
-  info "Mounted /mammoth"
+# ─── 2. System packages ──────────────────────────────────────────────────────
+info "Installing system packages..."
+PACKAGES=(git curl jq)
+[[ "$STORAGE_FS" == "xfs" ]] && PACKAGES+=(xfsprogs)
+apt-get update -qq
+apt-get install -y -qq "${PACKAGES[@]}" > /dev/null
+
+# ─── 3. Storage mount ────────────────────────────────────────────────────────
+if [[ -n "$STORAGE_DEVICE" ]]; then
+  info "Configuring storage mount..."
+  FSTAB_ENTRY="${STORAGE_DEVICE} ${STORAGE_MOUNT} ${STORAGE_FS} defaults 0 0"
+
+  if ! grep -qF "$STORAGE_DEVICE" /etc/fstab; then
+    echo "$FSTAB_ENTRY" >> /etc/fstab
+    info "Added ${STORAGE_MOUNT} to fstab"
+  fi
+
+  mkdir -p "$STORAGE_MOUNT"
+
+  if ! mountpoint -q "$STORAGE_MOUNT"; then
+    mount "$STORAGE_MOUNT"
+    info "Mounted ${STORAGE_MOUNT}"
+  else
+    info "${STORAGE_MOUNT} already mounted"
+  fi
 else
-  info "/mammoth already mounted"
+  info "No storage device configured, skipping mount"
 fi
 
 # ─── 4. Groups ───────────────────────────────────────────────────────────────
@@ -72,7 +92,12 @@ if ! id littledog &>/dev/null; then
 else
   info "User littledog already exists"
 fi
-usermod -aG docker,render,video littledog 2>/dev/null || true
+
+LITTLEDOG_GROUPS="docker"
+if [[ -n "$LITTLEDOG_EXTRA_GROUPS" ]]; then
+  LITTLEDOG_GROUPS+=",${LITTLEDOG_EXTRA_GROUPS}"
+fi
+usermod -aG "$LITTLEDOG_GROUPS" littledog 2>/dev/null || true
 
 # adminhabl — admin account
 if ! id adminhabl &>/dev/null; then
@@ -98,12 +123,32 @@ info "Configuring SSH..."
 
 SSHD_CONFIG="/etc/ssh/sshd_config"
 if [[ -f "$SSHD_CONFIG" ]]; then
+  SSHD_CHANGED=false
+
   if ! grep -q "^AllowUsers hsimah" "$SSHD_CONFIG"; then
     echo "AllowUsers hsimah" >> "$SSHD_CONFIG"
     info "Added AllowUsers hsimah to sshd_config"
-    systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null || true
+    SSHD_CHANGED=true
   else
     info "SSH AllowUsers already configured"
+  fi
+
+  if [[ "$SSH_DISABLE_PASSWORD" == "true" ]]; then
+    if grep -q "^PasswordAuthentication yes" "$SSHD_CONFIG"; then
+      sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' "$SSHD_CONFIG"
+      info "Disabled password authentication"
+      SSHD_CHANGED=true
+    elif ! grep -q "^PasswordAuthentication no" "$SSHD_CONFIG"; then
+      echo "PasswordAuthentication no" >> "$SSHD_CONFIG"
+      info "Added PasswordAuthentication no to sshd_config"
+      SSHD_CHANGED=true
+    else
+      info "Password authentication already disabled"
+    fi
+  fi
+
+  if [[ "$SSHD_CHANGED" == "true" ]]; then
+    systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null || true
   fi
 else
   warn "sshd_config not found, skipping SSH lockdown"
@@ -124,9 +169,12 @@ else
   exit 1
 fi
 
-# ─── 8. hsimah alias ─────────────────────────────────────────────────────────
-info "Configuring admin alias..."
+# ─── 8. Shell config ─────────────────────────────────────────────────────────
+info "Configuring shared shell config..."
 
+BASHRC_SOURCE="source ${REPO_DIR}/bashrc"
+
+# hsimah
 ALIAS_FILE="/home/hsimah/.admin_alias"
 echo "alias admin='su - adminhabl'" > "$ALIAS_FILE"
 chown hsimah:hsimah "$ALIAS_FILE"
@@ -136,51 +184,39 @@ BASHRC="/home/hsimah/.bashrc"
 if [[ -f "$BASHRC" ]]; then
   if ! grep -qF ".admin_alias" "$BASHRC"; then
     echo '[ -f ~/.admin_alias ] && source ~/.admin_alias' >> "$BASHRC"
-    info "Added admin alias sourcing to .bashrc"
-  else
-    info "Admin alias already sourced in .bashrc"
+    info "Added admin alias sourcing to hsimah .bashrc"
+  fi
+  if ! grep -qF "$BASHRC_SOURCE" "$BASHRC"; then
+    echo "$BASHRC_SOURCE" >> "$BASHRC"
+    info "Added shared bashrc sourcing to hsimah .bashrc"
   fi
 else
-  echo '[ -f ~/.admin_alias ] && source ~/.admin_alias' > "$BASHRC"
+  printf '%s\n' '[ -f ~/.admin_alias ] && source ~/.admin_alias' "$BASHRC_SOURCE" > "$BASHRC"
   chown hsimah:hsimah "$BASHRC"
-  info "Created .bashrc with admin alias sourcing"
+  info "Created hsimah .bashrc with admin alias and shared bashrc sourcing"
+fi
+
+# adminhabl
+ADMIN_BASHRC="/home/adminhabl/.bashrc"
+if [[ -f "$ADMIN_BASHRC" ]]; then
+  if ! grep -qF "$BASHRC_SOURCE" "$ADMIN_BASHRC"; then
+    echo "$BASHRC_SOURCE" >> "$ADMIN_BASHRC"
+    info "Added shared bashrc sourcing to adminhabl .bashrc"
+  fi
+else
+  echo "$BASHRC_SOURCE" > "$ADMIN_BASHRC"
+  chown adminhabl:adminhabl "$ADMIN_BASHRC"
+  info "Created adminhabl .bashrc with shared bashrc sourcing"
 fi
 
 # ─── 9. Directory structure ──────────────────────────────────────────────────
 info "Creating directory structure..."
-
-# Config dirs (755)
-CONFIG_DIRS=(
-  /opt/plex/config
-  /opt/radarr
-  /opt/sonarr
-  /opt/lidarr
-  /opt/jackett
-  /opt/transmission
-  /opt/soulseek
-  /opt/soulseek/logs
-  /opt/pupyrus/html
-  /opt/pupyrus/db
-  /opt/iditarod
-)
 
 for dir in "${CONFIG_DIRS[@]}"; do
   mkdir -p "$dir"
   chown littledog:pack-member "$dir"
   chmod 755 "$dir"
 done
-
-# Media/download dirs (775)
-MEDIA_DIRS=(
-  /mammoth/library/movies
-  /mammoth/library/tv
-  /mammoth/library/music
-  /mammoth/library/videos
-  /mammoth/library/stand-up
-  /mammoth/downloads/transmission
-  /mammoth/downloads/soulseek
-  /mammoth/plex/transcode
-)
 
 for dir in "${MEDIA_DIRS[@]}"; do
   mkdir -p "$dir"
@@ -199,7 +235,8 @@ if ! command -v docker &>/dev/null; then
 
   install -m 0755 -d /etc/apt/keyrings
   if [[ ! -f /etc/apt/keyrings/docker.gpg ]]; then
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    . /etc/os-release
+    curl -fsSL "https://download.docker.com/linux/${ID}/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
     chmod a+r /etc/apt/keyrings/docker.gpg
   fi
 
@@ -243,51 +280,64 @@ fi
 # ─── 11. Deploy services ─────────────────────────────────────────────────────
 info "Deploying services..."
 
-SERVICES=(plex media pupyrus iditarod)
+# Source compose helper from control-plane
+source "${REPO_DIR}/control-plane/common.sh"
 
 for service in "${SERVICES[@]}"; do
-  compose_file="${REPO_DIR}/${service}/docker-compose.yml"
-
-  if [[ ! -f "$compose_file" ]]; then
-    warn "No docker-compose.yml for ${service}, skipping"
+  compose_args=$(compose_args_for "$service") || {
+    warn "No compose config for ${service}, skipping"
     continue
-  fi
+  }
 
   # Warn if .env is expected but missing
-  if [[ -f "${REPO_DIR}/${service}/.env.example" && ! -f "${REPO_DIR}/${service}/.env" ]]; then
+  service_dir="${REPO_DIR}/services/${service}"
+  if [[ -f "${service_dir}/.env.example" && ! -f "${service_dir}/.env" ]]; then
     warn "${service}: .env file missing (see .env.example)"
     continue
   fi
 
+  # Build if the service has a Dockerfile
+  if [[ -f "${service_dir}/Dockerfile" ]]; then
+    info "Building ${service}..."
+    DOCKER_GID=$(getent group docker | cut -d: -f3)
+    # shellcheck disable=SC2086
+    docker compose ${compose_args} build --build-arg DOCKER_GID="${DOCKER_GID}"
+  fi
+
   info "Starting ${service}..."
-  docker compose -f "$compose_file" up -d
+  # shellcheck disable=SC2086
+  docker compose ${compose_args} up -d
 done
 
 # ─── 11a. WordPress setup ───────────────────────────────────────────────────
-if docker ps --format '{{.Names}}' | grep -q '^pupyrus$'; then
-  info "Configuring WordPress..."
-  compose_file="${REPO_DIR}/pupyrus/docker-compose.yml"
-  source "${REPO_DIR}/pupyrus/.env"
+if printf '%s\n' "${SERVICES[@]}" | grep -qx pupyrus; then
+  if docker ps --format '{{.Names}}' | grep -q '^pupyrus$'; then
+    info "Configuring WordPress..."
+    compose_args=$(compose_args_for "pupyrus")
+    source "${REPO_DIR}/services/pupyrus/.env"
 
-  if docker compose -f "$compose_file" --profile cli run --rm cli wp core is-installed 2>/dev/null; then
-    info "WordPress already installed"
-  else
-    info "Installing WordPress..."
-    docker compose -f "$compose_file" --profile cli run --rm cli \
-      wp core install \
-        --url="http://localhost" \
-        --title="Pupyrus" \
-        --admin_user="adminhabl" \
-        --admin_password="${WORDPRESS_ADMIN_PASSWORD}" \
-        --admin_email="hamishblake+papyrus@gmail.com"
-    info "WordPress installed"
+    # shellcheck disable=SC2086
+    if docker compose ${compose_args} --profile cli run --rm cli wp core is-installed 2>/dev/null; then
+      info "WordPress already installed"
+    else
+      info "Installing WordPress..."
+      # shellcheck disable=SC2086
+      docker compose ${compose_args} --profile cli run --rm cli \
+        wp core install \
+          --url="http://localhost" \
+          --title="Pupyrus" \
+          --admin_user="adminhabl" \
+          --admin_password="${WORDPRESS_ADMIN_PASSWORD}" \
+          --admin_email="hamishblake+papyrus@gmail.com"
+      info "WordPress installed"
+    fi
   fi
 fi
 
 # ─── 12. Verification summary ─────────────────────────────────────────────────
 echo ""
 echo "============================================"
-echo "  space-needle setup complete"
+echo "  ${HOST_NAME} setup complete"
 echo "============================================"
 echo ""
 
@@ -304,12 +354,29 @@ echo ""
 info "Service account shell:"
 echo "  $(getent passwd littledog | cut -d: -f7)"
 
+if [[ -n "$STORAGE_MOUNT" ]]; then
+  echo ""
+  info "Mount status:"
+  if mountpoint -q "$STORAGE_MOUNT"; then
+    echo "  ${STORAGE_MOUNT} is mounted"
+  else
+    warn "  ${STORAGE_MOUNT} is NOT mounted"
+  fi
+fi
+
 echo ""
-info "Mount status:"
-if mountpoint -q /mammoth; then
-  echo "  /mammoth is mounted"
+info "SSH config:"
+if grep -q "^AllowUsers hsimah" /etc/ssh/sshd_config 2>/dev/null; then
+  echo "  AllowUsers: hsimah"
 else
-  warn "  /mammoth is NOT mounted"
+  warn "  AllowUsers not configured"
+fi
+if [[ "$SSH_DISABLE_PASSWORD" == "true" ]]; then
+  if grep -q "^PasswordAuthentication no" /etc/ssh/sshd_config 2>/dev/null; then
+    echo "  PasswordAuthentication: no"
+  else
+    warn "  PasswordAuthentication not disabled"
+  fi
 fi
 
 echo ""
@@ -319,5 +386,5 @@ docker ps --format "  {{.Names}}: {{.Status}}" 2>/dev/null || warn "  Could not 
 echo ""
 info "Done. Remember to:"
 echo "  - Set adminhabl password:  passwd adminhabl"
-echo "  - Verify SSH:              sshd -T | grep allowusers"
+echo "  - Verify SSH:              sshd -T | grep -E 'allowusers|passwordauthentication'"
 echo "  - Check .env files for any services that were skipped"

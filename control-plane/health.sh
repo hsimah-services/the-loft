@@ -4,12 +4,12 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 health_check_service() {
   local service="$1"
-  local compose_file
-  compose_file=$(compose_file_for "$service") || return 1
+  local compose_args
+  compose_args=$(compose_args_for "$service") || return 1
 
   echo "Health check: ${service}"
   local exit_code=0
-  check_containers "$compose_file" "$service" || exit_code=1
+  check_containers "$compose_args" "$service" || exit_code=1
   check_web_ui "$service" || exit_code=1
 
   if (( exit_code == 0 )); then

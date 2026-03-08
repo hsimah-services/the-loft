@@ -17,7 +17,8 @@ RUN apt-get update -qq \
     && rm -rf /var/lib/apt/lists/*
 
 # Match host docker group GID so runner can use the mounted socket
-RUN groupmod -g 988 docker && usermod -aG docker runner
+ARG DOCKER_GID=999
+RUN groupmod -g ${DOCKER_GID} docker && usermod -aG docker runner
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

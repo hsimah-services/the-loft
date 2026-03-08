@@ -4,11 +4,12 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 start_service() {
   local service="$1"
-  local compose_file
-  compose_file=$(compose_file_for "$service") || return 1
+  local compose_args
+  compose_args=$(compose_args_for "$service") || return 1
 
   echo "Starting ${service}..."
-  docker compose -f "$compose_file" up -d
+  # shellcheck disable=SC2086
+  docker compose ${compose_args} up -d
   echo "Started ${service}."
   echo ""
 }
