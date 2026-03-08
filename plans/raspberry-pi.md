@@ -1,6 +1,6 @@
 # Raspberry Pi Provisioning — viking & fjord
 
-Provisioning guide for The Loft's Raspberry Pi 4 fleet. Both devices (`viking` and `fjord`) get identical configuration: same user/group model as space-needle, Docker, iditarod (GitHub Actions runner), and shared shell configs.
+Provisioning guide for The Loft's Raspberry Pi 3 B+ fleet. Both devices (`viking` and `fjord`) get identical configuration: same user/group model as space-needle, Docker, iditarod (GitHub Actions runner), and shared shell configs.
 
 ---
 

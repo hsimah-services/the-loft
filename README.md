@@ -9,8 +9,8 @@ Fleet configuration for The Loft — a mono-repo managing all hosts (space-needl
 | Host | Role | Services |
 |------|------|----------|
 | `space-needle` | Primary server | plex, media, pupyrus, iditarod, howlr (server) |
-| `viking` | Raspberry Pi 4 | iditarod, howlr (client) |
-| `fjord` | Raspberry Pi 4 | iditarod, howlr (client) |
+| `viking` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
+| `fjord` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 
 Each host has a config file at `hosts/<hostname>/host.conf` that declares its services, storage, directories, and health check URLs. A single `setup.sh` provisions any host by reading its config.
 
@@ -254,7 +254,7 @@ After each deploy, the script verifies:
 
 ## Raspberry Pi Fleet
 
-Two Raspberry Pi 4 devices (`viking` and `fjord`) in The Loft run Docker with iditarod (GitHub Actions runner) and howlr (Snapcast client), using the same unified `setup.sh` and user/group model as space-needle.
+Two Raspberry Pi 3 B+ devices (`viking` and `fjord`) in The Loft run Docker with iditarod (GitHub Actions runner) and howlr (Snapcast client), using the same unified `setup.sh` and user/group model as space-needle.
 
 ### Pi Setup
 
