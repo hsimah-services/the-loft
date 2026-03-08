@@ -20,6 +20,13 @@ jobs:
             docker compose -f "$f" config --quiet
           done
 
+      - name: Validate howlr compose profiles
+        run: |
+          for profile in server client; do
+            echo "Validating services/howlr/docker-compose.yml (profile: ${profile})..."
+            COMPOSE_PROFILES="${profile}" docker compose -f services/howlr/docker-compose.yml config --quiet
+          done
+
       - name: Validate compose with overrides
         run: |
           for host_dir in hosts/*/; do

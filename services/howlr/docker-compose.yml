@@ -1,0 +1,85 @@
+services:
+  # ── Server profile ──────────────────────────────────────────────
+  snapserver:
+    image: crazymax/snapserver:latest
+    container_name: howlr-snapserver
+    profiles:
+      - server
+    network_mode: host
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    volumes:
+      - snapcast-pipes:/tmp/snapcast
+      - ./config/snapserver.conf:/etc/snapserver.conf:ro
+
+  shairport-sync:
+    image: mikebrady/shairport-sync:latest
+    container_name: howlr-shairport-sync
+    profiles:
+      - server
+    network_mode: host
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    volumes:
+      - snapcast-pipes:/tmp/snapcast
+      - ./config/shairport-sync.conf:/etc/shairport-sync.conf:ro
+
+  librespot:
+    image: giof71/librespot:latest
+    container_name: howlr-librespot
+    profiles:
+      - server
+    network_mode: host
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    volumes:
+      - snapcast-pipes:/tmp/snapcast
+    entrypoint: ["librespot"]
+    command:
+      - --name
+      - ${LIBRESPOT_NAME:-The Loft Spotify}
+      - --backend
+      - pipe
+      - --device
+      - /tmp/snapcast/spotify-fifo
+      - --bitrate
+      - "320"
+      - --initial-volume
+      - "100"
+      - --enable-volume-normalisation
+      - --device-type
+      - speaker
+
+  # ── Client profile ─────────────────────────────────────────────
+  snapclient:
+    image: crazymax/snapclient:latest
+    container_name: howlr-snapclient
+    profiles:
+      - client
+    network_mode: host
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    devices:
+      - /dev/snd:/dev/snd
+    environment:
+      SNAPCLIENT_HOST: ${SNAPSERVER_HOST}
+      SNAPCLIENT_OPTS: "--soundcard ${SOUND_DEVICE:-default} --hostID ${HOST_ID}"
+
+volumes:
+  snapcast-pipes:
