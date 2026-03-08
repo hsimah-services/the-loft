@@ -80,26 +80,28 @@ uname -m    # should print aarch64
 
 ## 5. Deploy Key and Clone Repo
 
-1. Generate an SSH key on the Pi:
+1. Install git (needed before `setup.sh` can run):
+   ```bash
+   sudo apt-get update && sudo apt-get install -y git
+   ```
+
+2. Generate an SSH key on the Pi:
    ```bash
    ssh-keygen -t ed25519 -C "<hostname>-deploy-key" -f ~/.ssh/id_ed25519 -N ""
    cat ~/.ssh/id_ed25519.pub
    ```
 
-2. Copy the public key output, then on GitHub:
+3. Copy the public key output, then on GitHub:
    - Go to `hsimah/the-loft` → Settings → Deploy keys → Add deploy key
    - Title: `viking` (or `fjord`)
    - Key: paste the public key
    - Allow write access: No (read-only is fine)
 
-3. Clone the repo:
+4. Clone the repo:
    ```bash
-   sudo git clone git@github.com:hsimah/the-loft.git /srv/the-loft
-   ```
-
-4. Fix ownership so your user can work in the repo:
-   ```bash
-   sudo chown -R hsimah:hsimah /srv/the-loft
+   sudo mkdir /srv/the-loft
+   sudo chown hsimah:hsimah /srv/the-loft
+   git clone git@github.com:hsimah/the-loft.git /srv/the-loft
    ```
 
 ---
@@ -163,6 +165,23 @@ The script is idempotent — safe to re-run at any time.
 
 ```bash
 sudo passwd adminhabl
+```
+
+### Remove hsimah from sudoers
+
+Raspberry Pi OS grants the initial user passwordless sudo via drop-in files. Remove them so only `adminhabl` has sudo:
+
+```bash
+su - adminhabl
+sudo rm -f /etc/sudoers.d/010_pi-nopasswd /etc/sudoers.d/90-cloud-init-users
+exit
+```
+
+Verify hsimah no longer has sudo:
+
+```bash
+sudo echo test
+# Expected: permission denied
 ```
 
 ### Verify SSH hardening
