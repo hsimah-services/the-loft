@@ -1,7 +1,7 @@
 services:
   # ── Server profile ──────────────────────────────────────────────
   snapserver:
-    image: crazymax/snapserver:latest
+    image: ivdata/snapserver:latest
     container_name: howlr-snapserver
     profiles:
       - server
@@ -64,7 +64,7 @@ services:
 
   # ── Client profile ─────────────────────────────────────────────
   snapclient:
-    image: crazymax/snapclient:latest
+    image: ivdata/snapclient:latest
     container_name: howlr-snapclient
     profiles:
       - client
@@ -78,8 +78,8 @@ services:
     devices:
       - /dev/snd:/dev/snd
     environment:
-      SNAPCLIENT_HOST: ${SNAPSERVER_HOST}
-      SNAPCLIENT_OPTS: "--soundcard ${SOUND_DEVICE:-default} --hostID ${HOST_ID}"
+      HOST: ${SNAPSERVER_HOST}
+      EXTRA_ARGS: "--soundcard ${SOUND_DEVICE:-default} --hostID ${HOST_ID}"
 
 volumes:
   snapcast-pipes:
