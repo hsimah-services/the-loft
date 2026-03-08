@@ -234,6 +234,52 @@ After each deploy, the script verifies:
 5. Run `sudo bash setup.sh`
 
 
+## Raspberry Pi Fleet
+
+Two Raspberry Pi 4 devices (`viking` and `fjord`) in The Loft run Docker and iditarod (GitHub Actions runner), with the same user/group model as space-needle.
+
+### Pi Services
+
+| Service | Image | Config | Purpose |
+|---------|-------|--------|---------|
+| Iditarod | `actions/actions-runner` (custom build) | `/srv/<hostname>/raspberry-pi/iditarod/.env` | Self-hosted GitHub Actions runner (arm64) |
+
+### Pi Directory Structure
+
+```
+/srv/<hostname>/                    Git clone of space-needle repo
+  raspberry-pi/
+    setup.sh                        Pi provisioning script
+    iditarod/
+      docker-compose.yml            Pi-specific compose (no pupyrus mounts)
+      Dockerfile                    Parameterized DOCKER_GID (default 999)
+      entrypoint.sh                 Runner entrypoint
+      .env                          Secrets (gitignored)
+```
+
+### Pi Environment Files
+
+| Service | Required Variables |
+|---------|--------------------|
+| Iditarod | `GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS`, `DOCKER_GID` |
+
+### Pi Setup
+
+```bash
+# Clone repo on the Pi
+sudo git clone <repo-url> /srv/$(hostname)
+
+# Configure iditarod
+cd /srv/$(hostname)/raspberry-pi/iditarod
+sudo cp .env.example .env
+sudo nano .env
+
+# Run setup
+sudo bash /srv/$(hostname)/raspberry-pi/setup.sh
+```
+
+See `raspberry-pi/plan.md` for the full provisioning guide.
+
 ## Environment Files
 
 Each service that needs secrets has a `.env.example` template. Copy it to `.env` and fill in real values. The `.env` files are gitignored.
