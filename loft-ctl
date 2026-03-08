@@ -1,11 +1,24 @@
 #!/usr/bin/env bash
-# space-needle-ctl — manage space-needle services
+# loft-ctl — manage services on this host
 set -euo pipefail
 
 CONTROL_PLANE_DIR="$(cd "$(dirname "$0")/control-plane" && pwd)"
 
+# Source host config for dynamic usage info
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+HOST_NAME="$(hostname)"
+HOST_CONF="${REPO_DIR}/hosts/${HOST_NAME}/host.conf"
+
 usage() {
   echo "Usage: $0 <command> [<service>]"
+  echo ""
+  if [[ -f "$HOST_CONF" ]]; then
+    source "$HOST_CONF"
+    echo "Host: ${HOST_NAME}"
+    echo "Services: ${SERVICES[*]}"
+  else
+    echo "Host: ${HOST_NAME} (no host.conf found)"
+  fi
   echo ""
   echo "Commands:"
   echo "  --deploy <service|--all>  Pull images and restart (with health checks)"
@@ -13,8 +26,6 @@ usage() {
   echo "  --stop   <service|--all>  Stop containers"
   echo "  --health [service]        Run health checks (all services, or one)"
   echo "  --update                  Pull latest config from git"
-  echo ""
-  echo "Services: plex media pupyrus iditarod"
   exit 0
 }
 

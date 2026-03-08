@@ -1,8 +1,18 @@
-# space-needle
+# the-loft
 
-Home server running media services, download clients, and WordPress in Docker.
+Fleet configuration for The Loft — a mono-repo managing all hosts (space-needle, viking, fjord) with shared service definitions, per-host configuration, and a unified setup/control-plane.
 
 ## Architecture
+
+### Fleet
+
+| Host | Role | Services |
+|------|------|----------|
+| `space-needle` | Primary server | plex, media, pupyrus, iditarod |
+| `viking` | Raspberry Pi 4 | iditarod |
+| `fjord` | Raspberry Pi 4 | iditarod |
+
+Each host has a config file at `hosts/<hostname>/host.conf` that declares its services, storage, directories, and health check URLs. A single `setup.sh` provisions any host by reading its config.
 
 ### Services
 
@@ -17,19 +27,79 @@ Home server running media services, download clients, and WordPress in Docker.
 | Lidarr | `linuxserver/lidarr` | 8686 (host) | `/opt/lidarr` | Music management |
 | Jackett | `linuxserver/jackett` | 9117 | `/opt/jackett` | Indexer proxy |
 | Pupyrus | `wordpress` + `mariadb` + `redis` | 80 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
-| Iditarod | `actions/actions-runner` | — | `/opt/iditarod` | Self-hosted GitHub Actions runner |
+| Iditarod | `actions/actions-runner` (custom build) | — | `.env` per host | Self-hosted GitHub Actions runner |
 
-Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`media-vpn`). Radarr, Sonarr, and Lidarr use host networking. Jackett uses standard port mapping. All six are managed together in `media/docker-compose.yml`.
+Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`media-vpn`). Radarr, Sonarr, and Lidarr use host networking. All six are managed together in `services/media/docker-compose.yml`.
+
+### Directory Layout
+
+```
+the-loft/
+├── hosts/
+│   ├── space-needle/
+│   │   ├── host.conf                          # Host manifest
+│   │   └── overrides/
+│   │       └── iditarod/
+│   │           └── docker-compose.override.yml # Pupyrus mounts for runner
+│   ├── viking/
+│   │   └── host.conf
+│   └── fjord/
+│       └── host.conf
+├── services/
+│   ├── plex/
+│   │   ├── docker-compose.yml
+│   │   └── .env.example
+│   ├── media/
+│   │   ├── docker-compose.yml
+│   │   └── .env.example
+│   ├── pupyrus/
+│   │   ├── docker-compose.yml
+│   │   └── .env.example
+│   └── iditarod/
+│       ├── docker-compose.yml
+│       ├── Dockerfile
+│       ├── entrypoint.sh
+│       └── .env.example
+├── control-plane/
+│   ├── common.sh
+│   ├── deploy.sh
+│   ├── health.sh
+│   ├── start.sh
+│   ├── stop.sh
+│   └── update.sh
+├── plans/
+│   ├── howlr.md
+│   └── raspberry-pi.md
+├── setup.sh
+├── loft-ctl
+├── bashrc
+├── nanorc
+├── daemon.json
+├── .github/workflows/validate.yml
+├── .gitignore
+├── CLAUDE.md
+└── README.md
+```
+
+### Compose Override Pattern
+
+Services are defined once in `services/<name>/docker-compose.yml`. Per-host customization uses Docker Compose's native merge via override files at `hosts/<hostname>/overrides/<service>/docker-compose.override.yml`.
+
+Example: space-needle's iditarod gets pupyrus volume mounts via override. Viking/fjord get the base compose only (no pupyrus).
 
 ### Users & Groups
 
+Consistent across all hosts:
+
 | User | UID | Primary Group | Shell | Additional Groups | Role |
 |------|-----|---------------|-------|-------------------|------|
-| `littledog` | 1003 | `pack-member` (1003) | `/usr/sbin/nologin` | `docker`, `render`, `video` | Service account for all containers |
+| `littledog` | 1003 | `pack-member` (1003) | `/usr/sbin/nologin` | `docker` + host-specific | Service account for all containers |
 | `adminhabl` | auto | `adminhabl` | `/bin/bash` | `sudo`, `docker`, `pack-member` | Admin (passworded, no SSH) |
 | `hsimah` | auto | `hsimah` | `/bin/bash` | `pack-member` | SSH user, manages repo |
 
-### Storage Layout
+Host-specific groups (e.g. `render,video` on space-needle) are configured in `host.conf` via `LITTLEDOG_EXTRA_GROUPS`.
+
+### Storage Layout (space-needle only)
 
 ```
 /mammoth                          XFS volume (/dev/sda1)
@@ -58,8 +128,23 @@ Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`
   /iditarod                       GitHub Actions runner workdir
 ```
 
-All `/opt` config dirs are owned `littledog:pack-member` (755).
-All `/mammoth` media dirs are owned `littledog:pack-member` (775).
+All `/opt` config dirs are owned `littledog:pack-member` (755). All `/mammoth` media dirs are owned `littledog:pack-member` (775). Viking/fjord have no storage mount or `/opt` directories.
+
+## Host Configuration
+
+Each host is defined by `hosts/<hostname>/host.conf`, a bash-sourceable file declaring:
+
+| Variable | Purpose |
+|----------|---------|
+| `HOST_NAME` | Hostname identifier |
+| `SERVICES` | Array of service names to deploy |
+| `STORAGE_DEVICE` / `STORAGE_MOUNT` / `STORAGE_FS` | Storage mount config (empty = no mount) |
+| `CONFIG_DIRS` | Array of `/opt` config directories to create (755) |
+| `MEDIA_DIRS` | Array of media directories to create (775) |
+| `LITTLEDOG_EXTRA_GROUPS` | Additional groups for littledog (e.g. `render,video`) |
+| `SSH_DISABLE_PASSWORD` | Whether to disable SSH password auth (`true`/`false`) |
+| `HEALTH_URLS` | Associative array of required health check endpoints |
+| `HEALTH_URLS_WARN` | Associative array of warn-only health check endpoints |
 
 ## Log Rotation
 
@@ -84,28 +169,30 @@ Docker log rotation is configured at two levels:
 | soulseek | 5m | 3 | Moderate logging |
 | jackett | 5m | 3 | Moderate logging |
 
-Worst-case total disk usage: ~500MB across all containers.
-
 ## Security Model
 
 - **SSH**: Only `hsimah` can SSH in (`AllowUsers hsimah` in sshd_config)
-- **Admin escalation**: `hsimah` runs `admin` alias (defined in `~/.admin_alias`) which does `su - adminhabl`
+- **SSH passwords**: Disabled on Pis (`SSH_DISABLE_PASSWORD=true`), enabled on space-needle
+- **Admin escalation**: `hsimah` runs `admin` alias which does `su - adminhabl`
 - **Sudo**: `adminhabl` has full sudo via `/etc/sudoers.d/adminhabl`
 - **Containers**: All run as `littledog` (UID/GID 1003), a nologin service account
 
 ## Quick Start
 
-### Fresh setup
+### Fresh host setup
 
 ```bash
 # Clone the repo
-git clone <repo-url> /srv/space-needle
-cd /srv/space-needle
+sudo git clone <repo-url> /srv/the-loft
+cd /srv/the-loft
 
-# Copy .env.example files and fill in secrets
-cp plex/.env.example plex/.env
-cp media/.env.example media/.env
-cp pupyrus/.env.example pupyrus/.env
+# Copy .env.example files and fill in secrets for this host's services
+# (check hosts/<hostname>/host.conf for the SERVICES list)
+cp services/iditarod/.env.example services/iditarod/.env
+# On space-needle also:
+cp services/plex/.env.example services/plex/.env
+cp services/media/.env.example services/media/.env
+cp services/pupyrus/.env.example services/pupyrus/.env
 
 # Edit each .env file with real values
 # Then run setup as root:
@@ -114,33 +201,38 @@ sudo bash setup.sh
 
 ### Managing services
 
-Edit compose files on your laptop, push to GitHub, then SSH to the server:
-
 ```bash
-# Show usage
-./space-needle-ctl
+# Show usage (dynamically shows this host's services)
+loft-ctl
 
 # Pull latest config from git
-./space-needle-ctl --update
+loft-ctl --update
 
 # Deploy (pull images + restart + health check)
-./space-needle-ctl --deploy --all
-./space-needle-ctl --deploy plex
+loft-ctl --deploy --all
+loft-ctl --deploy plex
 
 # Start / stop containers
-./space-needle-ctl --start --all
-./space-needle-ctl --stop media
+loft-ctl --start --all
+loft-ctl --stop media
 
 # Run health checks without deploying
-./space-needle-ctl --health          # all services
-./space-needle-ctl --health plex     # single service
+loft-ctl --health          # all services
+loft-ctl --health plex     # single service
 ```
 
 After each deploy, the script verifies:
 1. **Container check** — all containers in the compose file are "running" (retries for up to 30s)
-2. **Web UI check** — HTTP endpoints respond (Plex `:32400`, Radarr `:7878`, Sonarr `:8989`, Lidarr `:8686`, Jackett `:9117`, WordPress `:80`). VPN-dependent services (Transmission `:9091`, Soulseek `:6080`) are checked but failures are treated as warnings.
+2. **Web UI check** — HTTP endpoints respond based on the host's `HEALTH_URLS` and `HEALTH_URLS_WARN` config
 
-A CI workflow validates all `docker-compose.yml` files on every push.
+### Adding a new host
+
+1. Create `hosts/<hostname>/host.conf` with the host's config
+2. Optionally create override files in `hosts/<hostname>/overrides/<service>/`
+3. Clone the repo on the new host to `/srv/the-loft`
+4. Copy and fill in `.env` files for the host's services
+5. Run `sudo bash setup.sh`
+
 
 ## Environment Files
 
@@ -148,8 +240,15 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 
 | Service | Required Variables |
 |---------|--------------------|
-| Plex | `PLEX_CLAIM` (one-time claim token), `PUID`, `PGID`, `TZ` |
-| Media | `NORDVPN_TOKEN` (NordVPN token for shared VPN), `PUID`, `PGID`, `TZ` |
+| Plex | `PLEX_CLAIM`, `PUID`, `PGID`, `TZ` |
+| Media | `NORDVPN_TOKEN`, `PUID`, `PGID`, `TZ` |
 | Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `GRAPHQL_JWT_AUTH_SECRET_KEY` |
-| Iditarod | `GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS` |
+| Iditarod | `GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS`, `DOCKER_GID` |
 
+## CI
+
+A GitHub Actions workflow validates on every push:
+- All base `docker-compose.yml` files pass `docker compose config --quiet`
+- All compose + override combinations validate
+- All shell scripts pass `bash -n` syntax check
+- All `host.conf` files pass `bash -n` syntax check
