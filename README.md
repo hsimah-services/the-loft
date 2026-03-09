@@ -37,6 +37,8 @@ Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`
 
 Howlr uses Docker Compose profiles: `COMPOSE_PROFILES=server` on space-needle runs snapserver + shairport-sync + librespot; `COMPOSE_PROFILES=client` on Pis runs snapclient. The `.env` file controls which profile is active.
 
+**Known issue:** The AirPlay stream uses AirPlay 2 format (48kHz/32-bit) which crashes the snapweb browser client. Use native snapclient devices (viking, fjord) for AirPlay playback. Spotify Connect works on all clients including snapweb.
+
 ### Directory Layout
 
 ```
