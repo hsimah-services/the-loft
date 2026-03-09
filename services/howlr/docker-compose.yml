@@ -30,7 +30,7 @@ services:
         max-file: "3"
     volumes:
       - snapcast-pipes:/tmp/snapcast
-      - ./config/shairport-sync.conf:/etc/shairport-sync.conf:ro
+    command: ["-a", "The Loft", "-o", "pipe", "--", "/tmp/snapcast/shairport-fifo"]
 
   librespot:
     image: giof71/librespot:latest
