@@ -46,21 +46,14 @@ services:
         max-file: "3"
     volumes:
       - snapcast-pipes:/tmp/snapcast
-    entrypoint: ["librespot"]
-    command:
-      - --name
-      - ${LIBRESPOT_NAME:-The Loft Spotify}
-      - --backend
-      - pipe
-      - --device
-      - /tmp/snapcast/spotify-fifo
-      - --bitrate
-      - "320"
-      - --initial-volume
-      - "100"
-      - --enable-volume-normalisation
-      - --device-type
-      - speaker
+    environment:
+      DEVICE_NAME: ${LIBRESPOT_NAME:-The Loft Spotify}
+      BACKEND: pipe
+      DEVICE: /tmp/snapcast/spotify-fifo
+      BITRATE: "320"
+      INITIAL_VOLUME: "100"
+      ENABLE_VOLUME_NORMALISATION: "Y"
+      DEVICE_TYPE: speaker
 
   # ── Client profile ─────────────────────────────────────────────
   snapclient:
