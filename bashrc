@@ -77,6 +77,5 @@ __REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Aliases ────────────────────────────────────────────────────────────────────
 alias loft-ctl="${__REPO_DIR}/loft-ctl"
-alias space-needle-ctl="${__REPO_DIR}/loft-ctl"  # backward compat
 alias nano="nano --rcfile=${__REPO_DIR}/nanorc"
 alias adminhabl='su - adminhabl'

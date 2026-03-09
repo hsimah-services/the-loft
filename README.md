@@ -8,9 +8,9 @@ Fleet configuration for The Loft — a mono-repo managing all hosts (space-needl
 
 | Host | Role | Services |
 |------|------|----------|
-| `space-needle` | Primary server | plex, media, pupyrus, iditarod |
-| `viking` | Raspberry Pi 4 | iditarod |
-| `fjord` | Raspberry Pi 4 | iditarod |
+| `space-needle` | Primary server | plex, media, pupyrus, iditarod, howlr (server) |
+| `viking` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
+| `fjord` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 
 Each host has a config file at `hosts/<hostname>/host.conf` that declares its services, storage, directories, and health check URLs. A single `setup.sh` provisions any host by reading its config.
 
@@ -28,8 +28,16 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Jackett | `linuxserver/jackett` | 9117 | `/opt/jackett` | Indexer proxy |
 | Pupyrus | `wordpress` + `mariadb` + `redis` | 80 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
 | Iditarod | `actions/actions-runner` (custom build) | — | `.env` per host | Self-hosted GitHub Actions runner |
+| Howlr snapserver | `ivdata/snapserver` | 1704, 1705, 1780 (host) | `/opt/howlr`, `config/snapserver.conf` | Snapcast sync engine + snapweb UI |
+| Howlr shairport-sync | `mikebrady/shairport-sync` | host network | `config/shairport-sync.conf` | AirPlay receiver (feeds snapserver) |
+| Howlr librespot | `giof71/librespot` | host network | — | Spotify Connect receiver (feeds snapserver) |
+| Howlr snapclient | `ivdata/snapclient` | host network | `.env` per host | Snapcast client (receives stream, outputs to speakers) |
 
 Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`media-vpn`). Radarr, Sonarr, and Lidarr use host networking. All six are managed together in `services/media/docker-compose.yml`.
+
+Howlr uses Docker Compose profiles: `COMPOSE_PROFILES=server` on space-needle runs snapserver + shairport-sync + librespot; `COMPOSE_PROFILES=client` on Pis runs snapclient. The `.env` file controls which profile is active.
+
+**Known issue:** The AirPlay stream uses AirPlay 2 format (48kHz/32-bit) which crashes the snapweb browser client. Use native snapclient devices (viking, fjord) for AirPlay playback. Spotify Connect works on all clients including snapweb.
 
 ### Directory Layout
 
@@ -55,10 +63,16 @@ the-loft/
 │   ├── pupyrus/
 │   │   ├── docker-compose.yml
 │   │   └── .env.example
-│   └── iditarod/
+│   ├── iditarod/
+│   │   ├── docker-compose.yml
+│   │   ├── Dockerfile
+│   │   ├── entrypoint.sh
+│   │   └── .env.example
+│   └── howlr/
 │       ├── docker-compose.yml
-│       ├── Dockerfile
-│       ├── entrypoint.sh
+│       ├── config/
+│       │   ├── snapserver.conf
+│       │   └── shairport-sync.conf
 │       └── .env.example
 ├── control-plane/
 │   ├── common.sh
@@ -126,6 +140,7 @@ Host-specific groups (e.g. `render,video` on space-needle) are configured in `ho
   /pupyrus/html                   WordPress files
   /pupyrus/db                     MariaDB data
   /iditarod                       GitHub Actions runner workdir
+  /howlr                          Howlr persistent data
 ```
 
 All `/opt` config dirs are owned `littledog:pack-member` (755). All `/mammoth` media dirs are owned `littledog:pack-member` (775). Viking/fjord have no storage mount or `/opt` directories.
@@ -168,6 +183,10 @@ Docker log rotation is configured at two levels:
 | radarr/sonarr/lidarr | 5m | 3 | Moderate media management logging |
 | soulseek | 5m | 3 | Moderate logging |
 | jackett | 5m | 3 | Moderate logging |
+| snapserver | 5m | 3 | Audio distribution logging |
+| shairport-sync | 5m | 3 | AirPlay receiver logging |
+| librespot | 5m | 3 | Spotify Connect logging |
+| snapclient | 5m | 3 | Audio client logging |
 
 ## Security Model
 
@@ -189,6 +208,7 @@ cd /srv/the-loft
 # Copy .env.example files and fill in secrets for this host's services
 # (check hosts/<hostname>/host.conf for the SERVICES list)
 cp services/iditarod/.env.example services/iditarod/.env
+cp services/howlr/.env.example services/howlr/.env
 # On space-needle also:
 cp services/plex/.env.example services/plex/.env
 cp services/media/.env.example services/media/.env
@@ -234,6 +254,32 @@ After each deploy, the script verifies:
 5. Run `sudo bash setup.sh`
 
 
+## Raspberry Pi Fleet
+
+Two Raspberry Pi 3 B+ devices (`viking` and `fjord`) in The Loft run Docker with iditarod (GitHub Actions runner) and howlr (Snapcast client), using the same unified `setup.sh` and user/group model as space-needle.
+
+### Pi Setup
+
+Pis use the same `setup.sh` as space-needle. The script auto-detects the hostname and sources `hosts/$(hostname)/host.conf`.
+
+```bash
+# Clone repo on the Pi
+sudo git clone <repo-url> /srv/the-loft
+cd /srv/the-loft
+
+# Configure services
+sudo cp services/iditarod/.env.example services/iditarod/.env
+sudo cp services/howlr/.env.example services/howlr/.env
+# Edit .env files — set COMPOSE_PROFILES=client, SNAPSERVER_HOST, SOUND_DEVICE, HOST_ID for howlr
+sudo nano services/iditarod/.env
+sudo nano services/howlr/.env
+
+# Run setup
+sudo bash setup.sh
+```
+
+See `plans/raspberry-pi.md` for the full provisioning guide.
+
 ## Environment Files
 
 Each service that needs secrets has a `.env.example` template. Copy it to `.env` and fill in real values. The `.env` files are gitignored.
@@ -244,11 +290,14 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Media | `NORDVPN_TOKEN`, `PUID`, `PGID`, `TZ` |
 | Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `GRAPHQL_JWT_AUTH_SECRET_KEY` |
 | Iditarod | `GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS`, `DOCKER_GID` |
+| Howlr (server) | `COMPOSE_PROFILES=server`, `LIBRESPOT_NAME` |
+| Howlr (client) | `COMPOSE_PROFILES=client`, `SNAPSERVER_HOST`, `SOUND_DEVICE`, `HOST_ID` |
 
 ## CI
 
 A GitHub Actions workflow validates on every push:
 - All base `docker-compose.yml` files pass `docker compose config --quiet`
+- Howlr compose validated with both `COMPOSE_PROFILES=server` and `COMPOSE_PROFILES=client`
 - All compose + override combinations validate
 - All shell scripts pass `bash -n` syntax check
 - All `host.conf` files pass `bash -n` syntax check
