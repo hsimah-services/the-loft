@@ -28,6 +28,11 @@ http://pupyrus.space-needle:80 {
 }
 
 http://pulsr.space-needle:80 {
+	redir https://pulsr.space-needle{uri} permanent
+}
+
+https://pulsr.space-needle {
+	tls internal
 	@gts path /api/* /.well-known/* /nodeinfo/* /oauth/* /users/* /@* /fileserver/* /settings/* /auth/* /media/*
 	handle @gts {
 		reverse_proxy pulsr:8080
