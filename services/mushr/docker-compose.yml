@@ -29,14 +29,12 @@ services:
     image: drpsychick/dnsmasq:latest
     container_name: mushr-dns
     restart: unless-stopped
+    network_mode: host
     logging:
       driver: json-file
       options:
         max-size: "5m"
         max-file: "3"
-    ports:
-      - "192.168.86.28:53:53/udp"
-      - "192.168.86.28:53:53/tcp"
     volumes:
       - ./dnsmasq.conf:/etc/dnsmasq.conf:ro
     cap_add:
