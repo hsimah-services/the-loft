@@ -26,6 +26,9 @@ usage() {
   echo "  --stop   <service|--all>  Stop containers"
   echo "  --health [service]        Run health checks (all services, or one)"
   echo "  --update                  Pull latest config from git"
+  echo "  --ship   <service|--all>  Update + deploy in one step"
+  echo ""
+  echo "Commands that need docker auto-elevate to adminhabl."
   exit 0
 }
 
@@ -33,12 +36,26 @@ if [[ $# -eq 0 ]]; then
   usage
 fi
 
+# Auto-elevate to adminhabl for commands that need docker access
+case "$1" in
+  --deploy|--start|--stop|--health)
+    if [[ "$(whoami)" != "adminhabl" ]]; then
+      echo "Elevating to adminhabl..."
+      exec su - adminhabl -c "${REPO_DIR}/loft-ctl $*"
+    fi
+    ;;
+esac
+
 case "$1" in
   --deploy) bash "$CONTROL_PLANE_DIR/deploy.sh" "${2:-}" ;;
   --start)  bash "$CONTROL_PLANE_DIR/start.sh"  "${2:-}" ;;
   --stop)   bash "$CONTROL_PLANE_DIR/stop.sh"   "${2:-}" ;;
   --health) bash "$CONTROL_PLANE_DIR/health.sh"  "${2:-}" ;;
   --update) bash "$CONTROL_PLANE_DIR/update.sh" ;;
+  --ship)
+    bash "$CONTROL_PLANE_DIR/update.sh"
+    "$REPO_DIR/loft-ctl" --deploy "${2:-}"
+    ;;
   -h|--help) usage ;;
   *)
     echo "Unknown command: $1"

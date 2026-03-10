@@ -192,7 +192,7 @@ Docker log rotation is configured at two levels:
 
 - **SSH**: Only `hsimah` can SSH in (`AllowUsers hsimah` in sshd_config)
 - **SSH passwords**: Disabled on Pis (`SSH_DISABLE_PASSWORD=true`), enabled on space-needle
-- **Admin escalation**: `hsimah` runs `admin` alias which does `su - adminhabl`
+- **Admin escalation**: `loft-ctl` auto-elevates to `adminhabl` via `su` for docker commands; `admin` alias also available for manual escalation
 - **Sudo**: `adminhabl` has full sudo via `/etc/sudoers.d/adminhabl`
 - **Containers**: All run as `littledog` (UID/GID 1003), a nologin service account
 
@@ -221,6 +221,8 @@ sudo bash setup.sh
 
 ### Managing services
 
+Commands that need docker access (`--deploy`, `--start`, `--stop`, `--health`) auto-elevate to `adminhabl` via `su` when run as another user. You'll be prompted for the admin password.
+
 ```bash
 # Show usage (dynamically shows this host's services)
 loft-ctl
@@ -231,6 +233,10 @@ loft-ctl --update
 # Deploy (pull images + restart + health check)
 loft-ctl --deploy --all
 loft-ctl --deploy plex
+
+# Update + deploy in one step
+loft-ctl --ship --all
+loft-ctl --ship plex
 
 # Start / stop containers
 loft-ctl --start --all
