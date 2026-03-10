@@ -8,7 +8,7 @@ Fleet configuration for The Loft — a mono-repo managing all hosts (space-needl
 
 | Host | Role | Services |
 |------|------|----------|
-| `space-needle` | Primary server | plex, media, pupyrus, iditarod, howlr (server) |
+| `space-needle` | Primary server | plex, media, pupyrus, iditarod, howlr (server), pulsr |
 | `viking` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 | `fjord` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 
@@ -32,6 +32,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Howlr shairport-sync | `mikebrady/shairport-sync` | host network | `config/shairport-sync.conf` | AirPlay receiver (feeds snapserver) |
 | Howlr librespot | `giof71/librespot` | host network | — | Spotify Connect receiver (feeds snapserver) |
 | Howlr snapclient | `ivdata/snapclient` | host network | `.env` per host | Snapcast client (receives stream, outputs to speakers) |
+| Pulsr | `superseriousbusiness/gotosocial` | 8080 | `/opt/pulsr/data` | Self-hosted fediverse instance (GoToSocial) for status updates and household messaging |
 
 Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`media-vpn`). Radarr, Sonarr, and Lidarr use host networking. All six are managed together in `services/media/docker-compose.yml`.
 
@@ -68,11 +69,14 @@ the-loft/
 │   │   ├── Dockerfile
 │   │   ├── entrypoint.sh
 │   │   └── .env.example
-│   └── howlr/
+│   ├── howlr/
+│   │   ├── docker-compose.yml
+│   │   ├── config/
+│   │   │   ├── snapserver.conf
+│   │   │   └── shairport-sync.conf
+│   │   └── .env.example
+│   └── pulsr/
 │       ├── docker-compose.yml
-│       ├── config/
-│       │   ├── snapserver.conf
-│       │   └── shairport-sync.conf
 │       └── .env.example
 ├── control-plane/
 │   ├── common.sh
@@ -141,6 +145,7 @@ Host-specific groups (e.g. `render,video` on space-needle) are configured in `ho
   /pupyrus/db                     MariaDB data
   /iditarod                       GitHub Actions runner workdir
   /howlr                          Howlr persistent data
+  /pulsr/data                     GoToSocial database + media storage
 ```
 
 All `/opt` config dirs are owned `littledog:pack-member` (755). All `/mammoth` media dirs are owned `littledog:pack-member` (775). Viking/fjord have no storage mount or `/opt` directories.
@@ -187,6 +192,7 @@ Docker log rotation is configured at two levels:
 | shairport-sync | 5m | 3 | AirPlay receiver logging |
 | librespot | 5m | 3 | Spotify Connect logging |
 | snapclient | 5m | 3 | Audio client logging |
+| pulsr | 10m | 3 | Fediverse instance (GoToSocial) |
 
 ## Security Model
 
@@ -213,6 +219,7 @@ cp services/howlr/.env.example services/howlr/.env
 cp services/plex/.env.example services/plex/.env
 cp services/media/.env.example services/media/.env
 cp services/pupyrus/.env.example services/pupyrus/.env
+cp services/pulsr/.env.example services/pulsr/.env
 
 # Edit each .env file with real values
 # Then run setup as root:
@@ -298,6 +305,7 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Iditarod | `GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS`, `DOCKER_GID` |
 | Howlr (server) | `COMPOSE_PROFILES=server`, `LIBRESPOT_NAME` |
 | Howlr (client) | `COMPOSE_PROFILES=client`, `SNAPSERVER_HOST`, `SOUND_DEVICE`, `HOST_ID` |
+| Pulsr | `GTS_HOST`, `GTS_PROTOCOL`, `TZ` |
 
 ## CI
 
