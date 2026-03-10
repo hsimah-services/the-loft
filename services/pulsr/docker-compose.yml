@@ -25,4 +25,10 @@ services:
       - /opt/pulsr/data:/gotosocial/storage
     ports:
       - "8080:8080"
+    networks:
+      - loft-proxy
     user: "1003:1003"
+
+networks:
+  loft-proxy:
+    external: true

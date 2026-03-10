@@ -277,6 +277,10 @@ else
   warn "daemon.json not found in repo, skipping log rotation config"
 fi
 
+# ─── 10b. Shared Docker networks ────────────────────────────────────────
+info "Ensuring shared Docker networks..."
+docker network create loft-proxy 2>/dev/null || true
+
 # ─── 11. Deploy services ─────────────────────────────────────────────────────
 info "Deploying services..."
 

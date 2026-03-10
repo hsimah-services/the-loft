@@ -59,8 +59,11 @@ services:
     volumes:
       - /opt/pupyrus/html:/var/www/html
     ports:
-      - "80:80"
+      - "8081:80"
     restart: unless-stopped
+    networks:
+      - default
+      - loft-proxy
     depends_on:
       db:
         condition: service_healthy
@@ -87,3 +90,7 @@ services:
         condition: service_healthy
     profiles:
       - cli
+
+networks:
+  loft-proxy:
+    external: true

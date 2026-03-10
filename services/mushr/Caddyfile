@@ -1,0 +1,52 @@
+{
+	auto_https off
+	admin :8880
+}
+
+http://radarr.space-needle:80 {
+	reverse_proxy host.docker.internal:7878
+}
+
+http://sonarr.space-needle:80 {
+	reverse_proxy host.docker.internal:8989
+}
+
+http://lidarr.space-needle:80 {
+	reverse_proxy host.docker.internal:8686
+}
+
+http://jackett.space-needle:80 {
+	reverse_proxy host.docker.internal:9117
+}
+
+http://plex.space-needle:80 {
+	reverse_proxy host.docker.internal:32400
+}
+
+http://pupyrus.space-needle:80 {
+	reverse_proxy pupyrus:80
+}
+
+http://pulsr.space-needle:80 {
+	reverse_proxy pulsr:8080
+}
+
+http://transmission.space-needle:80 {
+	reverse_proxy host.docker.internal:9091
+}
+
+http://soulseek.space-needle:80 {
+	reverse_proxy host.docker.internal:6080
+}
+
+http://snapweb.space-needle:80 {
+	reverse_proxy host.docker.internal:1780
+}
+
+http://space-needle:80 {
+	reverse_proxy pupyrus:80
+}
+
+http://*.space-needle:80 {
+	respond "Unknown service" 404
+}

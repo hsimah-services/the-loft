@@ -1,0 +1,52 @@
+services:
+  mushr:
+    image: caddy:2-alpine
+    container_name: mushr
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    ports:
+      - "80:80"
+      - "8880:8880"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - loft-proxy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8880/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mushr-dns:
+    image: drpsychick/dnsmasq:latest
+    container_name: mushr-dns
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+    volumes:
+      - ./dnsmasq.conf:/etc/dnsmasq.conf:ro
+    cap_add:
+      - NET_ADMIN
+
+volumes:
+  caddy-data:
+  caddy-config:
+
+networks:
+  loft-proxy:
+    name: loft-proxy
+    driver: bridge
