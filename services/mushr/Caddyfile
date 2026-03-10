@@ -1,5 +1,4 @@
 {
-	auto_https off
 	admin :8880
 }
 
