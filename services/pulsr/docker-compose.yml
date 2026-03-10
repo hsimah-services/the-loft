@@ -30,6 +30,18 @@ services:
       - loft-proxy
     user: "1003:1003"
 
+  pulsr-phanpy:
+    container_name: pulsr-phanpy
+    image: ghcr.io/yitsushi/phanpy-docker:latest
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    networks:
+      - loft-proxy
+
 networks:
   loft-proxy:
     external: true

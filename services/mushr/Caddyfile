@@ -28,7 +28,13 @@ http://pupyrus.space-needle:80 {
 }
 
 http://pulsr.space-needle:80 {
-	reverse_proxy pulsr:8080
+	@gts path /api/* /.well-known/* /nodeinfo/* /oauth/* /users/* /@* /fileserver/* /settings/* /auth/* /media/*
+	handle @gts {
+		reverse_proxy pulsr:8080
+	}
+	handle {
+		reverse_proxy pulsr-phanpy:80
+	}
 }
 
 http://transmission.space-needle:80 {

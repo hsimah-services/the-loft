@@ -8,7 +8,7 @@ Fleet configuration for The Loft — a mono-repo managing all hosts (space-needl
 
 | Host | Role | Services |
 |------|------|----------|
-| `space-needle` | Primary server | mushr, plex, media, pupyrus, iditarod, howlr (server), pulsr |
+| `space-needle` | Primary server | mushr, plex, media, pupyrus, iditarod, howlr (server), pulsr (+ phanpy) |
 | `viking` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 | `fjord` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 
@@ -35,10 +35,11 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Howlr librespot | `giof71/librespot` | host network | — | Spotify Connect receiver (feeds snapserver) |
 | Howlr snapclient | `ivdata/snapclient` | host network | `.env` per host | Snapcast client (receives stream, outputs to speakers) |
 | Pulsr | `superseriousbusiness/gotosocial` | 8080 | `/opt/pulsr/data` | Self-hosted fediverse instance (GoToSocial) for status updates and household messaging |
+| Pulsr Phanpy | `ghcr.io/yitsushi/phanpy-docker` | — | — | Web client for GoToSocial (served at `pulsr.space-needle/`) |
 
 Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`media-vpn`). Radarr, Sonarr, and Lidarr use host networking. All six are managed together in `services/media/docker-compose.yml`.
 
-Mushr provides a reverse proxy (Caddy) and wildcard DNS (dnsmasq) so all web services are accessible via clean subdomain URLs (`radarr.space-needle`, `sonarr.space-needle`, etc.) instead of remembering port numbers. A shared `loft-proxy` Docker bridge network connects Caddy to bridge-networked services (pupyrus, pulsr); host-network services are reached via `host.docker.internal`.
+Mushr provides a reverse proxy (Caddy) and wildcard DNS (dnsmasq) so all web services are accessible via clean subdomain URLs (`radarr.space-needle`, `sonarr.space-needle`, etc.) instead of remembering port numbers. A shared `loft-proxy` Docker bridge network connects Caddy to bridge-networked services (pupyrus, pulsr, pulsr-phanpy); host-network services are reached via `host.docker.internal`. Pulsr uses path-based routing: `pulsr.space-needle/` serves the Phanpy web client, while GoToSocial API paths (`/api/*`, `/.well-known/*`, `/settings/*`, etc.) are proxied to GoToSocial directly.
 
 Howlr uses Docker Compose profiles: `COMPOSE_PROFILES=server` on space-needle runs snapserver + shairport-sync + librespot; `COMPOSE_PROFILES=client` on Pis runs snapclient. The `.env` file controls which profile is active.
 
@@ -204,6 +205,7 @@ Docker log rotation is configured at two levels:
 | librespot | 5m | 3 | Spotify Connect logging |
 | snapclient | 5m | 3 | Audio client logging |
 | pulsr | 10m | 3 | Fediverse instance (GoToSocial) |
+| pulsr-phanpy | 5m | 3 | Phanpy web client (static files) |
 
 ## Security Model
 
@@ -317,7 +319,7 @@ Mushr provides subdomain-based access to all web services on space-needle:
 | `jackett.space-needle` | Jackett |
 | `plex.space-needle` | Plex |
 | `pupyrus.space-needle` | WordPress |
-| `pulsr.space-needle` | GoToSocial |
+| `pulsr.space-needle` | Phanpy web client (default) / GoToSocial API (path-based: `/api/*`, `/.well-known/*`, `/settings/*`, etc.) |
 | `transmission.space-needle` | Transmission |
 | `soulseek.space-needle` | Soulseek |
 | `snapweb.space-needle` | Snapweb |
