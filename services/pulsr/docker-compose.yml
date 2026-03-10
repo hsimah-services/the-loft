@@ -34,6 +34,8 @@ services:
     container_name: pulsr-phanpy
     image: ghcr.io/yitsushi/phanpy-docker:latest
     restart: unless-stopped
+    environment:
+      PHANPY_DEFAULT_INSTANCE: pulsr.space-needle
     logging:
       driver: json-file
       options:
