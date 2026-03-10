@@ -35,8 +35,8 @@ services:
         max-size: "5m"
         max-file: "3"
     ports:
-      - "53:53/udp"
-      - "53:53/tcp"
+      - "192.168.86.28:53:53/udp"
+      - "192.168.86.28:53:53/tcp"
     volumes:
       - ./dnsmasq.conf:/etc/dnsmasq.conf:ro
     cap_add:
