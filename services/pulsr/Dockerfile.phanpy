@@ -1,7 +1,7 @@
 # Build Phanpy from source with custom branding
 FROM node:22-alpine AS builder
 
-RUN apk add --no-cache git imagemagick
+RUN apk add --no-cache git imagemagick imagemagick-jpeg
 
 # Clone Phanpy source
 RUN git clone --depth 1 https://github.com/cheeaun/phanpy.git /phanpy
