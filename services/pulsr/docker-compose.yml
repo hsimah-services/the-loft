@@ -30,10 +30,11 @@ services:
 
   pulsr-phanpy:
     container_name: pulsr-phanpy
-    image: ghcr.io/yitsushi/phanpy-docker:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.phanpy
+    image: pulsr-phanpy:latest
     restart: unless-stopped
-    environment:
-      PHANPY_DEFAULT_INSTANCE: pulsr.space-needle
     logging:
       driver: json-file
       options:

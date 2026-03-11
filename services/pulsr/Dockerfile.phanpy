@@ -1,0 +1,36 @@
+# Build Phanpy from source with custom branding
+FROM node:22-alpine AS builder
+
+RUN apk add --no-cache git imagemagick
+
+# Clone Phanpy source
+RUN git clone --depth 1 https://github.com/cheeaun/phanpy.git /phanpy
+WORKDIR /phanpy
+RUN npm install
+
+# Copy custom logo and generate icon variants
+COPY assets/pulsr-logo.jpg /tmp/pulsr-logo.jpg
+
+RUN magick /tmp/pulsr-logo.jpg -resize 16x16 /tmp/favicon-16.png && \
+    magick /tmp/pulsr-logo.jpg -resize 32x32 /tmp/favicon-32.png && \
+    magick /tmp/pulsr-logo.jpg -resize 48x48 /tmp/favicon-48.png && \
+    magick /tmp/favicon-16.png /tmp/favicon-32.png /tmp/favicon-48.png public/favicon.ico && \
+    magick /tmp/pulsr-logo.jpg -resize 180x180 public/apple-touch-icon.png && \
+    magick /tmp/pulsr-logo.jpg -resize 192x192 public/logo-192.png && \
+    magick /tmp/pulsr-logo.jpg -resize 512x512 public/logo-512.png && \
+    magick /tmp/pulsr-logo.jpg -resize 72x72 public/logo-badge-72.png && \
+    magick /tmp/pulsr-logo.jpg -resize 512x512 public/logo-maskable-512.png && \
+    magick /tmp/pulsr-logo.jpg -resize 512x512 -colorspace Gray public/logo-monochrome-512.png && \
+    magick /tmp/pulsr-logo.jpg -resize 512x512 -colorspace Gray public/logo-monochrome-maskable-512.png && \
+    magick /tmp/pulsr-logo.jpg -resize 1200x630 -gravity center -extent 1200x630 public/og-image.png
+
+# Build with custom branding
+ENV PHANPY_CLIENT_NAME="Pulsr"
+ENV PHANPY_DEFAULT_INSTANCE="pulsr.space-needle"
+ENV PHANPY_DISALLOW_ROBOTS="true"
+RUN npm run build
+
+# Serve with nginx
+FROM nginx:alpine
+COPY --from=builder /phanpy/dist /usr/share/nginx/html
+EXPOSE 80
