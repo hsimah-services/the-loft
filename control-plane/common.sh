@@ -100,7 +100,7 @@ check_url() {
   local warn_only="${3:-false}"
 
   local http_code
-  http_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$url" 2>/dev/null || echo "000")
+  http_code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "$url" 2>/dev/null || echo "000")
 
   if [[ "$http_code" == "000" ]]; then
     if $warn_only; then
