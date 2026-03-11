@@ -37,21 +37,6 @@ compose_args_for() {
   echo "$args"
 }
 
-# ── Resolve target services ───────────────────────────────────────────────────
-# Returns SERVICES array if --all, or the single named service.
-resolve_targets() {
-  local arg="${1:-}"
-  if [[ -z "$arg" ]]; then
-    echo "ERROR: Missing <service|--all> argument." >&2
-    exit 1
-  fi
-  if [[ "$arg" == "--all" ]]; then
-    echo "${SERVICES[@]}"
-  else
-    echo "$arg"
-  fi
-}
-
 # ── Container health check ─────────────────────────────────────────────────────
 check_containers() {
   local compose_args="$1"
@@ -133,18 +118,4 @@ check_web_ui() {
   done
 
   return "$failed"
-}
-
-# ── Run a command across targets ──────────────────────────────────────────────
-run_for_targets() {
-  local cmd="$1"
-  shift
-  local targets
-  read -ra targets <<< "$(resolve_targets "${1:-}")"
-
-  local overall=0
-  for svc in "${targets[@]}"; do
-    "$cmd" "$svc" || (( overall++ ))
-  done
-  return "$overall"
 }

@@ -89,12 +89,7 @@ the-loft/
 │       ├── docker-compose.yml
 │       └── .env.example
 ├── control-plane/
-│   ├── common.sh
-│   ├── deploy.sh
-│   ├── health.sh
-│   ├── start.sh
-│   ├── stop.sh
-│   └── update.sh
+│   └── common.sh
 ├── plans/
 │   ├── howlr.md
 │   └── raspberry-pi.md
@@ -242,33 +237,37 @@ sudo bash setup.sh
 
 ### Managing services
 
-Commands that need docker access (`--deploy`, `--start`, `--stop`, `--health`) auto-elevate to `adminhabl` via `su` when run as another user. You'll be prompted for the admin password.
+Commands that need docker access (`start`, `stop`, `rebuild`, `health`, `update`) auto-elevate to `adminhabl` via `su` when run as another user. You'll be prompted for the admin password.
 
 ```bash
 # Show usage (dynamically shows this host's services)
 loft-ctl
 
-# Pull latest config from git
-loft-ctl --update
-
-# Deploy (pull images + restart + health check)
-loft-ctl --deploy --all
-loft-ctl --deploy plex
-
-# Update + deploy in one step
-loft-ctl --ship --all
-loft-ctl --ship plex
-
 # Start / stop containers
-loft-ctl --start --all
-loft-ctl --stop media
+loft-ctl start --all
+loft-ctl start plex media
+loft-ctl stop media
 
-# Run health checks without deploying
-loft-ctl --health          # all services
-loft-ctl --health plex     # single service
+# Full rebuild (down + pull images + up — fresh mounts)
+loft-ctl rebuild --all
+loft-ctl rebuild plex
+
+# Run health checks (defaults to all services)
+loft-ctl health
+loft-ctl health plex media
+
+# Update: git pull + rebuild + health check
+loft-ctl update --all
+loft-ctl update plex media
+
+# Update from a specific branch
+loft-ctl update --branch feature/ssl --all
+
+# Rebuild without pulling git changes
+loft-ctl update --no-pull plex
 ```
 
-After each deploy, the script verifies:
+After each `rebuild` or `update`, the script verifies:
 1. **Container check** — all containers in the compose file are "running" (retries for up to 30s)
 2. **Web UI check** — HTTP endpoints respond based on the host's `HEALTH_URLS` and `HEALTH_URLS_WARN` config
 
