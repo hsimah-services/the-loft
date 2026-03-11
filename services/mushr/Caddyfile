@@ -34,7 +34,9 @@ https://pulsr.space-needle {
 	tls internal
 	@gts path /api/* /.well-known/* /nodeinfo/* /oauth/* /users/* /@* /fileserver/* /settings /settings/* /auth/* /media/* /assets/*
 	handle @gts {
-		reverse_proxy pulsr:8080
+		reverse_proxy pulsr:8080 {
+			header_up X-Real-IP {remote_host}
+		}
 	}
 	handle {
 		reverse_proxy pulsr-phanpy:80

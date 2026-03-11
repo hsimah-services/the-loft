@@ -16,7 +16,7 @@ services:
       GTS_DB_TYPE: sqlite
       GTS_DB_ADDRESS: /gotosocial/storage/database.sqlite
       GTS_STORAGE_LOCAL_BASE_PATH: /gotosocial/storage
-      GTS_TRUSTED_PROXIES: "172.27.0.0/16,192.168.86.0/24"
+      GTS_TRUSTED_PROXIES: "172.27.0.0/16"
       GTS_LETSENCRYPT_ENABLED: "false"
       GTS_ACCOUNTS_REGISTRATION_OPEN: "false"
       GTS_ACCOUNTS_APPROVAL_REQUIRED: "true"
