@@ -32,7 +32,7 @@ http://pulsr.space-needle:80 {
 
 https://pulsr.space-needle {
 	tls internal
-	@gts path /api/* /.well-known/* /nodeinfo/* /oauth/* /users/* /@* /fileserver/* /settings /settings/* /auth/* /media/*
+	@gts path /api/* /.well-known/* /nodeinfo/* /oauth/* /users/* /@* /fileserver/* /settings /settings/* /auth/* /media/* /assets/*
 	handle @gts {
 		reverse_proxy pulsr:8080
 	}
