@@ -172,7 +172,7 @@ fi
 # ─── 8. Shell config ─────────────────────────────────────────────────────────
 info "Configuring shared shell config..."
 
-BASHRC_SOURCE="source ${REPO_DIR}/bashrc"
+BASHRC_SOURCE="source ${REPO_DIR}/bashrc.d"
 
 # hsimah
 ALIAS_FILE="/home/hsimah/.admin_alias"

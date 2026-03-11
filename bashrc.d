@@ -1,5 +1,5 @@
 # the-loft shared bashrc — sourced by hsimah and adminhabl
-# Source from ~/.bashrc:  source /srv/the-loft/bashrc
+# Source from ~/.bashrc:  source /srv/the-loft/bashrc.d
 
 # If not running interactively, don't do anything
 case $- in
@@ -77,5 +77,5 @@ __REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Aliases ────────────────────────────────────────────────────────────────────
 alias loft-ctl="${__REPO_DIR}/loft-ctl"
-alias nano="nano --rcfile=${__REPO_DIR}/nanorc"
+alias nano="nano --rcfile=${__REPO_DIR}/nanorc.d"
 alias adminhabl='su - adminhabl'
