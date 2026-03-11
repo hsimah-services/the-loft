@@ -32,14 +32,21 @@ http://pulsr.space-needle:80 {
 
 https://pulsr.space-needle {
 	tls internal
-	@gts path /api/* /.well-known/* /nodeinfo/* /oauth/* /users/* /@* /fileserver/* /settings /settings/* /auth/* /media/* /assets/*
+	@gts path /api/* /.well-known/* /nodeinfo/* /oauth/* /users/* /@* /fileserver/* /settings /settings/* /auth/* /media/*
 	handle @gts {
 		reverse_proxy pulsr:8080 {
 			header_up X-Real-IP {remote_host}
 		}
 	}
 	handle {
-		reverse_proxy pulsr-phanpy:80
+		reverse_proxy pulsr-phanpy:80 {
+			@notfound status 404
+			handle_response @notfound {
+				reverse_proxy pulsr:8080 {
+					header_up X-Real-IP {remote_host}
+				}
+			}
+		}
 	}
 }
 
