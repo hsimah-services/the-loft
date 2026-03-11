@@ -2,31 +2,57 @@
 # loft-ctl — manage services on this host
 set -euo pipefail
 
-CONTROL_PLANE_DIR="$(cd "$(dirname "$0")/control-plane" && pwd)"
-
-# Source host config for dynamic usage info
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOST_NAME="$(hostname)"
 HOST_CONF="${REPO_DIR}/hosts/${HOST_NAME}/host.conf"
 
+# ─── Colors ───────────────────────────────────────────────────────────────────
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+info()  { echo -e "${GREEN}[INFO]${NC}  $*"; }
+warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
+error() { echo -e "${RED}[ERROR]${NC} $*"; }
+
+# ─── Load host config ────────────────────────────────────────────────────────
+if [[ ! -f "$HOST_CONF" ]]; then
+  error "No host config found at ${HOST_CONF}"
+  error "This host (${HOST_NAME}) is not configured in the fleet."
+  exit 1
+fi
+
+source "$HOST_CONF"
+
+# ─── Source common helpers ────────────────────────────────────────────────────
+source "${REPO_DIR}/control-plane/common.sh"
+
+# ─── Usage ────────────────────────────────────────────────────────────────────
 usage() {
-  echo "Usage: $0 <command> [<service>]"
+  echo "Usage: loft-ctl <command> [options] [service ...]"
   echo ""
-  if [[ -f "$HOST_CONF" ]]; then
-    source "$HOST_CONF"
-    echo "Host: ${HOST_NAME}"
-    echo "Services: ${SERVICES[*]}"
-  else
-    echo "Host: ${HOST_NAME} (no host.conf found)"
-  fi
+  echo "Host: ${HOST_NAME}"
+  echo "Services: ${SERVICES[*]}"
   echo ""
   echo "Commands:"
-  echo "  --deploy <service|--all>  Pull images and restart (with health checks)"
-  echo "  --start  <service|--all>  Start containers"
-  echo "  --stop   <service|--all>  Stop containers"
-  echo "  --health [service]        Run health checks (all services, or one)"
-  echo "  --update                  Pull latest config from git"
-  echo "  --ship   <service|--all>  Update + deploy in one step"
+  echo "  start   <service ...| --all>   Start containers"
+  echo "  stop    <service ...| --all>   Stop containers"
+  echo "  rebuild <service ...| --all>   Full rebuild (down + up, fresh mounts)"
+  echo "  health  [service ...]          Run health checks (defaults to --all)"
+  echo "  update  <service ...| --all>   Pull config, rebuild, health check"
+  echo ""
+  echo "Options:"
+  echo "  --all                          Target all services on this host"
+  echo "  --branch <name>               Checkout a specific branch (update only)"
+  echo "  --no-pull                      Skip git pull (update only)"
+  echo "  -h, --help                     Show this help"
+  echo ""
+  echo "Examples:"
+  echo "  loft-ctl start plex media"
+  echo "  loft-ctl rebuild --all"
+  echo "  loft-ctl update --branch feature/ssl --all"
+  echo "  loft-ctl update --no-pull plex"
   echo ""
   echo "Commands that need docker auto-elevate to adminhabl."
   exit 0
@@ -36,29 +62,214 @@ if [[ $# -eq 0 ]]; then
   usage
 fi
 
-# Auto-elevate to adminhabl for commands that need docker access
+# ─── Auto-elevate to adminhabl for docker commands ───────────────────────────
+# Must happen before arg parsing consumes $@
 case "$1" in
-  --deploy|--start|--stop|--health)
+  start|stop|rebuild|health|update)
     if [[ "$(whoami)" != "adminhabl" ]]; then
+      QUOTED_ARGS=""
+      for arg in "$@"; do
+        QUOTED_ARGS+="$(printf '%q ' "$arg")"
+      done
       echo "Elevating to adminhabl..."
-      exec su - adminhabl -c "${REPO_DIR}/loft-ctl $*"
+      exec su - adminhabl -c "${REPO_DIR}/loft-ctl ${QUOTED_ARGS}"
     fi
     ;;
 esac
 
-case "$1" in
-  --deploy) bash "$CONTROL_PLANE_DIR/deploy.sh" "${2:-}" ;;
-  --start)  bash "$CONTROL_PLANE_DIR/start.sh"  "${2:-}" ;;
-  --stop)   bash "$CONTROL_PLANE_DIR/stop.sh"   "${2:-}" ;;
-  --health) bash "$CONTROL_PLANE_DIR/health.sh"  "${2:-}" ;;
-  --update) bash "$CONTROL_PLANE_DIR/update.sh" ;;
-  --ship)
-    bash "$CONTROL_PLANE_DIR/update.sh"
-    "$REPO_DIR/loft-ctl" --deploy "${2:-}"
+# ─── Parse arguments ─────────────────────────────────────────────────────────
+COMMAND="$1"
+shift
+
+TARGETS=()
+BRANCH=""
+NO_PULL=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --all)
+      TARGETS=("${SERVICES[@]}")
+      ;;
+    --branch)
+      if [[ $# -lt 2 ]]; then
+        error "--branch requires a branch name"
+        exit 1
+      fi
+      BRANCH="$2"
+      shift
+      ;;
+    --no-pull)
+      NO_PULL=true
+      ;;
+    -h|--help)
+      usage
+      ;;
+    -*)
+      error "Unknown option: $1"
+      usage
+      ;;
+    *)
+      TARGETS+=("$1")
+      ;;
+  esac
+  shift
+done
+
+# ─── Validate targets ────────────────────────────────────────────────────────
+# health defaults to all services
+if [[ "$COMMAND" == "health" && ${#TARGETS[@]} -eq 0 ]]; then
+  TARGETS=("${SERVICES[@]}")
+fi
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  error "No services specified. Provide service names or --all."
+  exit 1
+fi
+
+# Verify each target is a known service
+for target in "${TARGETS[@]}"; do
+  found=false
+  for svc in "${SERVICES[@]}"; do
+    if [[ "$target" == "$svc" ]]; then
+      found=true
+      break
+    fi
+  done
+  if ! $found; then
+    error "Unknown service: ${target}"
+    error "Available services: ${SERVICES[*]}"
+    exit 1
+  fi
+done
+
+# ─── Service operations ──────────────────────────────────────────────────────
+do_start() {
+  local service="$1"
+  local compose_args
+  compose_args=$(compose_args_for "$service") || return 1
+
+  info "Starting ${service}..."
+  # shellcheck disable=SC2086
+  docker compose ${compose_args} up -d
+  info "Started ${service}."
+}
+
+do_stop() {
+  local service="$1"
+  local compose_args
+  compose_args=$(compose_args_for "$service") || return 1
+
+  info "Stopping ${service}..."
+  # shellcheck disable=SC2086
+  docker compose ${compose_args} down
+  info "Stopped ${service}."
+}
+
+do_rebuild() {
+  local service="$1"
+  local compose_args
+  compose_args=$(compose_args_for "$service") || return 1
+
+  info "Rebuilding ${service}..."
+  # shellcheck disable=SC2086
+  docker compose ${compose_args} down
+  # shellcheck disable=SC2086
+  docker compose ${compose_args} pull 2>/dev/null || true
+  # shellcheck disable=SC2086
+  docker compose ${compose_args} up -d
+  info "Rebuilt ${service}."
+}
+
+do_health() {
+  local service="$1"
+  local compose_args
+  compose_args=$(compose_args_for "$service") || return 1
+
+  info "Health check: ${service}"
+  local exit_code=0
+  check_containers "$compose_args" "$service" || exit_code=1
+  check_web_ui "$service" || exit_code=1
+
+  if (( exit_code == 0 )); then
+    info "Health check ${service} — passed."
+  else
+    warn "Health check ${service} — some checks failed."
+  fi
+  return "$exit_code"
+}
+
+do_git_update() {
+  local branch="${BRANCH:-main}"
+
+  if $NO_PULL; then
+    info "Skipping git pull (--no-pull)"
+    return 0
+  fi
+
+  info "Updating the-loft on ${HOST_NAME}..."
+  git -C "$REPO_DIR" fetch --all --prune
+  git -C "$REPO_DIR" checkout "$branch"
+  git -C "$REPO_DIR" pull --ff-only
+  info "Updated to $(git -C "$REPO_DIR" rev-parse --short HEAD) on ${branch}."
+}
+
+# ─── Execute command ──────────────────────────────────────────────────────────
+overall=0
+
+case "$COMMAND" in
+  start)
+    for svc in "${TARGETS[@]}"; do
+      do_start "$svc" || (( overall++ ))
+      echo ""
+    done
     ;;
-  -h|--help) usage ;;
+  stop)
+    for svc in "${TARGETS[@]}"; do
+      do_stop "$svc" || (( overall++ ))
+      echo ""
+    done
+    ;;
+  rebuild)
+    for svc in "${TARGETS[@]}"; do
+      do_rebuild "$svc" || (( overall++ ))
+      echo ""
+    done
+    ;;
+  health)
+    info "Running health checks: ${TARGETS[*]}"
+    echo ""
+    for svc in "${TARGETS[@]}"; do
+      do_health "$svc" || (( overall++ ))
+      echo ""
+    done
+    ;;
+  update)
+    do_git_update || { error "Git update failed"; exit 1; }
+    echo ""
+    for svc in "${TARGETS[@]}"; do
+      do_rebuild "$svc" || (( overall++ ))
+      echo ""
+    done
+    info "Running health checks..."
+    echo ""
+    for svc in "${TARGETS[@]}"; do
+      do_health "$svc" || (( overall++ ))
+      echo ""
+    done
+    ;;
+  -h|--help)
+    usage
+    ;;
   *)
-    echo "Unknown command: $1"
+    error "Unknown command: ${COMMAND}"
     usage
     ;;
 esac
+
+# ─── Summary ─────────────────────────────────────────────────────────────────
+if (( overall == 0 )); then
+  info "Done — all operations succeeded."
+else
+  warn "Done — ${overall} operation(s) had failures."
+  exit 1
+fi

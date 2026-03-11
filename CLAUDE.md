@@ -10,8 +10,8 @@
 - Host configs live at `hosts/<hostname>/host.conf` (bash-sourceable)
 - Service definitions live at `services/<name>/docker-compose.yml`
 - Per-host overrides live at `hosts/<hostname>/overrides/<service>/docker-compose.override.yml`
-- Control-plane scripts live at `control-plane/` and source host.conf dynamically
-- `loft-ctl` is the fleet-aware control script (aliased in bashrc, backward-compat alias `space-needle-ctl`)
+- `control-plane/common.sh` has shared helpers (compose_args_for, health checks) sourced by loft-ctl and setup.sh
+- `loft-ctl` is the fleet-aware control script (aliased in bashrc) with commands: start, stop, rebuild, health, update
 - `setup.sh` is the unified host provisioner — reads `hosts/$(hostname)/host.conf`
 
 ## README Maintenance
