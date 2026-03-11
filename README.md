@@ -8,7 +8,7 @@ Fleet configuration for The Loft — a mono-repo managing all hosts (space-needl
 
 | Host | Role | Services |
 |------|------|----------|
-| `space-needle` | Primary server | plex, media, pupyrus, iditarod, howlr (server) |
+| `space-needle` | Primary server | mushr, plex, media, pupyrus, iditarod, howlr (server), pulsr (+ phanpy) |
 | `viking` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 | `fjord` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 
@@ -26,14 +26,20 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Sonarr | `linuxserver/sonarr` | 8989 (host) | `/opt/sonarr` | TV management |
 | Lidarr | `linuxserver/lidarr` | 8686 (host) | `/opt/lidarr` | Music management |
 | Jackett | `linuxserver/jackett` | 9117 | `/opt/jackett` | Indexer proxy |
-| Pupyrus | `wordpress` + `mariadb` + `redis` | 80 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
+| Mushr (proxy) | `caddy:2-alpine` | 80, 8880 | `Caddyfile` | Reverse proxy — routes `*.space-needle` subdomains to services |
+| Mushr (DNS) | `drpsychick/dnsmasq` | 53/udp, 53/tcp | `dnsmasq.conf` | Wildcard DNS — resolves `*.space-needle` to LAN IP |
+| Pupyrus | `wordpress` + `mariadb` + `redis` | 8081 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
 | Iditarod | `actions/actions-runner` (custom build) | — | `.env` per host | Self-hosted GitHub Actions runner |
 | Howlr snapserver | `ivdata/snapserver` | 1704, 1705, 1780 (host) | `/opt/howlr`, `config/snapserver.conf`, `snapserver-data` volume | Snapcast sync engine + snapweb UI (speaker groups persist via volume) |
 | Howlr shairport-sync | `mikebrady/shairport-sync` | host network | `config/shairport-sync.conf` | AirPlay receiver (feeds snapserver) |
 | Howlr librespot | `giof71/librespot` | host network | — | Spotify Connect receiver (feeds snapserver) |
 | Howlr snapclient | `ivdata/snapclient` | host network | `.env` per host | Snapcast client (receives stream, outputs to speakers) |
+| Pulsr | `superseriousbusiness/gotosocial` | — (via Caddy) | `/opt/pulsr/data` | Self-hosted fediverse instance (GoToSocial) for status updates and household messaging |
+| Pulsr Phanpy | `ghcr.io/yitsushi/phanpy-docker` | — | — | Web client for GoToSocial (served at `pulsr.space-needle/`) |
 
 Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`media-vpn`). Radarr, Sonarr, and Lidarr use host networking. All six are managed together in `services/media/docker-compose.yml`.
+
+Mushr provides a reverse proxy (Caddy) and wildcard DNS (dnsmasq) so all web services are accessible via clean subdomain URLs (`radarr.space-needle`, `sonarr.space-needle`, etc.) instead of remembering port numbers. A shared `loft-proxy` Docker bridge network connects Caddy to bridge-networked services (pupyrus, pulsr, pulsr-phanpy); host-network services are reached via `host.docker.internal`. Pulsr uses path-based routing: `pulsr.space-needle/` serves the Phanpy web client, while GoToSocial API paths (`/api/*`, `/.well-known/*`, `/settings/*`, etc.) are proxied to GoToSocial directly.
 
 Howlr uses Docker Compose profiles: `COMPOSE_PROFILES=server` on space-needle runs snapserver + shairport-sync + librespot; `COMPOSE_PROFILES=client` on Pis runs snapclient. The `.env` file controls which profile is active.
 
@@ -68,11 +74,19 @@ the-loft/
 │   │   ├── Dockerfile
 │   │   ├── entrypoint.sh
 │   │   └── .env.example
-│   └── howlr/
+│   ├── howlr/
+│   │   ├── docker-compose.yml
+│   │   ├── config/
+│   │   │   ├── snapserver.conf
+│   │   │   └── shairport-sync.conf
+│   │   └── .env.example
+│   ├── mushr/
+│   │   ├── docker-compose.yml
+│   │   ├── Caddyfile
+│   │   ├── dnsmasq.conf
+│   │   └── .env.example
+│   └── pulsr/
 │       ├── docker-compose.yml
-│       ├── config/
-│       │   ├── snapserver.conf
-│       │   └── shairport-sync.conf
 │       └── .env.example
 ├── control-plane/
 │   ├── common.sh
@@ -141,6 +155,7 @@ Host-specific groups (e.g. `render,video` on space-needle) are configured in `ho
   /pupyrus/db                     MariaDB data
   /iditarod                       GitHub Actions runner workdir
   /howlr                          Howlr persistent data
+  /pulsr/data                     GoToSocial database + media storage
 ```
 
 All `/opt` config dirs are owned `littledog:pack-member` (755). All `/mammoth` media dirs are owned `littledog:pack-member` (775). Viking/fjord have no storage mount or `/opt` directories.
@@ -183,10 +198,14 @@ Docker log rotation is configured at two levels:
 | radarr/sonarr/lidarr | 5m | 3 | Moderate media management logging |
 | soulseek | 5m | 3 | Moderate logging |
 | jackett | 5m | 3 | Moderate logging |
+| mushr (caddy) | 5m | 3 | Reverse proxy access logging |
+| mushr-dns | 5m | 3 | DNS query logging |
 | snapserver | 5m | 3 | Audio distribution logging |
 | shairport-sync | 5m | 3 | AirPlay receiver logging |
 | librespot | 5m | 3 | Spotify Connect logging |
 | snapclient | 5m | 3 | Audio client logging |
+| pulsr | 10m | 3 | Fediverse instance (GoToSocial) |
+| pulsr-phanpy | 5m | 3 | Phanpy web client (static files) |
 
 ## Security Model
 
@@ -213,6 +232,8 @@ cp services/howlr/.env.example services/howlr/.env
 cp services/plex/.env.example services/plex/.env
 cp services/media/.env.example services/media/.env
 cp services/pupyrus/.env.example services/pupyrus/.env
+cp services/mushr/.env.example services/mushr/.env
+cp services/pulsr/.env.example services/pulsr/.env
 
 # Edit each .env file with real values
 # Then run setup as root:
@@ -286,6 +307,34 @@ sudo bash setup.sh
 
 See `plans/raspberry-pi.md` for the full provisioning guide.
 
+## Mushr — Reverse Proxy & LAN DNS
+
+Mushr provides subdomain-based access to all web services on space-needle:
+
+| URL | Service |
+|-----|---------|
+| `radarr.space-needle` | Radarr |
+| `sonarr.space-needle` | Sonarr |
+| `lidarr.space-needle` | Lidarr |
+| `jackett.space-needle` | Jackett |
+| `plex.space-needle` | Plex |
+| `pupyrus.space-needle` | WordPress |
+| `pulsr.space-needle` | Phanpy web client (default) / GoToSocial API (path-based: `/api/*`, `/.well-known/*`, `/settings/*`, etc.) |
+| `transmission.space-needle` | Transmission |
+| `soulseek.space-needle` | Soulseek |
+| `snapweb.space-needle` | Snapweb |
+| `space-needle` (bare) | WordPress (default) |
+
+Direct port access (e.g. `space-needle:7878`) continues to work for all services.
+
+### DNS Setup
+
+Before deploying, edit `services/mushr/dnsmasq.conf` and replace `SPACE_NEEDLE_LAN_IP` with space-needle's actual LAN IP.
+
+To use the subdomain URLs, point LAN clients' DNS at space-needle's IP:
+- **Router DHCP** (recommended): Set the primary DNS server to space-needle's LAN IP in your router's DHCP settings. All devices on the network will automatically resolve `*.space-needle`.
+- **Per-device**: Manually set DNS to space-needle's LAN IP in each device's network settings.
+
 ## Environment Files
 
 Each service that needs secrets has a `.env.example` template. Copy it to `.env` and fill in real values. The `.env` files are gitignored.
@@ -298,10 +347,13 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Iditarod | `GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS`, `DOCKER_GID` |
 | Howlr (server) | `COMPOSE_PROFILES=server`, `LIBRESPOT_NAME` |
 | Howlr (client) | `COMPOSE_PROFILES=client`, `SNAPSERVER_HOST`, `SOUND_DEVICE`, `HOST_ID` |
+| Mushr | None (edit `dnsmasq.conf` with LAN IP before deploying) |
+| Pulsr | `GTS_HOST`, `GTS_PROTOCOL`, `TZ` |
 
 ## CI
 
 A GitHub Actions workflow validates on every push:
+- Creates shared Docker networks (`loft-proxy`) needed by external network references
 - All base `docker-compose.yml` files pass `docker compose config --quiet`
 - Howlr compose validated with both `COMPOSE_PROFILES=server` and `COMPOSE_PROFILES=client`
 - All compose + override combinations validate

@@ -1,0 +1,47 @@
+services:
+  pulsr:
+    container_name: pulsr
+    image: superseriousbusiness/gotosocial:latest
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      GTS_HOST: ${GTS_HOST}
+      GTS_PROTOCOL: ${GTS_PROTOCOL:-http}
+      GTS_BIND_ADDRESS: 0.0.0.0
+      GTS_PORT: 8080
+      GTS_DB_TYPE: sqlite
+      GTS_DB_ADDRESS: /gotosocial/storage/database.sqlite
+      GTS_STORAGE_LOCAL_BASE_PATH: /gotosocial/storage
+      GTS_LETSENCRYPT_ENABLED: "false"
+      GTS_ACCOUNTS_REGISTRATION_OPEN: "false"
+      GTS_ACCOUNTS_APPROVAL_REQUIRED: "true"
+      GTS_MEDIA_REMOTE_CACHE_DAYS: ${GTS_MEDIA_REMOTE_CACHE_DAYS:-7}
+      TZ: ${TZ:-America/Los_Angeles}
+    volumes:
+      - /opt/pulsr/data:/gotosocial/storage
+      - ./config.yaml:/gotosocial/config.yaml:ro
+    networks:
+      - loft-proxy
+    user: "1003:1003"
+
+  pulsr-phanpy:
+    container_name: pulsr-phanpy
+    image: ghcr.io/yitsushi/phanpy-docker:latest
+    restart: unless-stopped
+    environment:
+      PHANPY_DEFAULT_INSTANCE: pulsr.space-needle
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    networks:
+      - loft-proxy
+
+networks:
+  loft-proxy:
+    external: true
