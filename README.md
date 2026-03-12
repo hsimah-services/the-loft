@@ -103,6 +103,7 @@ the-loft/
 │   └── raspberry-pi.md
 ├── setup.sh
 ├── loft-ctl
+├── pulsr-ctl
 ├── bashrc.d
 ├── inputrc.d
 ├── nanorc.d
@@ -278,6 +279,31 @@ loft-ctl update --branch feature/ssl --all
 loft-ctl update --no-pull plex
 ```
 
+### Managing Pulsr accounts
+
+`pulsr-ctl` wraps GoToSocial admin commands for managing accounts on the Pulsr instance. Like `loft-ctl`, it auto-elevates to `adminhabl` for docker access.
+
+```bash
+# Show usage
+pulsr-ctl
+
+# Create a regular account
+pulsr-ctl user-add --username alice --email alice@example.com --password 'MyP@ss123'
+
+# Create an admin account
+pulsr-ctl user-add --username bob --email bob@example.com --password 'MyP@ss123' --admin
+
+# Get an API token for automated posting
+pulsr-ctl user-token --email alice@example.com --password 'MyP@ss123'
+
+# Post a status update
+pulsr-ctl post --message "Server is alive at $(date)"
+```
+
+Accounts are automatically confirmed (no email verification on self-hosted instances).
+
+API tokens are obtained via the full OAuth flow (app creation → sign-in → authorize → token exchange) and do not expire unless revoked. Store the token as `GTS_TOKEN` in `services/pulsr/.env`.
+
 After each `rebuild` or `update`, the script verifies:
 1. **Container check** — all containers in the compose file are "running" (retries for up to 30s)
 2. **Web UI check** — HTTP endpoints respond based on the host's `HEALTH_URLS` and `HEALTH_URLS_WARN` config
@@ -402,7 +428,7 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Howlr (server) | `COMPOSE_PROFILES=server`, `LIBRESPOT_NAME` |
 | Howlr (client) | `COMPOSE_PROFILES=client`, `SNAPSERVER_HOST`, `SOUND_DEVICE`, `HOST_ID` |
 | Mushr | `LOFT_DOMAIN`, `CLOUDFLARE_API_TOKEN`, `TUNNEL_TOKEN` (edit `dnsmasq.conf` with LAN IP before deploying) |
-| Pulsr | `GTS_HOST`, `GTS_PROTOCOL`, `TZ` |
+| Pulsr | `GTS_HOST`, `GTS_PROTOCOL`, `GTS_TOKEN` (for `pulsr-ctl post`), `TZ` |
 
 ## CI
 

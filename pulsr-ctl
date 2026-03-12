@@ -1,0 +1,441 @@
+#!/usr/bin/env bash
+# pulsr-ctl — manage GoToSocial (Pulsr) accounts
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONTAINER="pulsr"
+GTS_BIN="/gotosocial/gotosocial"
+
+# ─── Colors ───────────────────────────────────────────────────────────────────
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+info()  { echo -e "${GREEN}[INFO]${NC}  $*"; }
+warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
+error() { echo -e "${RED}[ERROR]${NC} $*"; }
+
+# ─── Usage ────────────────────────────────────────────────────────────────────
+usage() {
+  echo "Usage: pulsr-ctl <command>"
+  echo ""
+  echo "Commands:"
+  echo "  user-add      Create a new GoToSocial account"
+  echo "  user-token    Get an API token for automated posting"
+  echo "  post          Post a status to GoToSocial"
+  echo ""
+  echo "Options for user-add:"
+  echo "  --username <name>    Account username (required)"
+  echo "  --email <email>      Account email (required)"
+  echo "  --password <pass>    Account password (required)"
+  echo "  --admin              Promote account to admin"
+  echo ""
+  echo "Options for user-token:"
+  echo "  --email <email>      Account email (required)"
+  echo "  --password <pass>    Account password (required)"
+  echo ""
+  echo "Options for post:"
+  echo "  --message <text>     Status text to post (required)"
+  exit 0
+}
+
+if [[ $# -eq 0 ]]; then
+  usage
+fi
+
+# ─── Auto-elevate to adminhabl for docker commands ───────────────────────────
+case "$1" in
+  user-add)
+    if [[ "$(whoami)" != "adminhabl" ]]; then
+      QUOTED_ARGS=""
+      for arg in "$@"; do
+        QUOTED_ARGS+="$(printf '%q ' "$arg")"
+      done
+      echo "Elevating to adminhabl..."
+      exec su - adminhabl -c "${REPO_DIR}/pulsr-ctl ${QUOTED_ARGS}"
+    fi
+    ;;
+esac
+
+# ─── Commands ─────────────────────────────────────────────────────────────────
+do_user_add() {
+  local username="" email="" password="" admin=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --username)
+        if [[ $# -lt 2 ]]; then
+          error "--username requires a value"
+          exit 1
+        fi
+        username="$2"
+        shift
+        ;;
+      --email)
+        if [[ $# -lt 2 ]]; then
+          error "--email requires a value"
+          exit 1
+        fi
+        email="$2"
+        shift
+        ;;
+      --password)
+        if [[ $# -lt 2 ]]; then
+          error "--password requires a value"
+          exit 1
+        fi
+        password="$2"
+        shift
+        ;;
+      --admin)
+        admin=true
+        ;;
+      *)
+        error "Unknown option: $1"
+        exit 1
+        ;;
+    esac
+    shift
+  done
+
+  # Validate required flags
+  local missing=()
+  [[ -z "$username" ]] && missing+=("--username")
+  [[ -z "$email" ]]    && missing+=("--email")
+  [[ -z "$password" ]] && missing+=("--password")
+
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    error "Missing required flags: ${missing[*]}"
+    echo ""
+    echo "Usage: pulsr-ctl user-add --username <name> --email <email> --password <pass> [--admin]"
+    exit 1
+  fi
+
+  # Create account
+  info "Creating account '${username}'..."
+  docker exec "$CONTAINER" "$GTS_BIN" admin account create \
+    --username "$username" \
+    --email "$email" \
+    --password "$password"
+
+  # Confirm account (no email verification on self-hosted)
+  info "Confirming account '${username}'..."
+  docker exec "$CONTAINER" "$GTS_BIN" admin account confirm \
+    --username "$username"
+
+  # Promote to admin if requested
+  if $admin; then
+    info "Promoting '${username}' to admin..."
+    docker exec "$CONTAINER" "$GTS_BIN" admin account promote \
+      --username "$username"
+  fi
+
+  info "Account '${username}' created and confirmed."
+  if $admin; then
+    info "Account '${username}' has admin privileges."
+  fi
+}
+
+# ─── user-token ──────────────────────────────────────────────────────────────
+do_user_token() {
+  local email="" password=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --email)
+        if [[ $# -lt 2 ]]; then
+          error "--email requires a value"
+          exit 1
+        fi
+        email="$2"
+        shift
+        ;;
+      --password)
+        if [[ $# -lt 2 ]]; then
+          error "--password requires a value"
+          exit 1
+        fi
+        password="$2"
+        shift
+        ;;
+      *)
+        error "Unknown option: $1"
+        exit 1
+        ;;
+    esac
+    shift
+  done
+
+  # Validate required flags
+  local missing=()
+  [[ -z "$email" ]]    && missing+=("--email")
+  [[ -z "$password" ]] && missing+=("--password")
+
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    error "Missing required flags: ${missing[*]}"
+    echo ""
+    echo "Usage: pulsr-ctl user-token --email <email> --password <pass>"
+    exit 1
+  fi
+
+  # Read base URL from pulsr .env
+  local env_file="${REPO_DIR}/services/pulsr/.env"
+  if [[ ! -f "$env_file" ]]; then
+    error "Pulsr .env not found at ${env_file}"
+    exit 1
+  fi
+
+  local GTS_HOST="" GTS_PROTOCOL=""
+  # shellcheck source=/dev/null
+  source "$env_file"
+
+  if [[ -z "$GTS_HOST" || -z "$GTS_PROTOCOL" ]]; then
+    error "GTS_HOST and GTS_PROTOCOL must be set in ${env_file}"
+    exit 1
+  fi
+
+  local BASE_URL="${GTS_PROTOCOL}://${GTS_HOST}"
+
+  # Cookie jar for session persistence
+  local cookie_jar
+  cookie_jar="$(mktemp)"
+  trap 'rm -f "$cookie_jar"' EXIT
+
+  # ── Step 1: Create OAuth app ──
+  info "Creating OAuth application..." >&2
+  local app_response
+  app_response="$(curl -sS -w '\n%{http_code}' -X POST "${BASE_URL}/api/v1/apps" \
+    -H 'Content-Type: application/x-www-form-urlencoded' \
+    -d 'client_name=pulsr-ctl' \
+    -d 'redirect_uris=urn:ietf:wg:oauth:2.0:oob' \
+    -d 'scopes=write:statuses write:media read')"
+
+  local app_body app_status
+  app_status="$(echo "$app_response" | tail -n1)"
+  app_body="$(echo "$app_response" | sed '$d')"
+
+  if [[ "$app_status" -lt 200 || "$app_status" -ge 300 ]]; then
+    error "Failed to create OAuth app (HTTP ${app_status}): ${app_body}" >&2
+    exit 1
+  fi
+
+  local client_id client_secret
+  client_id="$(echo "$app_body" | sed -n 's/.*"client_id" *: *"\([^"]*\)".*/\1/p')"
+  client_secret="$(echo "$app_body" | sed -n 's/.*"client_secret" *: *"\([^"]*\)".*/\1/p')"
+
+  if [[ -z "$client_id" || -z "$client_secret" ]]; then
+    error "Failed to parse client_id/client_secret from app response" >&2
+    exit 1
+  fi
+
+  info "OAuth app created (client_id: ${client_id:0:8}...)" >&2
+
+  # ── Step 2: GET sign-in page (extract CSRF token if present) ──
+  info "Signing in..." >&2
+  local signin_page
+  signin_page="$(curl -sS -c "$cookie_jar" "${BASE_URL}/auth/sign_in")"
+
+  local csrf_token=""
+  csrf_token="$(echo "$signin_page" | sed -n 's/.*name="authenticity_token" *value="\([^"]*\)".*/\1/p' | head -1)"
+
+  # ── Step 3: POST sign-in ──
+  local signin_args=(-sS -w '\n%{http_code}' -L -b "$cookie_jar" -c "$cookie_jar")
+  signin_args+=(-X POST "${BASE_URL}/auth/sign_in")
+  signin_args+=(--data-urlencode "email=${email}")
+  signin_args+=(--data-urlencode "password=${password}")
+  if [[ -n "$csrf_token" ]]; then
+    signin_args+=(--data-urlencode "authenticity_token=${csrf_token}")
+  fi
+
+  local signin_response signin_body signin_status
+  signin_response="$(curl "${signin_args[@]}")"
+  signin_status="$(echo "$signin_response" | tail -n1)"
+  signin_body="$(echo "$signin_response" | sed '$d')"
+
+  if [[ "$signin_status" -lt 200 || "$signin_status" -ge 400 ]]; then
+    error "Sign-in failed (HTTP ${signin_status})" >&2
+    exit 1
+  fi
+
+  # ── Step 4: GET authorize page (extract CSRF token if present) ──
+  info "Authorizing application..." >&2
+  local auth_page
+  auth_page="$(curl -sS -c "$cookie_jar" -b "$cookie_jar" \
+    "${BASE_URL}/oauth/authorize?client_id=${client_id}&redirect_uri=urn:ietf:wg:oauth:2.0:oob&response_type=code&scope=write:statuses+write:media+read")"
+
+  local auth_csrf=""
+  auth_csrf="$(echo "$auth_page" | sed -n 's/.*name="authenticity_token" *value="\([^"]*\)".*/\1/p' | head -1)"
+
+  # ── Step 5: POST authorize ──
+  local auth_args=(-sS -w '\n%{http_code}' -L -b "$cookie_jar" -c "$cookie_jar")
+  auth_args+=(-X POST "${BASE_URL}/oauth/authorize")
+  auth_args+=(-d "client_id=${client_id}")
+  auth_args+=(-d "redirect_uri=urn:ietf:wg:oauth:2.0:oob")
+  auth_args+=(-d "response_type=code")
+  auth_args+=(-d "scope=write:statuses+write:media+read")
+  if [[ -n "$auth_csrf" ]]; then
+    auth_args+=(--data-urlencode "authenticity_token=${auth_csrf}")
+  fi
+
+  local auth_response auth_body auth_status
+  auth_response="$(curl "${auth_args[@]}")"
+  auth_status="$(echo "$auth_response" | tail -n1)"
+  auth_body="$(echo "$auth_response" | sed '$d')"
+
+  if [[ "$auth_status" -lt 200 || "$auth_status" -ge 400 ]]; then
+    error "Authorization failed (HTTP ${auth_status})" >&2
+    exit 1
+  fi
+
+  # Extract authorization code from the OOB page
+  local auth_code=""
+  auth_code="$(echo "$auth_body" | sed -n 's/.*<code>\([^<]*\)<\/code>.*/\1/p' | head -1)"
+
+  # If no <code> tag, try the "code" query parameter from a redirect
+  if [[ -z "$auth_code" ]]; then
+    auth_code="$(echo "$auth_body" | sed -n 's/.*code=\([^&"]*\).*/\1/p' | head -1)"
+  fi
+
+  if [[ -z "$auth_code" ]]; then
+    error "Failed to extract authorization code from response" >&2
+    exit 1
+  fi
+
+  info "Authorization code obtained" >&2
+
+  # ── Step 6: Exchange code for token ──
+  info "Exchanging code for access token..." >&2
+  local token_response token_body token_status
+  token_response="$(curl -sS -w '\n%{http_code}' -X POST "${BASE_URL}/oauth/token" \
+    -H 'Content-Type: application/x-www-form-urlencoded' \
+    -d 'grant_type=authorization_code' \
+    -d "code=${auth_code}" \
+    -d "client_id=${client_id}" \
+    -d "client_secret=${client_secret}" \
+    -d 'redirect_uri=urn:ietf:wg:oauth:2.0:oob')"
+
+  token_status="$(echo "$token_response" | tail -n1)"
+  token_body="$(echo "$token_response" | sed '$d')"
+
+  if [[ "$token_status" -lt 200 || "$token_status" -ge 300 ]]; then
+    error "Token exchange failed (HTTP ${token_status}): ${token_body}" >&2
+    exit 1
+  fi
+
+  local access_token
+  access_token="$(echo "$token_body" | sed -n 's/.*"access_token" *: *"\([^"]*\)".*/\1/p')"
+
+  if [[ -z "$access_token" ]]; then
+    error "Failed to parse access_token from response" >&2
+    exit 1
+  fi
+
+  info "Token obtained successfully" >&2
+  echo "$access_token"
+}
+
+# ─── post ─────────────────────────────────────────────────────────────────────
+do_post() {
+  local message=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --message)
+        if [[ $# -lt 2 ]]; then
+          error "--message requires a value"
+          exit 1
+        fi
+        message="$2"
+        shift
+        ;;
+      *)
+        error "Unknown option: $1"
+        exit 1
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$message" ]]; then
+    error "Missing required flag: --message"
+    echo "" >&2
+    echo "Usage: pulsr-ctl post --message <text>" >&2
+    exit 1
+  fi
+
+  # Read config from pulsr .env
+  local env_file="${REPO_DIR}/services/pulsr/.env"
+  if [[ ! -f "$env_file" ]]; then
+    error "Pulsr .env not found at ${env_file}"
+    exit 1
+  fi
+
+  local GTS_HOST="" GTS_PROTOCOL="" GTS_TOKEN=""
+  # shellcheck source=/dev/null
+  source "$env_file"
+
+  local missing=()
+  [[ -z "$GTS_HOST" ]]     && missing+=("GTS_HOST")
+  [[ -z "$GTS_PROTOCOL" ]] && missing+=("GTS_PROTOCOL")
+  [[ -z "$GTS_TOKEN" ]]    && missing+=("GTS_TOKEN")
+
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    error "Missing required variables in ${env_file}: ${missing[*]}"
+    exit 1
+  fi
+
+  local BASE_URL="${GTS_PROTOCOL}://${GTS_HOST}"
+
+  # Build JSON payload (jq handles escaping)
+  local json_payload
+  json_payload="$(jq -n --arg status "$message" '{ status: $status }')"
+
+  info "Posting status to ${GTS_HOST}..." >&2
+  local response body http_status
+  response="$(curl -sS -w '\n%{http_code}' -X POST "${BASE_URL}/api/v1/statuses" \
+    -H "Authorization: Bearer ${GTS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "$json_payload")"
+
+  http_status="$(echo "$response" | tail -n1)"
+  body="$(echo "$response" | sed '$d')"
+
+  if [[ "$http_status" -lt 200 || "$http_status" -ge 300 ]]; then
+    error "Failed to post status (HTTP ${http_status}): ${body}" >&2
+    exit 1
+  fi
+
+  local status_url
+  status_url="$(echo "$body" | jq -r '.url // empty')"
+
+  if [[ -n "$status_url" ]]; then
+    info "Status posted successfully" >&2
+    echo "$status_url"
+  else
+    info "Status posted (HTTP ${http_status})" >&2
+  fi
+}
+
+# ─── Execute command ──────────────────────────────────────────────────────────
+COMMAND="$1"
+shift
+
+case "$COMMAND" in
+  user-add)
+    do_user_add "$@"
+    ;;
+  user-token)
+    do_user_token "$@"
+    ;;
+  post)
+    do_post "$@"
+    ;;
+  -h|--help)
+    usage
+    ;;
+  *)
+    error "Unknown command: ${COMMAND}"
+    usage
+    ;;
+esac

@@ -4,7 +4,7 @@ FROM node:22-alpine AS builder
 RUN apk add --no-cache git imagemagick imagemagick-jpeg
 
 # Clone Phanpy source
-RUN git clone --depth 1 https://github.com/cheeaun/phanpy.git /phanpy
+RUN git clone --depth 1 https://github.com/hsimah/phanpy.git /phanpy
 WORKDIR /phanpy
 RUN npm install
 
