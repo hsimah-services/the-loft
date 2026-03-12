@@ -64,13 +64,39 @@ fi
 
 # ─── Auto-elevate to adminhabl for docker commands ───────────────────────────
 # Must happen before arg parsing consumes $@
+# For 'update', run git pull as the calling user (who has SSH keys) first,
+# then elevate with --no-pull so adminhabl only does docker operations.
 case "$1" in
   start|stop|rebuild|health|update)
     if [[ "$(whoami)" != "adminhabl" ]]; then
+      if [[ "$1" == "update" ]]; then
+        # Parse just enough to run git operations as the calling user
+        _update_args=("$@")
+        _branch=""
+        _no_pull=false
+        for (( _i=1; _i<${#_update_args[@]}; _i++ )); do
+          case "${_update_args[$_i]}" in
+            --branch) _branch="${_update_args[$((_i+1))]}"; (( _i++ )) ;;
+            --no-pull) _no_pull=true ;;
+          esac
+        done
+        if ! $_no_pull; then
+          _git_branch="${_branch:-main}"
+          info "Pulling latest code as $(whoami)..."
+          git -C "$REPO_DIR" fetch --all --prune
+          git -C "$REPO_DIR" checkout "$_git_branch"
+          git -C "$REPO_DIR" pull --ff-only
+          info "Updated to $(git -C "$REPO_DIR" rev-parse --short HEAD) on ${_git_branch}."
+        fi
+      fi
       QUOTED_ARGS=""
       for arg in "$@"; do
         QUOTED_ARGS+="$(printf '%q ' "$arg")"
       done
+      # Always pass --no-pull to the elevated session (git already done above)
+      if [[ "$1" == "update" ]]; then
+        QUOTED_ARGS+="--no-pull "
+      fi
       echo "Elevating to adminhabl..."
       exec su - adminhabl -c "${REPO_DIR}/loft-ctl ${QUOTED_ARGS}"
     fi
