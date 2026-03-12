@@ -27,6 +27,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Lidarr | `linuxserver/lidarr` | 8686 (host) | `/opt/lidarr` | Music management |
 | Jackett | `linuxserver/jackett` | 9117 | `/opt/jackett` | Indexer proxy |
 | Mushr (proxy) | `caddy:2-alpine` + Cloudflare DNS module (custom build) | 80, 443, 8880 | `Caddyfile`, `Dockerfile.caddy` | Reverse proxy with HTTPS (Let's Encrypt via DNS-01) + LAN HTTP fallback |
+| Mushr (tunnel) | `cloudflare/cloudflared` | — (outbound only) | — | Cloudflare Tunnel — exposes Pulsr externally without open ports |
 | Mushr (DNS) | `drpsychick/dnsmasq` | 53/udp, 53/tcp | `dnsmasq.conf` | Wildcard DNS — resolves `*.space-needle` and `*.loft.hsimah.com` to LAN IP |
 | Pupyrus | `wordpress` + `mariadb` + `redis` | 8081 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
 | Iditarod | `actions/actions-runner` (custom build) | — | `.env` per host | Self-hosted GitHub Actions runner |
@@ -43,7 +44,9 @@ Mushr provides a reverse proxy (Caddy) and wildcard DNS (dnsmasq) so all web ser
 - **`*.loft.hsimah.com`** — HTTPS with real Let's Encrypt certificates (via Cloudflare DNS-01 challenge, no open ports required)
 - **`*.space-needle`** — HTTP-only LAN fallback for backward compatibility
 
-A shared `loft-proxy` Docker bridge network connects Caddy to bridge-networked services (pupyrus, pulsr, pulsr-phanpy); host-network services are reached via `host.docker.internal`. Pulsr uses path-based routing: the Phanpy web client is the default, while GoToSocial API paths (`/api/*`, `/.well-known/*`, `/settings/*`, etc.) are proxied to GoToSocial directly.
+A shared `loft-proxy` Docker bridge network connects Caddy to bridge-networked services (pupyrus, pulsr, pulsr-phanpy, cloudflared); host-network services are reached via `host.docker.internal`. Pulsr uses path-based routing: the Phanpy web client is the default, while GoToSocial API paths (`/api/*`, `/.well-known/*`, `/settings/*`, etc.) are proxied to GoToSocial directly.
+
+A Cloudflare Tunnel (`mushr-tunnel`) provides external access to Pulsr from outside the LAN (e.g. phone on cellular). The tunnel makes outbound-only connections to Cloudflare's edge — no router ports need to be opened. LAN clients still resolve `pulsr.loft.hsimah.com` via dnsmasq to the LAN IP, so local traffic bypasses the tunnel entirely.
 
 Howlr uses Docker Compose profiles: `COMPOSE_PROFILES=server` on space-needle runs snapserver + shairport-sync + librespot; `COMPOSE_PROFILES=client` on Pis runs snapclient. The `.env` file controls which profile is active.
 
@@ -201,6 +204,7 @@ Docker log rotation is configured at two levels:
 | jackett | 5m | 3 | Moderate logging |
 | mushr (caddy) | 5m | 3 | Reverse proxy access logging |
 | mushr-dns | 5m | 3 | DNS query logging |
+| mushr-tunnel | 5m | 3 | Cloudflare Tunnel connection logging |
 | snapserver | 5m | 3 | Audio distribution logging |
 | shairport-sync | 5m | 3 | AirPlay receiver logging |
 | librespot | 5m | 3 | Spotify Connect logging |
@@ -215,6 +219,7 @@ Docker log rotation is configured at two levels:
 - **Admin escalation**: `loft-ctl` auto-elevates to `adminhabl` via `su` for docker commands; `adminhabl` alias also available for manual escalation
 - **Sudo**: `adminhabl` has full sudo via `/etc/sudoers.d/adminhabl`
 - **Containers**: All run as `littledog` (UID/GID 1003), a nologin service account
+- **External access**: Only Pulsr is exposed externally via Cloudflare Tunnel (outbound-only, no open ports). All other services remain LAN-only
 
 ## Quick Start
 
@@ -371,6 +376,19 @@ To enable HTTPS with real certificates:
 3. **Set the token in `.env`**: Copy `services/mushr/.env.example` to `.env` and fill in `CLOUDFLARE_API_TOKEN`.
 4. **Rebuild mushr**: Caddy will automatically obtain and renew certificates via the DNS-01 challenge.
 
+### Cloudflare Tunnel (external Pulsr access)
+
+To access Pulsr from outside the LAN (e.g. phone on cellular data):
+
+1. Go to [Cloudflare Zero Trust](https://one.dash.cloudflare.com/) → Networks → Tunnels → Create
+2. Name: `loft-pulsr`, connector: **Cloudflared**
+3. Copy the tunnel token
+4. Add public hostname: `pulsr.loft.hsimah.com` → HTTPS → `mushr:443`, set **Origin Server Name** to `pulsr.loft.hsimah.com`
+5. Add `TUNNEL_TOKEN=<token>` to `services/mushr/.env`
+6. `loft-ctl rebuild mushr`
+
+Traffic flow: Internet → Cloudflare Edge → `cloudflared` tunnel → `https://mushr:443` → Caddy → GoToSocial/Phanpy. LAN clients bypass the tunnel entirely (dnsmasq resolves to the LAN IP).
+
 ## Environment Files
 
 Each service that needs secrets has a `.env.example` template. Copy it to `.env` and fill in real values. The `.env` files are gitignored.
@@ -383,7 +401,7 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Iditarod | `GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS`, `DOCKER_GID` |
 | Howlr (server) | `COMPOSE_PROFILES=server`, `LIBRESPOT_NAME` |
 | Howlr (client) | `COMPOSE_PROFILES=client`, `SNAPSERVER_HOST`, `SOUND_DEVICE`, `HOST_ID` |
-| Mushr | `LOFT_DOMAIN`, `CLOUDFLARE_API_TOKEN` (edit `dnsmasq.conf` with LAN IP before deploying) |
+| Mushr | `LOFT_DOMAIN`, `CLOUDFLARE_API_TOKEN`, `TUNNEL_TOKEN` (edit `dnsmasq.conf` with LAN IP before deploying) |
 | Pulsr | `GTS_HOST`, `GTS_PROTOCOL`, `TZ` |
 
 ## CI

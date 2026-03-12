@@ -1,5 +1,8 @@
 {
 	admin :8880
+	servers {
+		trusted_proxies static private_ranges
+	}
 }
 
 # ─── TLS snippet for Cloudflare DNS-01 challenge ─────────────────────────────

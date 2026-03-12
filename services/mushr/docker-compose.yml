@@ -32,6 +32,24 @@ services:
       timeout: 5s
       retries: 3
 
+  mushr-tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: mushr-tunnel
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    networks:
+      - loft-proxy
+    depends_on:
+      mushr:
+        condition: service_healthy
+
   mushr-dns:
     image: drpsychick/dnsmasq:latest
     container_name: mushr-dns
