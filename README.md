@@ -96,6 +96,7 @@ the-loft/
 ├── setup.sh
 ├── loft-ctl
 ├── bashrc.d
+├── inputrc.d
 ├── nanorc.d
 ├── daemon.json
 ├── .github/workflows/validate.yml
@@ -206,7 +207,7 @@ Docker log rotation is configured at two levels:
 
 - **SSH**: Only `hsimah` can SSH in (`AllowUsers hsimah` in sshd_config)
 - **SSH passwords**: Disabled on Pis (`SSH_DISABLE_PASSWORD=true`), enabled on space-needle
-- **Admin escalation**: `loft-ctl` auto-elevates to `adminhabl` via `su` for docker commands; `admin` alias also available for manual escalation
+- **Admin escalation**: `loft-ctl` auto-elevates to `adminhabl` via `su` for docker commands; `adminhabl` alias also available for manual escalation
 - **Sudo**: `adminhabl` has full sudo via `/etc/sudoers.d/adminhabl`
 - **Containers**: All run as `littledog` (UID/GID 1003), a nologin service account
 

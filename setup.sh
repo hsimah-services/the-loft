@@ -173,41 +173,19 @@ fi
 info "Configuring shared shell config..."
 
 BASHRC_SOURCE="source ${REPO_DIR}/bashrc.d"
+INPUTRC_INCLUDE="\$include ${REPO_DIR}/inputrc.d"
 
-# hsimah
-ALIAS_FILE="/home/hsimah/.admin_alias"
-echo "alias admin='su - adminhabl'" > "$ALIAS_FILE"
-chown hsimah:hsimah "$ALIAS_FILE"
-chmod 600 "$ALIAS_FILE"
+for user in hsimah adminhabl; do
+  home_dir="/home/${user}"
 
-BASHRC="/home/hsimah/.bashrc"
-if [[ -f "$BASHRC" ]]; then
-  if ! grep -qF ".admin_alias" "$BASHRC"; then
-    echo '[ -f ~/.admin_alias ] && source ~/.admin_alias' >> "$BASHRC"
-    info "Added admin alias sourcing to hsimah .bashrc"
-  fi
-  if ! grep -qF "$BASHRC_SOURCE" "$BASHRC"; then
-    echo "$BASHRC_SOURCE" >> "$BASHRC"
-    info "Added shared bashrc sourcing to hsimah .bashrc"
-  fi
-else
-  printf '%s\n' '[ -f ~/.admin_alias ] && source ~/.admin_alias' "$BASHRC_SOURCE" > "$BASHRC"
-  chown hsimah:hsimah "$BASHRC"
-  info "Created hsimah .bashrc with admin alias and shared bashrc sourcing"
-fi
+  echo "$BASHRC_SOURCE" > "${home_dir}/.bashrc"
+  chown "${user}:${user}" "${home_dir}/.bashrc"
 
-# adminhabl
-ADMIN_BASHRC="/home/adminhabl/.bashrc"
-if [[ -f "$ADMIN_BASHRC" ]]; then
-  if ! grep -qF "$BASHRC_SOURCE" "$ADMIN_BASHRC"; then
-    echo "$BASHRC_SOURCE" >> "$ADMIN_BASHRC"
-    info "Added shared bashrc sourcing to adminhabl .bashrc"
-  fi
-else
-  echo "$BASHRC_SOURCE" > "$ADMIN_BASHRC"
-  chown adminhabl:adminhabl "$ADMIN_BASHRC"
-  info "Created adminhabl .bashrc with shared bashrc sourcing"
-fi
+  echo "$INPUTRC_INCLUDE" > "${home_dir}/.inputrc"
+  chown "${user}:${user}" "${home_dir}/.inputrc"
+
+  info "Installed .bashrc and .inputrc for ${user}"
+done
 
 # ─── 9. Directory structure ──────────────────────────────────────────────────
 info "Creating directory structure..."
