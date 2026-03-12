@@ -26,7 +26,7 @@ RUN magick /tmp/pulsr-logo.jpg -resize 16x16 /tmp/favicon-16.png && \
 
 # Build with custom branding
 ENV PHANPY_CLIENT_NAME="Pulsr"
-ENV PHANPY_DEFAULT_INSTANCE="pulsr.loft.hsimah.com"
+ENV PHANPY_DEFAULT_INSTANCE="pulsr.hsimah.com"
 ENV PHANPY_DISALLOW_ROBOTS="true"
 RUN npm run build
 

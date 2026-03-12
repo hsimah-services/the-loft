@@ -66,7 +66,7 @@ pupyrus.{$LOFT_DOMAIN} {
 	reverse_proxy pupyrus:80
 }
 
-pulsr.{$LOFT_DOMAIN} {
+pulsr.hsimah.com {
 	import cloudflare_tls
 	import pulsr_routes
 }
