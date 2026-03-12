@@ -95,8 +95,8 @@ the-loft/
 │   └── raspberry-pi.md
 ├── setup.sh
 ├── loft-ctl
-├── bashrc
-├── nanorc
+├── bashrc.d
+├── nanorc.d
 ├── daemon.json
 ├── .github/workflows/validate.yml
 ├── .gitignore

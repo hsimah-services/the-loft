@@ -149,7 +149,7 @@ The script will:
 - Create users (`littledog` with `audio` group, `adminhabl`, configure `hsimah`)
 - Harden SSH (`AllowUsers hsimah`, disable password auth)
 - Configure sudo for `adminhabl`
-- Set up shared bashrc sourcing
+- Set up shared bashrc.d sourcing
 - Install Docker CE
 - Configure Docker log rotation
 - Build and start iditarod (with correct Docker GID)
@@ -209,7 +209,7 @@ sudo docker logs iditarod
 
 Then on GitHub: Settings → Actions → Runners — should show `viking` (or `fjord`) as "Idle".
 
-### Verify shared bashrc
+### Verify shared bashrc.d
 
 ```bash
 exit
@@ -278,15 +278,15 @@ No additional directories are created. All iditarod state lives in the Docker vo
 
 ---
 
-## 13. Shared Shell Config (bashrc)
+## 13. Shared Shell Config (bashrc.d)
 
 The setup script adds a `source` line to both `hsimah` and `adminhabl`'s `~/.bashrc`:
 
 ```bash
-source /srv/the-loft/bashrc
+source /srv/the-loft/bashrc.d
 ```
 
-This gives both users the shared prompt, aliases, key bindings, and nano config from the repo. The bashrc resolves `__REPO_DIR` dynamically via `BASH_SOURCE[0]`, so aliases like `loft-ctl` and `nano --rcfile` resolve correctly regardless of clone path.
+This gives both users the shared prompt, aliases, key bindings, and nano config from the repo. The bashrc.d resolves `__REPO_DIR` dynamically via `BASH_SOURCE[0]`, so aliases like `loft-ctl` and `nano --rcfile` resolve correctly regardless of clone path.
 
 ---
 
@@ -351,4 +351,4 @@ Per-Pi provisioning checklist:
 - [ ] Verify SSH hardening: `sudo sshd -T | grep -E 'allowusers|passwordauthentication'`
 - [ ] Verify Docker: `sudo docker run --rm hello-world`
 - [ ] Verify iditarod: `sudo docker ps --filter name=iditarod` + check GitHub Runners
-- [ ] Verify shared bashrc: log out and back in, check prompt
+- [ ] Verify shared bashrc.d: log out and back in, check prompt
