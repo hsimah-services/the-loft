@@ -26,8 +26,8 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Sonarr | `linuxserver/sonarr` | 8989 (host) | `/opt/sonarr` | TV management |
 | Lidarr | `linuxserver/lidarr` | 8686 (host) | `/opt/lidarr` | Music management |
 | Jackett | `linuxserver/jackett` | 9117 | `/opt/jackett` | Indexer proxy |
-| Mushr (proxy) | `caddy:2-alpine` | 80, 8880 | `Caddyfile` | Reverse proxy — routes `*.space-needle` subdomains to services |
-| Mushr (DNS) | `drpsychick/dnsmasq` | 53/udp, 53/tcp | `dnsmasq.conf` | Wildcard DNS — resolves `*.space-needle` to LAN IP |
+| Mushr (proxy) | `caddy:2-alpine` + Cloudflare DNS module (custom build) | 80, 443, 8880 | `Caddyfile`, `Dockerfile.caddy` | Reverse proxy with HTTPS (Let's Encrypt via DNS-01) + LAN HTTP fallback |
+| Mushr (DNS) | `drpsychick/dnsmasq` | 53/udp, 53/tcp | `dnsmasq.conf` | Wildcard DNS — resolves `*.space-needle` and `*.loft.hsimah.com` to LAN IP |
 | Pupyrus | `wordpress` + `mariadb` + `redis` | 8081 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
 | Iditarod | `actions/actions-runner` (custom build) | — | `.env` per host | Self-hosted GitHub Actions runner |
 | Howlr snapserver | `ivdata/snapserver` | 1704, 1705, 1780 (host) | `/opt/howlr`, `config/snapserver.conf`, `snapserver-data` volume | Snapcast sync engine + snapweb UI (speaker groups persist via volume) |
@@ -39,7 +39,11 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 
 Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`media-vpn`). Radarr, Sonarr, and Lidarr use host networking. All six are managed together in `services/media/docker-compose.yml`.
 
-Mushr provides a reverse proxy (Caddy) and wildcard DNS (dnsmasq) so all web services are accessible via clean subdomain URLs (`radarr.space-needle`, `sonarr.space-needle`, etc.) instead of remembering port numbers. A shared `loft-proxy` Docker bridge network connects Caddy to bridge-networked services (pupyrus, pulsr, pulsr-phanpy); host-network services are reached via `host.docker.internal`. Pulsr uses path-based routing: `pulsr.space-needle/` serves the Phanpy web client, while GoToSocial API paths (`/api/*`, `/.well-known/*`, `/settings/*`, etc.) are proxied to GoToSocial directly.
+Mushr provides a reverse proxy (Caddy) and wildcard DNS (dnsmasq) so all web services are accessible via clean subdomain URLs instead of remembering port numbers. Services are available via two domain systems:
+- **`*.loft.hsimah.com`** — HTTPS with real Let's Encrypt certificates (via Cloudflare DNS-01 challenge, no open ports required)
+- **`*.space-needle`** — HTTP-only LAN fallback for backward compatibility
+
+A shared `loft-proxy` Docker bridge network connects Caddy to bridge-networked services (pupyrus, pulsr, pulsr-phanpy); host-network services are reached via `host.docker.internal`. Pulsr uses path-based routing: the Phanpy web client is the default, while GoToSocial API paths (`/api/*`, `/.well-known/*`, `/settings/*`, etc.) are proxied to GoToSocial directly.
 
 Howlr uses Docker Compose profiles: `COMPOSE_PROFILES=server` on space-needle runs snapserver + shairport-sync + librespot; `COMPOSE_PROFILES=client` on Pis runs snapclient. The `.env` file controls which profile is active.
 
@@ -82,6 +86,7 @@ the-loft/
 │   │   └── .env.example
 │   ├── mushr/
 │   │   ├── docker-compose.yml
+│   │   ├── Dockerfile.caddy
 │   │   ├── Caddyfile
 │   │   ├── dnsmasq.conf
 │   │   └── .env.example
@@ -309,31 +314,62 @@ See `plans/raspberry-pi.md` for the full provisioning guide.
 
 ## Mushr — Reverse Proxy & LAN DNS
 
-Mushr provides subdomain-based access to all web services on space-needle:
+Mushr provides subdomain-based access to all web services on space-needle via two domain systems:
+
+### HTTPS — `*.loft.hsimah.com` (recommended)
+
+Real Let's Encrypt certificates via Cloudflare DNS-01 challenge. No open ports or port forwarding required.
 
 | URL | Service |
 |-----|---------|
-| `radarr.space-needle` | Radarr |
-| `sonarr.space-needle` | Sonarr |
-| `lidarr.space-needle` | Lidarr |
-| `jackett.space-needle` | Jackett |
-| `plex.space-needle` | Plex |
-| `pupyrus.space-needle` | WordPress |
-| `pulsr.space-needle` | Phanpy web client (default) / GoToSocial API (path-based: `/api/*`, `/.well-known/*`, `/settings/*`, etc.) |
-| `transmission.space-needle` | Transmission |
-| `soulseek.space-needle` | Soulseek |
-| `snapweb.space-needle` | Snapweb |
-| `space-needle` (bare) | WordPress (default) |
+| `https://radarr.loft.hsimah.com` | Radarr |
+| `https://sonarr.loft.hsimah.com` | Sonarr |
+| `https://lidarr.loft.hsimah.com` | Lidarr |
+| `https://jackett.loft.hsimah.com` | Jackett |
+| `https://plex.loft.hsimah.com` | Plex |
+| `https://pupyrus.loft.hsimah.com` | WordPress |
+| `https://pulsr.loft.hsimah.com` | Phanpy web client (default) / GoToSocial API |
+| `https://transmission.loft.hsimah.com` | Transmission |
+| `https://soulseek.loft.hsimah.com` | Soulseek |
+| `https://snapweb.loft.hsimah.com` | Snapweb |
+| `https://loft.hsimah.com` | WordPress (default) |
+
+### HTTP — `*.space-needle` (LAN fallback)
+
+HTTP-only, no TLS. Kept for backward compatibility.
+
+| URL | Service |
+|-----|---------|
+| `http://radarr.space-needle` | Radarr |
+| `http://sonarr.space-needle` | Sonarr |
+| `http://lidarr.space-needle` | Lidarr |
+| `http://jackett.space-needle` | Jackett |
+| `http://plex.space-needle` | Plex |
+| `http://pupyrus.space-needle` | WordPress |
+| `https://pulsr.space-needle` | Pulsr (self-signed TLS via `tls internal`) |
+| `http://transmission.space-needle` | Transmission |
+| `http://soulseek.space-needle` | Soulseek |
+| `http://snapweb.space-needle` | Snapweb |
+| `http://space-needle` | WordPress (default) |
 
 Direct port access (e.g. `space-needle:7878`) continues to work for all services.
 
 ### DNS Setup
 
-Before deploying, edit `services/mushr/dnsmasq.conf` and replace `SPACE_NEEDLE_LAN_IP` with space-needle's actual LAN IP.
+Before deploying, edit `services/mushr/dnsmasq.conf` and replace the `listen-address` and `address` entries with space-needle's actual LAN IP.
 
 To use the subdomain URLs, point LAN clients' DNS at space-needle's IP:
-- **Router DHCP** (recommended): Set the primary DNS server to space-needle's LAN IP in your router's DHCP settings. All devices on the network will automatically resolve `*.space-needle`.
+- **Router DHCP** (recommended): Set the primary DNS server to space-needle's LAN IP in your router's DHCP settings. All devices on the network will automatically resolve both `*.space-needle` and `*.loft.hsimah.com`.
 - **Per-device**: Manually set DNS to space-needle's LAN IP in each device's network settings.
+
+### Cloudflare Setup (one-time)
+
+To enable HTTPS with real certificates:
+
+1. **Add your domain to Cloudflare**: Sign up at [cloudflare.com](https://dash.cloudflare.com), add `hsimah.com`, and update your domain registrar's nameservers to the ones Cloudflare provides. No A records needed — DNS resolution is handled locally by dnsmasq.
+2. **Create an API token**: Go to [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens), create a token with permissions **Zone > Zone > Read** and **Zone > DNS > Edit**, scoped to your zone.
+3. **Set the token in `.env`**: Copy `services/mushr/.env.example` to `.env` and fill in `CLOUDFLARE_API_TOKEN`.
+4. **Rebuild mushr**: Caddy will automatically obtain and renew certificates via the DNS-01 challenge.
 
 ## Environment Files
 
@@ -347,7 +383,7 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Iditarod | `GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS`, `DOCKER_GID` |
 | Howlr (server) | `COMPOSE_PROFILES=server`, `LIBRESPOT_NAME` |
 | Howlr (client) | `COMPOSE_PROFILES=client`, `SNAPSERVER_HOST`, `SOUND_DEVICE`, `HOST_ID` |
-| Mushr | None (edit `dnsmasq.conf` with LAN IP before deploying) |
+| Mushr | `LOFT_DOMAIN`, `CLOUDFLARE_API_TOKEN` (edit `dnsmasq.conf` with LAN IP before deploying) |
 | Pulsr | `GTS_HOST`, `GTS_PROTOCOL`, `TZ` |
 
 ## CI

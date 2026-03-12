@@ -1,6 +1,9 @@
 services:
   mushr:
-    image: caddy:2-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
+    image: mushr-caddy:latest
     container_name: mushr
     restart: unless-stopped
     logging:
@@ -11,7 +14,10 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "443:443/udp"
       - "8880:8880"
+    env_file:
+      - .env
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
