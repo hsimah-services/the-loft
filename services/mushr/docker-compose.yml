@@ -27,7 +27,7 @@ services:
     networks:
       - loft-proxy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8880/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8880/config/"]
       interval: 10s
       timeout: 5s
       retries: 3
