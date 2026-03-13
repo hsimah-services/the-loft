@@ -30,7 +30,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Mushr (tunnel) | `cloudflare/cloudflared` | — (outbound only) | — | Cloudflare Tunnel — exposes Pulsr externally without open ports |
 | Mushr (DNS) | `drpsychick/dnsmasq` | 53/udp, 53/tcp | `dnsmasq.conf` | Wildcard DNS — resolves `*.space-needle` and `*.loft.hsimah.com` to LAN IP |
 | Pupyrus | `wordpress` + `mariadb` + `redis` | 8081 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
-| Iditarod | `actions/actions-runner` (custom build) | — | `.env` per host | Self-hosted GitHub Actions runner |
+| Iditarod | `actions/actions-runner` (custom build) | — | `.env` per host | Self-hosted GitHub Actions runner (org-level, serves all hsimah-services repos) |
 | Howlr snapserver | `ivdata/snapserver` | 1704, 1705, 1780 (host) | `/opt/howlr`, `config/snapserver.conf`, `snapserver-data` volume | Snapcast sync engine + snapweb UI (speaker groups persist via volume) |
 | Howlr shairport-sync | `mikebrady/shairport-sync` | host network | `config/shairport-sync.conf` | AirPlay receiver (feeds snapserver) |
 | Howlr librespot | `giof71/librespot` | host network | — | Spotify Connect receiver (feeds snapserver) |
@@ -424,7 +424,7 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Plex | `PLEX_CLAIM`, `PUID`, `PGID`, `TZ` |
 | Media | `NORDVPN_TOKEN`, `PUID`, `PGID`, `TZ` |
 | Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `GRAPHQL_JWT_AUTH_SECRET_KEY` |
-| Iditarod | `GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS`, `DOCKER_GID` |
+| Iditarod | `GITHUB_ORG`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS`, `DOCKER_GID` |
 | Howlr (server) | `COMPOSE_PROFILES=server`, `LIBRESPOT_NAME` |
 | Howlr (client) | `COMPOSE_PROFILES=client`, `SNAPSERVER_HOST`, `SOUND_DEVICE`, `HOST_ID` |
 | Mushr | `LOFT_DOMAIN`, `CLOUDFLARE_API_TOKEN`, `TUNNEL_TOKEN` (edit `dnsmasq.conf` with LAN IP before deploying) |
