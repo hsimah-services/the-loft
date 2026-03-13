@@ -104,7 +104,7 @@ the-loft/
 ├── setup.sh
 ├── loft-ctl
 ├── pulsr-ctl
-├── bashrc.d
+├── bashrc.d                               # Shared shell config (prompt, terminal title, aliases)
 ├── inputrc.d
 ├── nanorc.d
 ├── daemon.json
