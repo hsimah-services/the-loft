@@ -52,6 +52,14 @@ __set_prompt() {
 __set_prompt
 unset -f __set_prompt
 
+# ── Terminal title ───────────────────────────────────────────────────────────
+# Update Windows Terminal / xterm tab title on every prompt
+case "$TERM" in
+    xterm*|vte*|screen*)
+        PROMPT_COMMAND='echo -ne "\033]0;${USER}@${HOSTNAME}: ${PWD}\007"'
+        ;;
+esac
+
 # ── History ────────────────────────────────────────────────────────────────────
 HISTSIZE=10000
 HISTFILESIZE=20000
