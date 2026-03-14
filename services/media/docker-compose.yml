@@ -44,6 +44,7 @@ services:
     volumes:
       - /opt/transmission:/config
       - /mammoth/downloads/transmission:/downloads
+      - ./transmission/remove-torrents.sh:/scripts/remove-torrents.sh:ro
     restart: unless-stopped
     network_mode: service:vpn
     depends_on:
