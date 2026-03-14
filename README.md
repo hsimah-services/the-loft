@@ -40,6 +40,8 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 
 Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`media-vpn`). Radarr, Sonarr, and Lidarr use host networking. All six are managed together in `services/media/docker-compose.yml`.
 
+Transmission is configured to auto-remove torrents after reaching a 200% seed ratio. A custom init script (`configure-transmission.sh`) patches `settings.json` on each container start to set the ratio limit and register a done-seeding script that removes the torrent and deletes its download data. This is safe because Radarr/Sonarr/Lidarr hardlink files into `/mammoth/library` — the library copies are independent of the download directory. Docker log rotation (20m/3 files) handles Transmission's logging; no separate log rotation is needed.
+
 Mushr provides a reverse proxy (Caddy) and wildcard DNS (dnsmasq) so all web services are accessible via clean subdomain URLs instead of remembering port numbers. Services are available via two domain systems:
 - **`*.loft.hsimah.com`** — HTTPS with real Let's Encrypt certificates (via Cloudflare DNS-01 challenge, no open ports required)
 - **`*.space-needle`** — HTTP-only LAN fallback for backward compatibility
@@ -72,6 +74,9 @@ the-loft/
 │   │   └── .env.example
 │   ├── media/
 │   │   ├── docker-compose.yml
+│   │   ├── transmission/
+│   │   │   ├── configure-transmission.sh  # Patches settings.json on container init
+│   │   │   └── done-seeding.sh            # Auto-removes torrents at 200% ratio
 │   │   └── .env.example
 │   ├── pupyrus/
 │   │   ├── docker-compose.yml

@@ -44,6 +44,8 @@ services:
     volumes:
       - /opt/transmission:/config
       - /mammoth/downloads/transmission:/downloads
+      - ./transmission/done-seeding.sh:/scripts/done-seeding.sh:ro
+      - ./transmission/configure-transmission.sh:/custom-cont-init.d/configure-transmission.sh:ro
     restart: unless-stopped
     network_mode: service:vpn
     depends_on:
