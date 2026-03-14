@@ -8,7 +8,7 @@ Fleet configuration for The Loft — a mono-repo managing all hosts (space-needl
 
 | Host | Role | Services |
 |------|------|----------|
-| `space-needle` | Primary server | mushr, plex, media, pupyrus, iditarod, howlr (server), pulsr (+ phanpy) |
+| `space-needle` | Primary server | mushr, plex, media, pupyrus, iditarod, howlr (server), pulsr (+ phanpy), hblake |
 | `viking` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 | `fjord` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 
@@ -27,7 +27,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Lidarr | `linuxserver/lidarr` | 8686 (host) | `/opt/lidarr` | Music management |
 | Jackett | `linuxserver/jackett` | 9117 | `/opt/jackett` | Indexer proxy |
 | Mushr (proxy) | `caddy:2-alpine` + Cloudflare DNS module (custom build) | 80, 443, 8880 | `Caddyfile`, `Dockerfile.caddy` | Reverse proxy with HTTPS (Let's Encrypt via DNS-01) + LAN HTTP fallback |
-| Mushr (tunnel) | `cloudflare/cloudflared` | — (outbound only) | — | Cloudflare Tunnel — exposes Pulsr externally without open ports |
+| Mushr (tunnel) | `cloudflare/cloudflared` | — (outbound only) | — | Cloudflare Tunnel — exposes Pulsr and Hblake externally without open ports |
 | Mushr (DNS) | `drpsychick/dnsmasq` | 53/udp, 53/tcp | `dnsmasq.conf` | Wildcard DNS — resolves `*.space-needle` and `*.loft.hsimah.com` to LAN IP |
 | Pupyrus | `wordpress` + `mariadb` + `redis` | 8081 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
 | Iditarod | `actions/actions-runner` (custom build) | — | `.env` per host | Self-hosted GitHub Actions runner (org-level, serves all hsimah-services repos) |
@@ -37,6 +37,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Howlr snapclient | `ivdata/snapclient` | host network | `.env` per host | Snapcast client (receives stream, outputs to speakers) |
 | Pulsr | `superseriousbusiness/gotosocial` | — (via Caddy) | `/opt/pulsr/data` | Self-hosted fediverse instance (GoToSocial) for status updates and household messaging |
 | Pulsr Phanpy | `ghcr.io/yitsushi/phanpy-docker` | — | — | Web client for GoToSocial (served at `pulsr.space-needle/`) |
+| Hblake | `nginx:alpine` | 8085 (bridge) | — | Static personal website served at `hbla.ke` |
 
 Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`media-vpn`). Radarr, Sonarr, and Lidarr use host networking. All six are managed together in `services/media/docker-compose.yml`.
 
@@ -46,9 +47,9 @@ Mushr provides a reverse proxy (Caddy) and wildcard DNS (dnsmasq) so all web ser
 - **`*.loft.hsimah.com`** — HTTPS with real Let's Encrypt certificates (via Cloudflare DNS-01 challenge, no open ports required)
 - **`*.space-needle`** — HTTP-only LAN fallback for backward compatibility
 
-A shared `loft-proxy` Docker bridge network connects Caddy to bridge-networked services (pupyrus, pulsr, pulsr-phanpy, cloudflared); host-network services are reached via `host.docker.internal`. Pulsr uses path-based routing: the Phanpy web client is the default, while GoToSocial API paths (`/api/*`, `/.well-known/*`, `/settings/*`, etc.) are proxied to GoToSocial directly.
+A shared `loft-proxy` Docker bridge network connects Caddy to bridge-networked services (pupyrus, pulsr, pulsr-phanpy, hblake, cloudflared); host-network services are reached via `host.docker.internal`. Pulsr uses path-based routing: the Phanpy web client is the default, while GoToSocial API paths (`/api/*`, `/.well-known/*`, `/settings/*`, etc.) are proxied to GoToSocial directly.
 
-A Cloudflare Tunnel (`mushr-tunnel`) provides external access to Pulsr from outside the LAN (e.g. phone on cellular). The tunnel makes outbound-only connections to Cloudflare's edge — no router ports need to be opened. LAN clients still resolve `pulsr.hsimah.com` via dnsmasq to the LAN IP, so local traffic bypasses the tunnel entirely. Pulsr uses `pulsr.hsimah.com` (not `*.loft.hsimah.com`) because Cloudflare's free Universal SSL only covers single-level subdomains.
+A Cloudflare Tunnel (`mushr-tunnel`) provides external access to Pulsr and Hblake from outside the LAN. The tunnel makes outbound-only connections to Cloudflare's edge — no router ports need to be opened. LAN clients still resolve `pulsr.hsimah.com` and `hbla.ke` via dnsmasq to the LAN IP, so local traffic bypasses the tunnel entirely. Pulsr uses `pulsr.hsimah.com` (not `*.loft.hsimah.com`) because Cloudflare's free Universal SSL only covers single-level subdomains. Hblake uses its own domain (`hbla.ke`).
 
 Howlr uses Docker Compose profiles: `COMPOSE_PROFILES=server` on space-needle runs snapserver + shairport-sync + librespot; `COMPOSE_PROFILES=client` on Pis runs snapclient. The `.env` file controls which profile is active.
 
@@ -97,9 +98,13 @@ the-loft/
 │   │   ├── Caddyfile
 │   │   ├── dnsmasq.conf
 │   │   └── .env.example
-│   └── pulsr/
+│   ├── pulsr/
+│   │   ├── docker-compose.yml
+│   │   └── .env.example
+│   └── hblake/
 │       ├── docker-compose.yml
-│       └── .env.example
+│       └── html/
+│           └── index.html
 ├── control-plane/
 │   └── common.sh
 ├── plans/
@@ -216,6 +221,7 @@ Docker log rotation is configured at two levels:
 | snapclient | 5m | 3 | Audio client logging |
 | pulsr | 10m | 3 | Fediverse instance (GoToSocial) |
 | pulsr-phanpy | 5m | 3 | Phanpy web client (static files) |
+| hblake | 5m | 3 | Static personal website (nginx) |
 
 ## Security Model
 
@@ -224,7 +230,7 @@ Docker log rotation is configured at two levels:
 - **Admin escalation**: `loft-ctl` auto-elevates to `adminhabl` via `su` for docker commands; `adminhabl` alias also available for manual escalation
 - **Sudo**: `adminhabl` has full sudo via `/etc/sudoers.d/adminhabl`
 - **Containers**: All run as `littledog` (UID/GID 1003), a nologin service account
-- **External access**: Only Pulsr is exposed externally via Cloudflare Tunnel (outbound-only, no open ports). All other services remain LAN-only
+- **External access**: Pulsr and Hblake are exposed externally via Cloudflare Tunnel (outbound-only, no open ports). All other services remain LAN-only
 
 ## Quick Start
 
@@ -367,6 +373,7 @@ Real Let's Encrypt certificates via Cloudflare DNS-01 challenge. No open ports o
 | `https://transmission.loft.hsimah.com` | Transmission |
 | `https://soulseek.loft.hsimah.com` | Soulseek |
 | `https://snapweb.loft.hsimah.com` | Snapweb |
+| `https://hbla.ke` | Hblake (static personal site) |
 | `https://loft.hsimah.com` | WordPress (default) |
 
 ### HTTP — `*.space-needle` (LAN fallback)
@@ -385,6 +392,7 @@ HTTP-only, no TLS. Kept for backward compatibility.
 | `http://transmission.space-needle` | Transmission |
 | `http://soulseek.space-needle` | Soulseek |
 | `http://snapweb.space-needle` | Snapweb |
+| `http://hblake.space-needle` | Hblake |
 | `http://space-needle` | WordPress (default) |
 
 Direct port access (e.g. `space-needle:7878`) continues to work for all services.
@@ -394,30 +402,31 @@ Direct port access (e.g. `space-needle:7878`) continues to work for all services
 Before deploying, edit `services/mushr/dnsmasq.conf` and replace the `listen-address` and `address` entries with space-needle's actual LAN IP.
 
 To use the subdomain URLs, point LAN clients' DNS at space-needle's IP:
-- **Router DHCP** (recommended): Set the primary DNS server to space-needle's LAN IP in your router's DHCP settings. All devices on the network will automatically resolve `*.space-needle`, `*.loft.hsimah.com`, and `pulsr.hsimah.com`.
+- **Router DHCP** (recommended): Set the primary DNS server to space-needle's LAN IP in your router's DHCP settings. All devices on the network will automatically resolve `*.space-needle`, `*.loft.hsimah.com`, `pulsr.hsimah.com`, and `hbla.ke`.
 - **Per-device**: Manually set DNS to space-needle's LAN IP in each device's network settings.
 
 ### Cloudflare Setup (one-time)
 
 To enable HTTPS with real certificates:
 
-1. **Add your domain to Cloudflare**: Sign up at [cloudflare.com](https://dash.cloudflare.com), add `hsimah.com`, and update your domain registrar's nameservers to the ones Cloudflare provides. No A records needed — DNS resolution is handled locally by dnsmasq.
-2. **Create an API token**: Go to [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens), create a token with permissions **Zone > Zone > Read** and **Zone > DNS > Edit**, scoped to your zone.
+1. **Add your domains to Cloudflare**: Sign up at [cloudflare.com](https://dash.cloudflare.com), add `hsimah.com` and `hbla.ke`, and update each domain registrar's nameservers to the ones Cloudflare provides. No A records needed — DNS resolution is handled locally by dnsmasq.
+2. **Create an API token**: Go to [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens), create a token with permissions **Zone > Zone > Read** and **Zone > DNS > Edit**, scoped to all zones (or both `hsimah.com` and `hbla.ke`).
 3. **Set the token in `.env`**: Copy `services/mushr/.env.example` to `.env` and fill in `CLOUDFLARE_API_TOKEN`.
 4. **Rebuild mushr**: Caddy will automatically obtain and renew certificates via the DNS-01 challenge.
 
-### Cloudflare Tunnel (external Pulsr access)
+### Cloudflare Tunnel (external access)
 
-To access Pulsr from outside the LAN (e.g. phone on cellular data):
+To access Pulsr and Hblake from outside the LAN:
 
 1. Go to [Cloudflare Zero Trust](https://one.dash.cloudflare.com/) → Networks → Tunnels → Create
 2. Name: `loft-pulsr`, connector: **Cloudflared**
 3. Copy the tunnel token
 4. Add public hostname: `pulsr.hsimah.com` → HTTPS → `mushr:443`, set **Origin Server Name** to `pulsr.hsimah.com`
-5. Add `TUNNEL_TOKEN=<token>` to `services/mushr/.env`
-6. `loft-ctl rebuild mushr`
+5. Add public hostname: `hbla.ke` → HTTPS → `mushr:443`, set **Origin Server Name** to `hbla.ke`
+6. Add `TUNNEL_TOKEN=<token>` to `services/mushr/.env`
+7. `loft-ctl rebuild mushr`
 
-Traffic flow: Internet → Cloudflare Edge → `cloudflared` tunnel → `https://mushr:443` → Caddy → GoToSocial/Phanpy. LAN clients bypass the tunnel entirely (dnsmasq resolves `pulsr.hsimah.com` to the LAN IP).
+Traffic flow: Internet → Cloudflare Edge → `cloudflared` tunnel → `https://mushr:443` → Caddy → target service. LAN clients bypass the tunnel entirely (dnsmasq resolves domains to the LAN IP).
 
 ## Environment Files
 
