@@ -35,7 +35,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Howlr shairport-sync | `mikebrady/shairport-sync` | host network | `config/shairport-sync.conf` | AirPlay receiver (feeds snapserver) |
 | Howlr librespot | `giof71/librespot` | host network | — | Spotify Connect receiver (feeds snapserver) |
 | Howlr snapclient | `ivdata/snapclient` | host network | `.env` per host | Snapcast client (receives stream, outputs to speakers) |
-| Pulsr | `superseriousbusiness/gotosocial` | — (via Caddy) | `/opt/pulsr/data` | Self-hosted fediverse instance (GoToSocial) for status updates and household messaging |
+| Pulsr | `superseriousbusiness/gotosocial` | — (via Caddy) | `/opt/pulsr/data` | Self-hosted fediverse instance (GoToSocial) for status updates, household messaging, and fleet status reporting |
 | Pulsr Phanpy | `ghcr.io/yitsushi/phanpy-docker` | — | — | Web client for GoToSocial (served at `pulsr.space-needle/`) |
 | Hblake | `nginx:alpine` | 8085 (bridge) | — | Static personal website served at `hbla.ke` |
 
@@ -106,7 +106,8 @@ the-loft/
 │       └── html/
 │           └── index.html
 ├── control-plane/
-│   └── common.sh
+│   ├── common.sh
+│   └── pulsr-collector.sh                # CPU sampler for fleet status reporting
 ├── plans/
 │   ├── howlr.md
 │   └── raspberry-pi.md
@@ -187,6 +188,7 @@ Each host is defined by `hosts/<hostname>/host.conf`, a bash-sourceable file dec
 | `MEDIA_DIRS` | Array of media directories to create (775) |
 | `LITTLEDOG_EXTRA_GROUPS` | Additional groups for littledog (e.g. `render,video`) |
 | `SSH_DISABLE_PASSWORD` | Whether to disable SSH password auth (`true`/`false`) |
+| `REPORT_DISKS` | Array of mount points to include in fleet status reports |
 | `HEALTH_URLS` | Associative array of required health check endpoints |
 | `HEALTH_URLS_WARN` | Associative array of warn-only health check endpoints |
 
@@ -327,6 +329,43 @@ After each `rebuild` or `update`, the script verifies:
 5. Run `sudo bash setup.sh`
 
 
+## Fleet Status Reporting
+
+Each fleet host automatically posts system metrics to Pulsr (GoToSocial) every 6 hours. This provides visibility into fleet health through the Fediverse timeline.
+
+### Architecture
+
+- Each host gets its own GoToSocial account (e.g. `space_needle`, `viking`, `fjord`)
+- A CPU sampler (`control-plane/pulsr-collector.sh`) runs every minute via cron, appending CPU usage % to `/var/log/loft/cpu.log`
+- Every 6 hours, `pulsr-ctl report` reads the CPU log, collects memory/disk/git metrics, and posts a status update
+- Reports include hashtags `#LoftServiceUpdate` and `#<HostName>Update` for filtering
+
+### Cron Jobs
+
+| Cron File | Schedule | Purpose |
+|-----------|----------|---------|
+| `/etc/cron.d/loft-cpu-collector` | Every minute | Sample CPU usage to `/var/log/loft/cpu.log` |
+| `/etc/cron.d/loft-pulsr-report` | Every 6 hours | Post status report to Pulsr |
+
+### Account Provisioning
+
+Fleet accounts are created automatically by `setup.sh` on space-needle (which hosts Pulsr). Each host's credentials:
+
+| Host | Username | Email |
+|------|----------|-------|
+| space-needle | `space_needle` | `space-needle@loft.hsimah.com` |
+| viking | `viking` | `viking@loft.hsimah.com` |
+| fjord | `fjord` | `fjord@loft.hsimah.com` |
+
+API tokens are stored at `/etc/loft/pulsr.env` on each host (created by `setup.sh`). The `REPORT_DISKS` variable in each host's `host.conf` controls which mount points are included in disk metrics.
+
+### Manual Reporting
+
+```bash
+# Post a status report manually
+sudo pulsr-ctl report
+```
+
 ## Raspberry Pi Fleet
 
 Two Raspberry Pi 3 B+ devices (`viking` and `fjord`) in The Loft run Docker with iditarod (GitHub Actions runner) and howlr (Snapcast client), using the same unified `setup.sh` and user/group model as space-needle.
@@ -450,5 +489,5 @@ A GitHub Actions workflow validates on every push:
 - All base `docker-compose.yml` files pass `docker compose config --quiet`
 - Howlr compose validated with both `COMPOSE_PROFILES=server` and `COMPOSE_PROFILES=client`
 - All compose + override combinations validate
-- All shell scripts pass `bash -n` syntax check
+- All shell scripts (`setup.sh`, `loft-ctl`, `pulsr-ctl`, `control-plane/*.sh`) pass `bash -n` syntax check
 - All `host.conf` files pass `bash -n` syntax check
