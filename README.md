@@ -40,7 +40,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 
 Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`media-vpn`). Radarr, Sonarr, and Lidarr use host networking. All six are managed together in `services/media/docker-compose.yml`.
 
-Transmission is configured to auto-remove torrents after reaching a 200% seed ratio. A custom init script (`configure-transmission.sh`) patches `settings.json` on each container start to set the ratio limit and register a done-seeding script that removes the torrent and deletes its download data. This is safe because Radarr/Sonarr/Lidarr hardlink files into `/mammoth/library` — the library copies are independent of the download directory. Docker log rotation (20m/3 files) handles Transmission's logging; no separate log rotation is needed.
+Transmission torrents are automatically cleaned up by a cron job that runs nightly at midnight on space-needle. The `remove-torrents.sh` script (bind-mounted into the container) uses `transmission-remote` to find and remove any torrents that have reached a 200% seed ratio, deleting the download data. This is safe because Radarr/Sonarr/Lidarr hardlink files into `/mammoth/library` — the library copies are independent of the download directory. The cron job is installed to `/etc/cron.d/transmission-cleanup` by `setup.sh`. Docker log rotation (20m/3 files) handles Transmission's logging; no separate log rotation is needed.
 
 Mushr provides a reverse proxy (Caddy) and wildcard DNS (dnsmasq) so all web services are accessible via clean subdomain URLs instead of remembering port numbers. Services are available via two domain systems:
 - **`*.loft.hsimah.com`** — HTTPS with real Let's Encrypt certificates (via Cloudflare DNS-01 challenge, no open ports required)
@@ -75,8 +75,7 @@ the-loft/
 │   ├── media/
 │   │   ├── docker-compose.yml
 │   │   ├── transmission/
-│   │   │   ├── configure-transmission.sh  # Patches settings.json on container init
-│   │   │   └── done-seeding.sh            # Auto-removes torrents at 200% ratio
+│   │   │   └── remove-torrents.sh         # Cron job: removes torrents at 200% ratio
 │   │   └── .env.example
 │   ├── pupyrus/
 │   │   ├── docker-compose.yml
