@@ -686,6 +686,23 @@ sudo systemctl restart systemd-resolved
 sudo docker restart mushr-dns
 ```
 
+### pulsr-ctl report silently fails
+
+**Symptom:** `sudo pulsr-ctl report` produces no output at all. No error, no post.
+
+**Cause:** A CPU sample of `0` in `/var/log/loft/cpu.log` triggers a bash arithmetic gotcha. Expressions like `(( 0 ))` return exit code 1, and `set -e` kills the script silently. This was fixed in commit `76c5437` by adding `|| true` to arithmetic lines that can evaluate to zero.
+
+**Fix:** Pull the latest code:
+```bash
+cd /srv/the-loft && git pull
+sudo pulsr-ctl report
+```
+
+**Debug tip:** If `pulsr-ctl` ever fails silently, run with `bash -x` to find where it dies:
+```bash
+sudo bash -x /srv/the-loft/pulsr-ctl report 2>&1 | tail -40
+```
+
 ### MariaDB won't start (pupyrus-db)
 
 **Symptom:** `pupyrus-db` exits immediately or enters a restart loop. WordPress and Redis are unaffected.
