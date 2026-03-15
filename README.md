@@ -12,7 +12,7 @@ Fleet configuration for The Loft — a mono-repo managing all hosts (space-needl
 | `viking` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 | `fjord` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 
-Each host has a config file at `hosts/<hostname>/host.conf` that declares its services, storage, directories, and health check URLs. A single `setup.sh` provisions any host by reading its config.
+Each host has a config file at `hosts/<hostname>/host.conf` that declares its services, storage, directories, and health check URLs. A single `setup.sh` provisions any host by reading its config. Services that need post-deploy configuration have a `services/<name>/setup.sh` script that is automatically sourced after deployment.
 
 ### Services
 
@@ -78,11 +78,13 @@ the-loft/
 │   │   └── .env.example
 │   ├── media/
 │   │   ├── docker-compose.yml
+│   │   ├── setup.sh                       # Per-service setup (transmission cron)
 │   │   ├── transmission/
 │   │   │   └── remove-torrents.sh         # Cron job: removes torrents at 200% ratio
 │   │   └── .env.example
 │   ├── pupyrus/
 │   │   ├── docker-compose.yml
+│   │   ├── setup.sh                       # Per-service setup (WordPress install)
 │   │   └── .env.example
 │   ├── iditarod/
 │   │   ├── docker-compose.yml
@@ -103,6 +105,7 @@ the-loft/
 │   │   └── .env.example
 │   ├── pulsr/
 │   │   ├── docker-compose.yml
+│   │   ├── setup.sh                       # Per-service setup (fleet account provisioning)
 │   │   └── .env.example
 │   └── hblake/
 │       ├── docker-compose.yml
@@ -495,5 +498,5 @@ A GitHub Actions workflow validates on every push:
 - All base `docker-compose.yml` files pass `docker compose config --quiet`
 - Howlr compose validated with both `COMPOSE_PROFILES=server` and `COMPOSE_PROFILES=client`
 - All compose + override combinations validate
-- All shell scripts (`setup.sh`, `loft-ctl`, `pulsr-ctl`, `control-plane/*.sh`) pass `bash -n` syntax check
+- All shell scripts (`setup.sh`, `loft-ctl`, `pulsr-ctl`, `control-plane/*.sh`, `services/*/setup.sh`) pass `bash -n` syntax check
 - All `host.conf` files pass `bash -n` syntax check

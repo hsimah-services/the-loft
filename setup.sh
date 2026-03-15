@@ -269,6 +269,17 @@ info "Deploying services..."
 # Source compose helper from control-plane
 source "${REPO_DIR}/control-plane/common.sh"
 
+# Hostname helpers (used by per-service setup and fleet-wide reporting)
+hostname_to_username() { echo "${1//-/_}"; }
+hostname_to_pascal() {
+  local result=""
+  local IFS='-'
+  for part in $1; do
+    result+="$(echo "${part:0:1}" | tr '[:lower:]' '[:upper:]')${part:1}"
+  done
+  echo "$result"
+}
+
 for service in "${SERVICES[@]}"; do
   compose_args=$(compose_args_for "$service") || {
     warn "No compose config for ${service}, skipping"
@@ -295,45 +306,17 @@ for service in "${SERVICES[@]}"; do
   docker compose ${compose_args} up -d
 done
 
-# ─── 11a. WordPress setup ───────────────────────────────────────────────────
-if printf '%s\n' "${SERVICES[@]}" | grep -qx pupyrus; then
-  if docker ps --format '{{.Names}}' | grep -q '^pupyrus$'; then
-    info "Configuring WordPress..."
-    compose_args=$(compose_args_for "pupyrus")
-    source "${REPO_DIR}/services/pupyrus/.env"
-
-    # shellcheck disable=SC2086
-    if docker compose ${compose_args} --profile cli run --rm cli wp core is-installed 2>/dev/null; then
-      info "WordPress already installed"
-    else
-      info "Installing WordPress..."
-      # shellcheck disable=SC2086
-      docker compose ${compose_args} --profile cli run --rm cli \
-        wp core install \
-          --url="http://localhost" \
-          --title="Pupyrus" \
-          --admin_user="adminhabl" \
-          --admin_password="${WORDPRESS_ADMIN_PASSWORD}" \
-          --admin_email="hamishblake+papyrus@gmail.com"
-      info "WordPress installed"
-    fi
+# ─── 11a. Per-service setup ──────────────────────────────────────────────────
+for service in "${SERVICES[@]}"; do
+  service_setup="${REPO_DIR}/services/${service}/setup.sh"
+  if [[ -f "$service_setup" ]]; then
+    info "Running ${service} setup..."
+    source "$service_setup"
   fi
-fi
+done
 
 # ─── 12. Cron jobs ───────────────────────────────────────────────────────────
 info "Configuring cron jobs..."
-
-if printf '%s\n' "${SERVICES[@]}" | grep -qx media; then
-  CRON_FILE="/etc/cron.d/transmission-cleanup"
-  cat > "$CRON_FILE" <<'EOF'
-# Remove torrents that have reached 200% seed ratio — installed by setup.sh
-0 0 * * * root docker exec transmission /scripts/remove-torrents.sh
-EOF
-  chmod 644 "$CRON_FILE"
-  info "Installed transmission cleanup cron job"
-else
-  info "No media service, skipping transmission cron job"
-fi
 
 # CPU collector cron (every minute)
 cat > /etc/cron.d/loft-cpu-collector <<EOF
@@ -351,47 +334,7 @@ EOF
 chmod 644 /etc/cron.d/loft-pulsr-report
 info "Installed Pulsr status report cron job"
 
-# ─── 12a. Pulsr fleet account provisioning ───────────────────────────────────
-# Source hostname helpers from pulsr-ctl
-hostname_to_username() { echo "${1//-/_}"; }
-hostname_to_pascal() {
-  local result=""
-  local IFS='-'
-  for part in $1; do
-    result+="$(echo "${part:0:1}" | tr '[:lower:]' '[:upper:]')${part:1}"
-  done
-  echo "$result"
-}
-
-# GoToSocial container name and binary path (same as pulsr-ctl)
-CONTAINER="pulsr"
-GTS_BIN="/gotosocial/gotosocial"
-
-if printf '%s\n' "${SERVICES[@]}" | grep -qx pulsr; then
-  info "Provisioning Pulsr fleet accounts (space-needle hosts Pulsr)..."
-
-  for host_conf_file in "${REPO_DIR}"/hosts/*/host.conf; do
-    host_dir="$(dirname "$host_conf_file")"
-    fleet_host="$(basename "$host_dir")"
-    fleet_username="$(hostname_to_username "$fleet_host")"
-    fleet_pascal="$(hostname_to_pascal "$fleet_host")"
-    fleet_email="${fleet_host}@loft.hsimah.com"
-    fleet_password="${fleet_pascal}12345!"
-
-    info "Creating Pulsr account for ${fleet_host} (${fleet_username})..."
-    if docker exec "$CONTAINER" "$GTS_BIN" admin account create \
-        --username "$fleet_username" \
-        --email "$fleet_email" \
-        --password "$fleet_password" 2>/dev/null; then
-      docker exec "$CONTAINER" "$GTS_BIN" admin account confirm \
-        --username "$fleet_username" 2>/dev/null || true
-      info "Account '${fleet_username}' created and confirmed"
-    else
-      info "Account '${fleet_username}' already exists (skipping)"
-    fi
-  done
-fi
-
+# ─── 12a. Pulsr reporting credentials ────────────────────────────────────────
 # Obtain API token and write /etc/loft/pulsr.env for this host
 info "Configuring Pulsr reporting credentials..."
 FLEET_USERNAME="$(hostname_to_username "$HOST_NAME")"
