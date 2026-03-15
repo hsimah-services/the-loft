@@ -113,6 +113,7 @@ the-loft/
 │           └── index.html
 ├── control-plane/
 │   ├── common.sh
+│   ├── package-collector.sh              # Package update cache for fleet status reporting
 │   └── pulsr-collector.sh                # CPU sampler for fleet status reporting
 ├── plans/
 │   ├── howlr.md
@@ -351,7 +352,8 @@ Each fleet host automatically posts system metrics to Pulsr (GoToSocial) every 6
 
 - Each host gets its own GoToSocial account (e.g. `space_needle`, `viking`, `fjord`)
 - A CPU sampler (`control-plane/pulsr-collector.sh`) runs every minute via cron, appending CPU usage % to `/var/log/loft/cpu.log`
-- Every 6 hours, `pulsr-ctl report` reads the CPU log, collects memory/disk/git metrics, and posts a status update
+- A package collector (`control-plane/package-collector.sh`) runs every 6 hours via cron, caching security/total update counts and reboot-required status to `/var/log/loft/packages.log`
+- Every 6 hours, `pulsr-ctl report` reads the CPU log and package cache, collects memory/disk/git metrics, and posts a status update
 - Reports include hashtags `#LoftServiceUpdate` and `#<HostName>Update` for filtering
 
 ### Cron Jobs
@@ -359,6 +361,7 @@ Each fleet host automatically posts system metrics to Pulsr (GoToSocial) every 6
 | Cron File | Schedule | Purpose |
 |-----------|----------|---------|
 | `/etc/cron.d/loft-cpu-collector` | Every minute | Sample CPU usage to `/var/log/loft/cpu.log` |
+| `/etc/cron.d/loft-package-collector` | Every 6 hours (30 min before report) | Cache package update counts to `/var/log/loft/packages.log` |
 | `/etc/cron.d/loft-pulsr-report` | Every 6 hours | Post status report to Pulsr |
 
 ### Account Provisioning

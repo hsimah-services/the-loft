@@ -57,7 +57,7 @@ usage() {
   echo "  user-token    Get an API token for automated posting"
   echo "  set-avatar    Set profile picture for the authenticated account"
   echo "  post          Post a status to GoToSocial"
-  echo "  report        Post fleet status report (CPU, memory, disk, git commit)"
+  echo "  report        Post fleet status report (CPU, memory, disk, packages, git commit)"
   echo ""
   echo "Options for user-add:"
   echo "  --username <name>    Account username (required)"
@@ -602,6 +602,24 @@ do_report() {
   # Remove trailing newline
   disk_section="${disk_section%$'\n'}"
 
+  # ── Package update metrics from collector log ──
+  local pkg_log="/var/log/loft/packages.log"
+  local pkg_section="Updates: no data"
+  local reboot_section=""
+  if [[ -f "$pkg_log" && -s "$pkg_log" ]]; then
+    local SECURITY_UPDATES="" TOTAL_UPDATES="" REBOOT_REQUIRED=""
+    # shellcheck source=/dev/null
+    source "$pkg_log"
+    if [[ -n "$TOTAL_UPDATES" ]]; then
+      pkg_section="Updates: ${SECURITY_UPDATES:-0} security, ${TOTAL_UPDATES} total"
+    fi
+    if [[ "$REBOOT_REQUIRED" == "yes" ]]; then
+      reboot_section="Reboot: required"
+    else
+      reboot_section="Reboot: not required"
+    fi
+  fi
+
   # ── Git commit ──
   local git_commit="unknown"
   if command -v git &>/dev/null; then
@@ -615,6 +633,10 @@ do_report() {
   status_msg+="${mem_section}"$'\n'
   if [[ -n "$disk_section" ]]; then
     status_msg+="${disk_section}"$'\n'
+  fi
+  status_msg+="${pkg_section}"$'\n'
+  if [[ -n "$reboot_section" ]]; then
+    status_msg+="${reboot_section}"$'\n'
   fi
   status_msg+="Commit: ${git_commit}"$'\n'
   status_msg+=""$'\n'

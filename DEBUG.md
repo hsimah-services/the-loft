@@ -134,11 +134,14 @@ sudo cat $(sudo docker inspect <container> --format '{{.LogPath}}')
 ### System logs
 
 ```bash
-# Cron jobs (CPU collector, transmission cleanup, pulsr reports)
+# Cron jobs (CPU collector, package collector, transmission cleanup, pulsr reports)
 sudo grep -i loft /var/log/syslog | tail -20
 
 # CPU metrics (sampled every minute by pulsr-collector.sh)
 sudo cat /var/log/loft/cpu.log
+
+# Package update cache (refreshed every 6 hours by package-collector.sh)
+sudo cat /var/log/loft/packages.log
 
 # Docker daemon logs
 sudo journalctl -u docker --since "1h"
@@ -701,6 +704,24 @@ sudo pulsr-ctl report
 **Debug tip:** If `pulsr-ctl` ever fails silently, run with `bash -x` to find where it dies:
 ```bash
 sudo bash -x /srv/the-loft/pulsr-ctl report 2>&1 | tail -40
+```
+
+### Fleet report shows "Updates: no data"
+
+**Symptom:** `sudo pulsr-ctl report` posts with `Updates: no data` instead of package counts.
+
+**Cause:** The package collector cron hasn't run yet, or `/var/log/loft/packages.log` doesn't exist.
+
+**Fix:**
+```bash
+# Run the collector manually
+sudo /srv/the-loft/control-plane/package-collector.sh
+
+# Verify the cache file
+sudo cat /var/log/loft/packages.log
+
+# Check cron is installed
+cat /etc/cron.d/loft-package-collector
 ```
 
 ### MariaDB won't start (pupyrus-db)

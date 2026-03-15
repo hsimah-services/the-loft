@@ -326,6 +326,14 @@ EOF
 chmod 644 /etc/cron.d/loft-cpu-collector
 info "Installed CPU collector cron job"
 
+# Package collector cron (every 6 hours, 30 min before report)
+cat > /etc/cron.d/loft-package-collector <<EOF
+# System package update cache for fleet status reporting — installed by setup.sh
+30 5,11,17,23 * * * root ${REPO_DIR}/control-plane/package-collector.sh
+EOF
+chmod 644 /etc/cron.d/loft-package-collector
+info "Installed package collector cron job"
+
 # Status report cron (every 6 hours)
 cat > /etc/cron.d/loft-pulsr-report <<EOF
 # Fleet status report to Pulsr — installed by setup.sh
