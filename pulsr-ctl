@@ -553,7 +553,7 @@ do_report() {
     while IFS= read -r val; do
       [[ -z "$val" ]] && continue
       (( cpu_sum += val )) || true
-      (( cpu_count++ ))
+      (( cpu_count++ )) || true
       (( val < cpu_low )) && cpu_low=$val
       (( val > cpu_high )) && cpu_high=$val || true
     done < "$cpu_log"
