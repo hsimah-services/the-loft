@@ -91,6 +91,10 @@ hbla.ke {
 	reverse_proxy hblake:80
 }
 
+http://hbla.ke {
+	redir https://hbla.ke{uri} permanent
+}
+
 {$LOFT_DOMAIN} {
 	import cloudflare_tls
 	reverse_proxy pupyrus:80
