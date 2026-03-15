@@ -438,6 +438,19 @@ EOF
   fi
 fi
 
+# Set profile picture if token is configured and image exists
+PROFILE_IMG="${REPO_DIR}/hosts/${HOST_NAME}/profile.jpg"
+if [[ -f "$PROFILE_IMG" ]] && grep -q "^GTS_TOKEN=.\+" "$PULSR_ENV" 2>/dev/null; then
+  info "Setting Pulsr avatar from ${PROFILE_IMG}..."
+  if "${REPO_DIR}/pulsr-ctl" set-avatar --image "$PROFILE_IMG"; then
+    info "Pulsr avatar set successfully"
+  else
+    warn "Failed to set Pulsr avatar — set manually with: pulsr-ctl set-avatar --image ${PROFILE_IMG}"
+  fi
+else
+  info "Skipping Pulsr avatar (no token or no profile.jpg)"
+fi
+
 # ─── 13. Verification summary ─────────────────────────────────────────────────
 echo ""
 echo "============================================"

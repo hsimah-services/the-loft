@@ -55,6 +55,7 @@ usage() {
   echo "Commands:"
   echo "  user-add      Create a new GoToSocial account"
   echo "  user-token    Get an API token for automated posting"
+  echo "  set-avatar    Set profile picture for the authenticated account"
   echo "  post          Post a status to GoToSocial"
   echo "  report        Post fleet status report (CPU, memory, disk, git commit)"
   echo ""
@@ -69,6 +70,9 @@ usage() {
   echo "  --password <pass>    Account password (required)"
   echo "  --host <host>        GoToSocial host (overrides config)"
   echo "  --protocol <proto>   Protocol http/https (overrides config)"
+  echo ""
+  echo "Options for set-avatar:"
+  echo "  --image <path>       Path to image file (required)"
   echo ""
   echo "Options for post:"
   echo "  --message <text>     Status text to post (required)"
@@ -456,6 +460,80 @@ do_post() {
   fi
 }
 
+# ─── set-avatar ────────────────────────────────────────────────────────────────
+do_set_avatar() {
+  local image=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --image)
+        if [[ $# -lt 2 ]]; then
+          error "--image requires a value"
+          exit 1
+        fi
+        image="$2"
+        shift
+        ;;
+      *)
+        error "Unknown option: $1"
+        exit 1
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$image" ]]; then
+    error "Missing required flag: --image"
+    echo "" >&2
+    echo "Usage: pulsr-ctl set-avatar --image <path>" >&2
+    exit 1
+  fi
+
+  if [[ ! -f "$image" ]]; then
+    error "Image file not found: ${image}"
+    exit 1
+  fi
+
+  # Load config
+  local GTS_HOST="" GTS_PROTOCOL="" GTS_TOKEN=""
+  load_pulsr_config
+
+  local missing=()
+  [[ -z "$GTS_HOST" ]]     && missing+=("GTS_HOST")
+  [[ -z "$GTS_PROTOCOL" ]] && missing+=("GTS_PROTOCOL")
+  [[ -z "$GTS_TOKEN" ]]    && missing+=("GTS_TOKEN")
+
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    error "Missing required variables: ${missing[*]}"
+    exit 1
+  fi
+
+  local BASE_URL="${GTS_PROTOCOL}://${GTS_HOST}"
+
+  info "Setting avatar from ${image}..." >&2
+  local response body http_status
+  response="$(curl -sS -w '\n%{http_code}' -X PATCH "${BASE_URL}/api/v1/accounts/update_credentials" \
+    -H "Authorization: Bearer ${GTS_TOKEN}" \
+    -F "avatar=@${image}")"
+
+  http_status="$(echo "$response" | tail -n1)"
+  body="$(echo "$response" | sed '$d')"
+
+  if [[ "$http_status" -lt 200 || "$http_status" -ge 300 ]]; then
+    error "Failed to set avatar (HTTP ${http_status}): ${body}" >&2
+    exit 1
+  fi
+
+  local avatar_url
+  avatar_url="$(echo "$body" | jq -r '.avatar // empty')"
+
+  if [[ -n "$avatar_url" ]]; then
+    info "Avatar set successfully: ${avatar_url}" >&2
+  else
+    info "Avatar set (HTTP ${http_status})" >&2
+  fi
+}
+
 # ─── report ───────────────────────────────────────────────────────────────────
 do_report() {
   local host_name
@@ -597,6 +675,9 @@ case "$COMMAND" in
     ;;
   user-token)
     do_user_token "$@"
+    ;;
+  set-avatar)
+    do_set_avatar "$@"
     ;;
   post)
     do_post "$@"

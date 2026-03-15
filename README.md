@@ -62,13 +62,16 @@ the-loft/
 ├── hosts/
 │   ├── space-needle/
 │   │   ├── host.conf                          # Host manifest
+│   │   ├── profile.jpg                        # Pulsr avatar for fleet account
 │   │   └── overrides/
 │   │       └── iditarod/
 │   │           └── docker-compose.override.yml # Pupyrus mounts for runner
 │   ├── viking/
-│   │   └── host.conf
+│   │   ├── host.conf
+│   │   └── profile.jpg                        # Pulsr avatar for fleet account
 │   └── fjord/
-│       └── host.conf
+│       ├── host.conf
+│       └── profile.jpg                        # Pulsr avatar for fleet account
 ├── services/
 │   ├── plex/
 │   │   ├── docker-compose.yml
@@ -308,6 +311,9 @@ pulsr-ctl user-add --username bob --email bob@example.com --password 'MyP@ss123'
 # Get an API token for automated posting
 pulsr-ctl user-token --email alice@example.com --password 'MyP@ss123'
 
+# Set a profile picture
+pulsr-ctl set-avatar --image hosts/space-needle/profile.jpg
+
 # Post a status update
 pulsr-ctl post --message "Server is alive at $(date)"
 ```
@@ -349,7 +355,7 @@ Each fleet host automatically posts system metrics to Pulsr (GoToSocial) every 6
 
 ### Account Provisioning
 
-Fleet accounts are created automatically by `setup.sh` on space-needle (which hosts Pulsr). Each host's credentials:
+Fleet accounts are created automatically by `setup.sh` on space-needle (which hosts Pulsr). Each host's profile picture (`hosts/<hostname>/profile.jpg`) is set as the account avatar during setup. Each host's credentials:
 
 | Host | Username | Email |
 |------|----------|-------|
