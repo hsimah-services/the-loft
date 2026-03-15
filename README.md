@@ -12,7 +12,7 @@ Fleet configuration for The Loft — a mono-repo managing all hosts (space-needl
 | `viking` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 | `fjord` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 
-Each host has a config file at `hosts/<hostname>/host.conf` that declares its services, storage, directories, and health check URLs. A single `setup.sh` provisions any host by reading its config.
+Each host has a config file at `hosts/<hostname>/host.conf` that declares its services, storage, directories, and health check URLs. A single `setup.sh` provisions any host by reading its config. Services that need post-deploy configuration have a `services/<name>/setup.sh` script that is automatically sourced after deployment.
 
 ### Services
 
@@ -35,7 +35,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Howlr shairport-sync | `mikebrady/shairport-sync` | host network | `config/shairport-sync.conf` | AirPlay receiver (feeds snapserver) |
 | Howlr librespot | `giof71/librespot` | host network | — | Spotify Connect receiver (feeds snapserver) |
 | Howlr snapclient | `ivdata/snapclient` | host network | `.env` per host | Snapcast client (receives stream, outputs to speakers) |
-| Pulsr | `superseriousbusiness/gotosocial` | — (via Caddy) | `/opt/pulsr/data` | Self-hosted fediverse instance (GoToSocial) for status updates and household messaging |
+| Pulsr | `superseriousbusiness/gotosocial` | — (via Caddy) | `/opt/pulsr/data` | Self-hosted fediverse instance (GoToSocial) for status updates, household messaging, and fleet status reporting |
 | Pulsr Phanpy | `ghcr.io/yitsushi/phanpy-docker` | — | — | Web client for GoToSocial (served at `pulsr.space-needle/`) |
 | Hblake | `nginx:alpine` | 8085 (bridge) | — | Static personal website served at `hbla.ke` |
 
@@ -62,24 +62,29 @@ the-loft/
 ├── hosts/
 │   ├── space-needle/
 │   │   ├── host.conf                          # Host manifest
+│   │   ├── profile.jpg                        # Pulsr avatar for fleet account
 │   │   └── overrides/
 │   │       └── iditarod/
 │   │           └── docker-compose.override.yml # Pupyrus mounts for runner
 │   ├── viking/
-│   │   └── host.conf
+│   │   ├── host.conf
+│   │   └── profile.jpg                        # Pulsr avatar for fleet account
 │   └── fjord/
-│       └── host.conf
+│       ├── host.conf
+│       └── profile.jpg                        # Pulsr avatar for fleet account
 ├── services/
 │   ├── plex/
 │   │   ├── docker-compose.yml
 │   │   └── .env.example
 │   ├── media/
 │   │   ├── docker-compose.yml
+│   │   ├── setup.sh                       # Per-service setup (transmission cron)
 │   │   ├── transmission/
 │   │   │   └── remove-torrents.sh         # Cron job: removes torrents at 200% ratio
 │   │   └── .env.example
 │   ├── pupyrus/
 │   │   ├── docker-compose.yml
+│   │   ├── setup.sh                       # Per-service setup (WordPress install)
 │   │   └── .env.example
 │   ├── iditarod/
 │   │   ├── docker-compose.yml
@@ -100,13 +105,16 @@ the-loft/
 │   │   └── .env.example
 │   ├── pulsr/
 │   │   ├── docker-compose.yml
+│   │   ├── setup.sh                       # Per-service setup (fleet account provisioning)
 │   │   └── .env.example
 │   └── hblake/
 │       ├── docker-compose.yml
 │       └── html/
 │           └── index.html
 ├── control-plane/
-│   └── common.sh
+│   ├── common.sh
+│   ├── package-collector.sh              # Package update cache for fleet status reporting
+│   └── pulsr-collector.sh                # CPU sampler for fleet status reporting
 ├── plans/
 │   ├── howlr.md
 │   └── raspberry-pi.md
@@ -120,6 +128,7 @@ the-loft/
 ├── .github/workflows/validate.yml
 ├── .gitignore
 ├── CLAUDE.md
+├── DEBUG.md
 └── README.md
 ```
 
@@ -187,6 +196,7 @@ Each host is defined by `hosts/<hostname>/host.conf`, a bash-sourceable file dec
 | `MEDIA_DIRS` | Array of media directories to create (775) |
 | `LITTLEDOG_EXTRA_GROUPS` | Additional groups for littledog (e.g. `render,video`) |
 | `SSH_DISABLE_PASSWORD` | Whether to disable SSH password auth (`true`/`false`) |
+| `REPORT_DISKS` | Array of mount points to include in fleet status reports |
 | `HEALTH_URLS` | Associative array of required health check endpoints |
 | `HEALTH_URLS_WARN` | Associative array of warn-only health check endpoints |
 
@@ -231,6 +241,10 @@ Docker log rotation is configured at two levels:
 - **Sudo**: `adminhabl` has full sudo via `/etc/sudoers.d/adminhabl`
 - **Containers**: All run as `littledog` (UID/GID 1003), a nologin service account
 - **External access**: Pulsr and Hblake are exposed externally via Cloudflare Tunnel (outbound-only, no open ports). All other services remain LAN-only
+
+## Debugging
+
+See [DEBUG.md](DEBUG.md) for a comprehensive debugging guide covering container state inspection, log analysis, database debugging, network troubleshooting, Caddy/TLS diagnostics, and common failure patterns with fixes.
 
 ## Quick Start
 
@@ -306,6 +320,9 @@ pulsr-ctl user-add --username bob --email bob@example.com --password 'MyP@ss123'
 # Get an API token for automated posting
 pulsr-ctl user-token --email alice@example.com --password 'MyP@ss123'
 
+# Set a profile picture
+pulsr-ctl set-avatar --image hosts/space-needle/profile.jpg
+
 # Post a status update
 pulsr-ctl post --message "Server is alive at $(date)"
 ```
@@ -326,6 +343,45 @@ After each `rebuild` or `update`, the script verifies:
 4. Copy and fill in `.env` files for the host's services
 5. Run `sudo bash setup.sh`
 
+
+## Fleet Status Reporting
+
+Each fleet host automatically posts system metrics to Pulsr (GoToSocial) every 6 hours. This provides visibility into fleet health through the Fediverse timeline.
+
+### Architecture
+
+- Each host gets its own GoToSocial account (e.g. `space_needle`, `viking`, `fjord`)
+- A CPU sampler (`control-plane/pulsr-collector.sh`) runs every minute via cron, appending CPU usage % to `/var/log/loft/cpu.log`
+- A package collector (`control-plane/package-collector.sh`) runs every 6 hours via cron, caching security/total update counts and reboot-required status to `/var/log/loft/packages.log`
+- Every 6 hours, `pulsr-ctl report` reads the CPU log and package cache, collects memory/disk/git metrics, and posts a status update
+- Reports include hashtags `#LoftServiceUpdate` and `#<HostName>Update` for filtering
+
+### Cron Jobs
+
+| Cron File | Schedule | Purpose |
+|-----------|----------|---------|
+| `/etc/cron.d/loft-cpu-collector` | Every minute | Sample CPU usage to `/var/log/loft/cpu.log` |
+| `/etc/cron.d/loft-package-collector` | Every 6 hours (30 min before report) | Cache package update counts to `/var/log/loft/packages.log` |
+| `/etc/cron.d/loft-pulsr-report` | Every 6 hours | Post status report to Pulsr |
+
+### Account Provisioning
+
+Fleet accounts are created automatically by `setup.sh` on space-needle (which hosts Pulsr). Each host's profile picture (`hosts/<hostname>/profile.jpg`) is set as the account avatar during setup. Each host's credentials:
+
+| Host | Username | Email |
+|------|----------|-------|
+| space-needle | `space_needle` | `space-needle@loft.hsimah.com` |
+| viking | `viking` | `viking@loft.hsimah.com` |
+| fjord | `fjord` | `fjord@loft.hsimah.com` |
+
+API tokens are stored at `/etc/loft/pulsr.env` on each host (created by `setup.sh`). The `REPORT_DISKS` variable in each host's `host.conf` controls which mount points are included in disk metrics.
+
+### Manual Reporting
+
+```bash
+# Post a status report manually
+sudo pulsr-ctl report
+```
 
 ## Raspberry Pi Fleet
 
@@ -450,5 +506,5 @@ A GitHub Actions workflow validates on every push:
 - All base `docker-compose.yml` files pass `docker compose config --quiet`
 - Howlr compose validated with both `COMPOSE_PROFILES=server` and `COMPOSE_PROFILES=client`
 - All compose + override combinations validate
-- All shell scripts pass `bash -n` syntax check
+- All shell scripts (`setup.sh`, `loft-ctl`, `pulsr-ctl`, `control-plane/*.sh`, `services/*/setup.sh`) pass `bash -n` syntax check
 - All `host.conf` files pass `bash -n` syntax check

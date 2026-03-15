@@ -204,6 +204,10 @@ done
 
 info "Directory structure created"
 
+# ─── 9a. Log directory ──────────────────────────────────────────────────────
+info "Creating log directory..."
+mkdir -p /var/log/loft
+
 # ─── 10. Docker install ──────────────────────────────────────────────────────
 info "Checking Docker..."
 
@@ -265,6 +269,17 @@ info "Deploying services..."
 # Source compose helper from control-plane
 source "${REPO_DIR}/control-plane/common.sh"
 
+# Hostname helpers (used by per-service setup and fleet-wide reporting)
+hostname_to_username() { echo "${1//-/_}"; }
+hostname_to_pascal() {
+  local result=""
+  local IFS='-'
+  for part in $1; do
+    result+="$(echo "${part:0:1}" | tr '[:lower:]' '[:upper:]')${part:1}"
+  done
+  echo "$result"
+}
+
 for service in "${SERVICES[@]}"; do
   compose_args=$(compose_args_for "$service") || {
     warn "No compose config for ${service}, skipping"
@@ -291,44 +306,100 @@ for service in "${SERVICES[@]}"; do
   docker compose ${compose_args} up -d
 done
 
-# ─── 11a. WordPress setup ───────────────────────────────────────────────────
-if printf '%s\n' "${SERVICES[@]}" | grep -qx pupyrus; then
-  if docker ps --format '{{.Names}}' | grep -q '^pupyrus$'; then
-    info "Configuring WordPress..."
-    compose_args=$(compose_args_for "pupyrus")
-    source "${REPO_DIR}/services/pupyrus/.env"
-
-    # shellcheck disable=SC2086
-    if docker compose ${compose_args} --profile cli run --rm cli wp core is-installed 2>/dev/null; then
-      info "WordPress already installed"
-    else
-      info "Installing WordPress..."
-      # shellcheck disable=SC2086
-      docker compose ${compose_args} --profile cli run --rm cli \
-        wp core install \
-          --url="http://localhost" \
-          --title="Pupyrus" \
-          --admin_user="adminhabl" \
-          --admin_password="${WORDPRESS_ADMIN_PASSWORD}" \
-          --admin_email="hamishblake+papyrus@gmail.com"
-      info "WordPress installed"
-    fi
+# ─── 11a. Per-service setup ──────────────────────────────────────────────────
+for service in "${SERVICES[@]}"; do
+  service_setup="${REPO_DIR}/services/${service}/setup.sh"
+  if [[ -f "$service_setup" ]]; then
+    info "Running ${service} setup..."
+    source "$service_setup"
   fi
-fi
+done
 
 # ─── 12. Cron jobs ───────────────────────────────────────────────────────────
 info "Configuring cron jobs..."
 
-if printf '%s\n' "${SERVICES[@]}" | grep -qx media; then
-  CRON_FILE="/etc/cron.d/transmission-cleanup"
-  cat > "$CRON_FILE" <<'EOF'
-# Remove torrents that have reached 200% seed ratio — installed by setup.sh
-0 0 * * * root docker exec transmission /scripts/remove-torrents.sh
+# CPU collector cron (every minute)
+cat > /etc/cron.d/loft-cpu-collector <<EOF
+# CPU usage sampler for fleet status reporting — installed by setup.sh
+* * * * * root ${REPO_DIR}/control-plane/pulsr-collector.sh
 EOF
-  chmod 644 "$CRON_FILE"
-  info "Installed transmission cleanup cron job"
+chmod 644 /etc/cron.d/loft-cpu-collector
+info "Installed CPU collector cron job"
+
+# Package collector cron (every 6 hours, 30 min before report)
+cat > /etc/cron.d/loft-package-collector <<EOF
+# System package update cache for fleet status reporting — installed by setup.sh
+30 5,11,17,23 * * * root ${REPO_DIR}/control-plane/package-collector.sh
+EOF
+chmod 644 /etc/cron.d/loft-package-collector
+info "Installed package collector cron job"
+
+# Status report cron (every 6 hours)
+cat > /etc/cron.d/loft-pulsr-report <<EOF
+# Fleet status report to Pulsr — installed by setup.sh
+0 */6 * * * root ${REPO_DIR}/pulsr-ctl report
+EOF
+chmod 644 /etc/cron.d/loft-pulsr-report
+info "Installed Pulsr status report cron job"
+
+# ─── 12a. Pulsr reporting credentials ────────────────────────────────────────
+# Obtain API token and write /etc/loft/pulsr.env for this host
+info "Configuring Pulsr reporting credentials..."
+FLEET_USERNAME="$(hostname_to_username "$HOST_NAME")"
+FLEET_EMAIL="${HOST_NAME}@loft.hsimah.com"
+FLEET_PASCAL="$(hostname_to_pascal "$HOST_NAME")"
+FLEET_PASSWORD="!LoftService_${FLEET_PASCAL}12345!"
+
+PULSR_ENV="/etc/loft/pulsr.env"
+mkdir -p /etc/loft
+
+if [[ -f "$PULSR_ENV" ]] && grep -q "^GTS_TOKEN=" "$PULSR_ENV" && [[ -n "$(sed -n 's/^GTS_TOKEN=//p' "$PULSR_ENV")" ]]; then
+  info "Pulsr token already configured at ${PULSR_ENV}"
 else
-  info "No media service, skipping transmission cron job"
+  info "Obtaining API token for ${FLEET_USERNAME}..."
+  FLEET_TOKEN="$("${REPO_DIR}/pulsr-ctl" user-token \
+    --host pulsr.hsimah.com \
+    --protocol https \
+    --email "$FLEET_EMAIL" \
+    --password "$FLEET_PASSWORD")" || {
+    warn "Failed to obtain Pulsr token — run 'pulsr-ctl user-token' manually after setup"
+    FLEET_TOKEN=""
+  }
+
+  # Write pulsr.env with REPORT_DISKS from host.conf
+  REPORT_DISKS_STR=""
+  if [[ ${#REPORT_DISKS[@]} -gt 0 ]]; then
+    REPORT_DISKS_STR="($(printf ' %s' "${REPORT_DISKS[@]}"))"
+  else
+    REPORT_DISKS_STR="(/)"
+  fi
+
+  cat > "$PULSR_ENV" <<EOF
+# Pulsr fleet reporting config — generated by setup.sh
+GTS_HOST=pulsr.hsimah.com
+GTS_PROTOCOL=https
+GTS_TOKEN=${FLEET_TOKEN}
+REPORT_DISKS=${REPORT_DISKS_STR}
+EOF
+  chmod 600 "$PULSR_ENV"
+  if [[ -n "$FLEET_TOKEN" ]]; then
+    info "Pulsr config written to ${PULSR_ENV}"
+  else
+    warn "Pulsr config written to ${PULSR_ENV} (token is empty — fill in manually)"
+  fi
+fi
+
+# Set profile picture if token is configured and image exists
+PROFILE_IMG="${REPO_DIR}/hosts/${HOST_NAME}/profile.jpg"
+if [[ -f "$PROFILE_IMG" ]] && grep -q "^GTS_TOKEN=.\+" "$PULSR_ENV" 2>/dev/null; then
+  info "Setting Pulsr avatar from ${PROFILE_IMG}..."
+  if "${REPO_DIR}/pulsr-ctl" set-avatar --image "$PROFILE_IMG"; then
+    info "Pulsr avatar set successfully"
+  else
+    warn "Failed to set Pulsr avatar — set manually with: pulsr-ctl set-avatar --image ${PROFILE_IMG}"
+  fi
+else
+  info "Skipping Pulsr avatar (no token or no profile.jpg)"
 fi
 
 # ─── 13. Verification summary ─────────────────────────────────────────────────

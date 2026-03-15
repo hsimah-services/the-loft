@@ -16,6 +16,38 @@ info()  { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; }
 
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+# space-needle → space_needle (GoToSocial usernames can't have hyphens)
+hostname_to_username() { echo "${1//-/_}"; }
+
+# space-needle → SpaceNeedle (for hashtags and display names)
+hostname_to_pascal() {
+  local result=""
+  local IFS='-'
+  for part in $1; do
+    result+="$(echo "${part:0:1}" | tr '[:lower:]' '[:upper:]')${part:1}"
+  done
+  echo "$result"
+}
+
+# ─── Config loading ─────────────────────────────────────────────────────────
+# Tries /etc/loft/pulsr.env first, falls back to services/pulsr/.env
+load_pulsr_config() {
+  local sys_env="/etc/loft/pulsr.env"
+  local repo_env="${REPO_DIR}/services/pulsr/.env"
+
+  if [[ -f "$sys_env" ]]; then
+    # shellcheck source=/dev/null
+    source "$sys_env"
+  elif [[ -f "$repo_env" ]]; then
+    # shellcheck source=/dev/null
+    source "$repo_env"
+  else
+    error "No pulsr config found at ${sys_env} or ${repo_env}"
+    exit 1
+  fi
+}
+
 # ─── Usage ────────────────────────────────────────────────────────────────────
 usage() {
   echo "Usage: pulsr-ctl <command>"
@@ -23,7 +55,9 @@ usage() {
   echo "Commands:"
   echo "  user-add      Create a new GoToSocial account"
   echo "  user-token    Get an API token for automated posting"
+  echo "  set-avatar    Set profile picture for the authenticated account"
   echo "  post          Post a status to GoToSocial"
+  echo "  report        Post fleet status report (CPU, memory, disk, packages, git commit)"
   echo ""
   echo "Options for user-add:"
   echo "  --username <name>    Account username (required)"
@@ -34,6 +68,11 @@ usage() {
   echo "Options for user-token:"
   echo "  --email <email>      Account email (required)"
   echo "  --password <pass>    Account password (required)"
+  echo "  --host <host>        GoToSocial host (overrides config)"
+  echo "  --protocol <proto>   Protocol http/https (overrides config)"
+  echo ""
+  echo "Options for set-avatar:"
+  echo "  --image <path>       Path to image file (required)"
   echo ""
   echo "Options for post:"
   echo "  --message <text>     Status text to post (required)"
@@ -139,7 +178,7 @@ do_user_add() {
 
 # ─── user-token ──────────────────────────────────────────────────────────────
 do_user_token() {
-  local email="" password=""
+  local email="" password="" cli_host="" cli_protocol=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -159,6 +198,22 @@ do_user_token() {
         password="$2"
         shift
         ;;
+      --host)
+        if [[ $# -lt 2 ]]; then
+          error "--host requires a value"
+          exit 1
+        fi
+        cli_host="$2"
+        shift
+        ;;
+      --protocol)
+        if [[ $# -lt 2 ]]; then
+          error "--protocol requires a value"
+          exit 1
+        fi
+        cli_protocol="$2"
+        shift
+        ;;
       *)
         error "Unknown option: $1"
         exit 1
@@ -175,23 +230,18 @@ do_user_token() {
   if [[ ${#missing[@]} -gt 0 ]]; then
     error "Missing required flags: ${missing[*]}"
     echo ""
-    echo "Usage: pulsr-ctl user-token --email <email> --password <pass>"
+    echo "Usage: pulsr-ctl user-token --email <email> --password <pass> [--host <host>] [--protocol <proto>]"
     exit 1
   fi
 
-  # Read base URL from pulsr .env
-  local env_file="${REPO_DIR}/services/pulsr/.env"
-  if [[ ! -f "$env_file" ]]; then
-    error "Pulsr .env not found at ${env_file}"
-    exit 1
-  fi
-
-  local GTS_HOST="" GTS_PROTOCOL=""
-  # shellcheck source=/dev/null
-  source "$env_file"
+  # Load config, then allow CLI flags to override
+  local GTS_HOST="" GTS_PROTOCOL="" GTS_TOKEN=""
+  load_pulsr_config
+  [[ -n "$cli_host" ]] && GTS_HOST="$cli_host"
+  [[ -n "$cli_protocol" ]] && GTS_PROTOCOL="$cli_protocol"
 
   if [[ -z "$GTS_HOST" || -z "$GTS_PROTOCOL" ]]; then
-    error "GTS_HOST and GTS_PROTOCOL must be set in ${env_file}"
+    error "GTS_HOST and GTS_PROTOCOL must be set (via config or --host/--protocol flags)"
     exit 1
   fi
 
@@ -364,16 +414,9 @@ do_post() {
     exit 1
   fi
 
-  # Read config from pulsr .env
-  local env_file="${REPO_DIR}/services/pulsr/.env"
-  if [[ ! -f "$env_file" ]]; then
-    error "Pulsr .env not found at ${env_file}"
-    exit 1
-  fi
-
+  # Load config
   local GTS_HOST="" GTS_PROTOCOL="" GTS_TOKEN=""
-  # shellcheck source=/dev/null
-  source "$env_file"
+  load_pulsr_config
 
   local missing=()
   [[ -z "$GTS_HOST" ]]     && missing+=("GTS_HOST")
@@ -381,7 +424,7 @@ do_post() {
   [[ -z "$GTS_TOKEN" ]]    && missing+=("GTS_TOKEN")
 
   if [[ ${#missing[@]} -gt 0 ]]; then
-    error "Missing required variables in ${env_file}: ${missing[*]}"
+    error "Missing required variables: ${missing[*]}"
     exit 1
   fi
 
@@ -417,6 +460,233 @@ do_post() {
   fi
 }
 
+# ─── set-avatar ────────────────────────────────────────────────────────────────
+do_set_avatar() {
+  local image=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --image)
+        if [[ $# -lt 2 ]]; then
+          error "--image requires a value"
+          exit 1
+        fi
+        image="$2"
+        shift
+        ;;
+      *)
+        error "Unknown option: $1"
+        exit 1
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$image" ]]; then
+    error "Missing required flag: --image"
+    echo "" >&2
+    echo "Usage: pulsr-ctl set-avatar --image <path>" >&2
+    exit 1
+  fi
+
+  if [[ ! -f "$image" ]]; then
+    error "Image file not found: ${image}"
+    exit 1
+  fi
+
+  # Load config
+  local GTS_HOST="" GTS_PROTOCOL="" GTS_TOKEN=""
+  load_pulsr_config
+
+  local missing=()
+  [[ -z "$GTS_HOST" ]]     && missing+=("GTS_HOST")
+  [[ -z "$GTS_PROTOCOL" ]] && missing+=("GTS_PROTOCOL")
+  [[ -z "$GTS_TOKEN" ]]    && missing+=("GTS_TOKEN")
+
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    error "Missing required variables: ${missing[*]}"
+    exit 1
+  fi
+
+  local BASE_URL="${GTS_PROTOCOL}://${GTS_HOST}"
+
+  info "Setting avatar from ${image}..." >&2
+  local response body http_status
+  response="$(curl -sS -w '\n%{http_code}' -X PATCH "${BASE_URL}/api/v1/accounts/update_credentials" \
+    -H "Authorization: Bearer ${GTS_TOKEN}" \
+    -F "avatar=@${image}")"
+
+  http_status="$(echo "$response" | tail -n1)"
+  body="$(echo "$response" | sed '$d')"
+
+  if [[ "$http_status" -lt 200 || "$http_status" -ge 300 ]]; then
+    error "Failed to set avatar (HTTP ${http_status}): ${body}" >&2
+    exit 1
+  fi
+
+  local avatar_url
+  avatar_url="$(echo "$body" | jq -r '.avatar // empty')"
+
+  if [[ -n "$avatar_url" ]]; then
+    info "Avatar set successfully: ${avatar_url}" >&2
+  else
+    info "Avatar set (HTTP ${http_status})" >&2
+  fi
+}
+
+# ─── report ───────────────────────────────────────────────────────────────────
+do_report() {
+  local host_name
+  host_name="$(hostname)"
+  local pascal_name
+  pascal_name="$(hostname_to_pascal "$host_name")"
+
+  # ── CPU metrics from collector log ──
+  local cpu_log="/var/log/loft/cpu.log"
+  local cpu_section="CPU: no data"
+  if [[ -f "$cpu_log" && -s "$cpu_log" ]]; then
+    local cpu_low cpu_high cpu_avg cpu_sum cpu_count
+    cpu_low=100
+    cpu_high=0
+    cpu_sum=0
+    cpu_count=0
+    while IFS= read -r val; do
+      [[ -z "$val" ]] && continue
+      (( cpu_sum += val )) || true
+      (( cpu_count++ )) || true
+      (( val < cpu_low )) && cpu_low=$val
+      (( val > cpu_high )) && cpu_high=$val || true
+    done < "$cpu_log"
+    if (( cpu_count > 0 )); then
+      cpu_avg=$(( cpu_sum / cpu_count ))
+      cpu_section="CPU: low ${cpu_low}% / avg ${cpu_avg}% / high ${cpu_high}%"
+    fi
+    # Truncate log after reading
+    : > "$cpu_log"
+  fi
+
+  # ── Memory metrics from /proc/meminfo ──
+  local mem_total_kb mem_avail_kb
+  mem_total_kb="$(sed -n 's/^MemTotal: *\([0-9]*\) kB/\1/p' /proc/meminfo)"
+  mem_avail_kb="$(sed -n 's/^MemAvailable: *\([0-9]*\) kB/\1/p' /proc/meminfo)"
+  local mem_total_mb=$(( mem_total_kb / 1024 ))
+  local mem_used_mb=$(( (mem_total_kb - mem_avail_kb) / 1024 ))
+  local mem_pct=$(( (mem_total_kb - mem_avail_kb) * 100 / mem_total_kb ))
+  local mem_section="Memory: ${mem_used_mb} MB / ${mem_total_mb} MB (${mem_pct}%)"
+
+  # ── Disk metrics ──
+  local disk_section=""
+  # Load REPORT_DISKS from /etc/loft/pulsr.env or host.conf
+  REPORT_DISKS=()
+  local sys_env="/etc/loft/pulsr.env"
+  local host_conf="${REPO_DIR}/hosts/${host_name}/host.conf"
+  if [[ -f "$sys_env" ]]; then
+    # shellcheck source=/dev/null
+    source "$sys_env"
+  elif [[ -f "$host_conf" ]]; then
+    # shellcheck source=/dev/null
+    source "$host_conf"
+  fi
+
+  for disk_path in "${REPORT_DISKS[@]}"; do
+    local df_line
+    df_line="$(df -BM --output=used,size "$disk_path" | tail -1)"
+    local used_mb size_mb
+    used_mb="$(echo "$df_line" | awk '{gsub(/M/,"",$1); print $1}')"
+    size_mb="$(echo "$df_line" | awk '{gsub(/M/,"",$2); print $2}')"
+    if [[ -n "$used_mb" && -n "$size_mb" && "$size_mb" -gt 0 ]]; then
+      local disk_pct=$(( used_mb * 100 / size_mb ))
+      disk_section+="Disk ${disk_path}: ${used_mb} MB / ${size_mb} MB (${disk_pct}%)"$'\n'
+    fi
+  done
+  # Remove trailing newline
+  disk_section="${disk_section%$'\n'}"
+
+  # ── Package update metrics from collector log ──
+  local pkg_log="/var/log/loft/packages.log"
+  local pkg_section="Updates: no data"
+  local reboot_section=""
+  if [[ -f "$pkg_log" && -s "$pkg_log" ]]; then
+    local SECURITY_UPDATES="" TOTAL_UPDATES="" REBOOT_REQUIRED=""
+    # shellcheck source=/dev/null
+    source "$pkg_log"
+    if [[ -n "$TOTAL_UPDATES" ]]; then
+      pkg_section="Updates: ${SECURITY_UPDATES:-0} security, ${TOTAL_UPDATES} total"
+    fi
+    if [[ "$REBOOT_REQUIRED" == "yes" ]]; then
+      reboot_section="Reboot: required"
+    else
+      reboot_section="Reboot: not required"
+    fi
+  fi
+
+  # ── Git commit ──
+  local git_commit="unknown"
+  if command -v git &>/dev/null; then
+    git_commit="$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+  fi
+
+  # ── Build status message ──
+  local status_msg="Server Status Report: ${host_name}"$'\n'
+  status_msg+=""$'\n'
+  status_msg+="${cpu_section}"$'\n'
+  status_msg+="${mem_section}"$'\n'
+  if [[ -n "$disk_section" ]]; then
+    status_msg+="${disk_section}"$'\n'
+  fi
+  status_msg+="${pkg_section}"$'\n'
+  if [[ -n "$reboot_section" ]]; then
+    status_msg+="${reboot_section}"$'\n'
+  fi
+  status_msg+="Commit: ${git_commit}"$'\n'
+  status_msg+=""$'\n'
+  status_msg+="#LoftServiceUpdate #${pascal_name}Update"
+
+  # ── Post via API ──
+  local GTS_HOST="" GTS_PROTOCOL="" GTS_TOKEN=""
+  load_pulsr_config
+
+  local missing=()
+  [[ -z "$GTS_HOST" ]]     && missing+=("GTS_HOST")
+  [[ -z "$GTS_PROTOCOL" ]] && missing+=("GTS_PROTOCOL")
+  [[ -z "$GTS_TOKEN" ]]    && missing+=("GTS_TOKEN")
+
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    error "Missing required variables: ${missing[*]}"
+    exit 1
+  fi
+
+  local BASE_URL="${GTS_PROTOCOL}://${GTS_HOST}"
+
+  local json_payload
+  json_payload="$(jq -n --arg status "$status_msg" '{ status: $status }')"
+
+  info "Posting status report to ${GTS_HOST}..." >&2
+  local response body http_status
+  response="$(curl -sS -w '\n%{http_code}' -X POST "${BASE_URL}/api/v1/statuses" \
+    -H "Authorization: Bearer ${GTS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "$json_payload")"
+
+  http_status="$(echo "$response" | tail -n1)"
+  body="$(echo "$response" | sed '$d')"
+
+  if [[ "$http_status" -lt 200 || "$http_status" -ge 300 ]]; then
+    error "Failed to post report (HTTP ${http_status}): ${body}" >&2
+    exit 1
+  fi
+
+  local status_url
+  status_url="$(echo "$body" | jq -r '.url // empty')"
+
+  if [[ -n "$status_url" ]]; then
+    info "Report posted successfully" >&2
+    echo "$status_url"
+  else
+    info "Report posted (HTTP ${http_status})" >&2
+  fi
+}
+
 # ─── Execute command ──────────────────────────────────────────────────────────
 COMMAND="$1"
 shift
@@ -428,8 +698,14 @@ case "$COMMAND" in
   user-token)
     do_user_token "$@"
     ;;
+  set-avatar)
+    do_set_avatar "$@"
+    ;;
   post)
     do_post "$@"
+    ;;
+  report)
+    do_report "$@"
     ;;
   -h|--help)
     usage
