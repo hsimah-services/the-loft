@@ -1,0 +1,20 @@
+services:
+  hblake:
+    image: nginx:alpine
+    container_name: hblake
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    ports:
+      - "8085:80"
+    volumes:
+      - ./html:/usr/share/nginx/html:ro
+    networks:
+      - loft-proxy
+
+networks:
+  loft-proxy:
+    external: true
