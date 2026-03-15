@@ -127,6 +127,7 @@ the-loft/
 ├── .github/workflows/validate.yml
 ├── .gitignore
 ├── CLAUDE.md
+├── DEBUG.md
 └── README.md
 ```
 
@@ -239,6 +240,10 @@ Docker log rotation is configured at two levels:
 - **Sudo**: `adminhabl` has full sudo via `/etc/sudoers.d/adminhabl`
 - **Containers**: All run as `littledog` (UID/GID 1003), a nologin service account
 - **External access**: Pulsr and Hblake are exposed externally via Cloudflare Tunnel (outbound-only, no open ports). All other services remain LAN-only
+
+## Debugging
+
+See [DEBUG.md](DEBUG.md) for a comprehensive debugging guide covering container state inspection, log analysis, database debugging, network troubleshooting, Caddy/TLS diagnostics, and common failure patterns with fixes.
 
 ## Quick Start
 

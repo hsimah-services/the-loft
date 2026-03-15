@@ -552,10 +552,10 @@ do_report() {
     cpu_count=0
     while IFS= read -r val; do
       [[ -z "$val" ]] && continue
-      (( cpu_sum += val ))
+      (( cpu_sum += val )) || true
       (( cpu_count++ ))
       (( val < cpu_low )) && cpu_low=$val
-      (( val > cpu_high )) && cpu_high=$val
+      (( val > cpu_high )) && cpu_high=$val || true
     done < "$cpu_log"
     if (( cpu_count > 0 )); then
       cpu_avg=$(( cpu_sum / cpu_count ))

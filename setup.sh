@@ -340,7 +340,7 @@ info "Configuring Pulsr reporting credentials..."
 FLEET_USERNAME="$(hostname_to_username "$HOST_NAME")"
 FLEET_EMAIL="${HOST_NAME}@loft.hsimah.com"
 FLEET_PASCAL="$(hostname_to_pascal "$HOST_NAME")"
-FLEET_PASSWORD="${FLEET_PASCAL}12345!"
+FLEET_PASSWORD="!LoftService_${FLEET_PASCAL}12345!"
 
 PULSR_ENV="/etc/loft/pulsr.env"
 mkdir -p /etc/loft
