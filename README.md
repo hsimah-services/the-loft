@@ -196,8 +196,10 @@ Each host is defined by `hosts/<hostname>/host.conf`, a bash-sourceable file dec
 | `LITTLEDOG_EXTRA_GROUPS` | Additional groups for littledog (e.g. `render,video`) |
 | `SSH_DISABLE_PASSWORD` | Whether to disable SSH password auth (`true`/`false`) |
 | `REPORT_DISKS` | Array of mount points to include in fleet status reports |
-| `HEALTH_URLS` | Associative array of required health check endpoints |
-| `HEALTH_URLS_WARN` | Associative array of warn-only health check endpoints |
+| `SERVICE_ENDPOINTS` | Associative array mapping service name → space-separated endpoint labels |
+| `SERVICE_ENDPOINTS_WARN` | Associative array mapping service name → space-separated warn-only endpoint labels |
+| `HEALTH_URLS` | Associative array of `label:tier` → URL (tiers: `local`, `lan`, `ssl`) |
+| `HEALTH_URLS_WARN` | Associative array of `label:tier` → URL (warn-only, e.g. VPN-dependent) |
 
 ## Log Rotation
 
@@ -332,7 +334,10 @@ API tokens are obtained via the full OAuth flow (app creation → sign-in → au
 
 After each `rebuild` or `update`, the script verifies:
 1. **Container check** — all containers in the compose file are "running" (retries for up to 30s)
-2. **Web UI check** — HTTP endpoints respond based on the host's `HEALTH_URLS` and `HEALTH_URLS_WARN` config
+2. **Web UI check** — for the targeted service only, checks each endpoint across three tiers:
+   - **local** — direct port access (e.g. `http://localhost:7878`)
+   - **lan** — dnsmasq subdomain (e.g. `http://radarr.space-needle`)
+   - **ssl** — HTTPS with real certificates (e.g. `https://radarr.loft.hsimah.com`)
 
 ### Adding a new host
 
