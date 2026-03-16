@@ -78,10 +78,12 @@ check_containers() {
   return 1
 }
 
-# ── Web UI health check ────────────────────────────────────────────────────────
+# ── Web UI health check ──────────────────────────────────────────────────────
+TIERS=(local lan ssl)
+
 check_url() {
   local url="$1"
-  local label="$2"
+  local tier="$2"
   local warn_only="${3:-false}"
 
   local http_code
@@ -89,32 +91,65 @@ check_url() {
 
   if [[ "$http_code" == "000" ]]; then
     if $warn_only; then
-      echo "    WARNING: ${label} (${url}) — no response (VPN-dependent)"
+      printf "      %-5s  WARNING  %s (VPN-dependent)\n" "$tier" "$url"
     else
-      echo "    FAIL: ${label} (${url}) — no response"
+      printf "      %-5s  FAIL     %s — no response\n" "$tier" "$url"
       return 1
     fi
   else
-    echo "    OK: ${label} (${url}) — HTTP ${http_code}"
+    printf "      %-5s  OK       %s — HTTP %s\n" "$tier" "$url" "$http_code"
   fi
   return 0
 }
 
-# ── Data-driven web UI checks ────────────────────────────────────────────────
+# Check all tiers for a single endpoint label
+check_endpoint() {
+  local label="$1"
+  local warn_only="${2:-false}"
+  local failed=0
+
+  for tier in "${TIERS[@]}"; do
+    local key="${label}:${tier}"
+    local url=""
+
+    if $warn_only; then
+      url="${HEALTH_URLS_WARN[$key]:-}"
+    else
+      url="${HEALTH_URLS[$key]:-}"
+    fi
+
+    [[ -z "$url" ]] && continue
+    check_url "$url" "$tier" "$warn_only" || (( failed++ ))
+  done
+
+  return "$failed"
+}
+
+# ── Data-driven web UI checks (service-scoped) ───────────────────────────────
 check_web_ui() {
   local service="$1"
   local failed=0
 
-  # Check required health URLs
-  for label in "${!HEALTH_URLS[@]}"; do
-    local url="${HEALTH_URLS[$label]}"
-    check_url "$url" "$label" || (( failed++ ))
+  local endpoints="${SERVICE_ENDPOINTS[$service]:-}"
+  local endpoints_warn="${SERVICE_ENDPOINTS_WARN[$service]:-}"
+
+  if [[ -z "$endpoints" && -z "$endpoints_warn" ]]; then
+    echo "  No web endpoints for ${service}."
+    return 0
+  fi
+
+  echo "  Checking web endpoints for ${service}..."
+
+  # Check required endpoints
+  for label in $endpoints; do
+    echo "    ${label}:"
+    check_endpoint "$label" false || (( failed++ ))
   done
 
-  # Check warn-only health URLs
-  for label in "${!HEALTH_URLS_WARN[@]}"; do
-    local url="${HEALTH_URLS_WARN[$label]}"
-    check_url "$url" "$label" true
+  # Check warn-only endpoints
+  for label in $endpoints_warn; do
+    echo "    ${label} (warn-only):"
+    check_endpoint "$label" true
   done
 
   return "$failed"
