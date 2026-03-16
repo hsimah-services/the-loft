@@ -202,7 +202,7 @@ do_rebuild() {
   # shellcheck disable=SC2086
   docker compose ${compose_args} pull 2>/dev/null || true
   # shellcheck disable=SC2086
-  docker compose ${compose_args} up -d
+  docker compose ${compose_args} up -d --build
   info "Rebuilt ${service}."
 }
 

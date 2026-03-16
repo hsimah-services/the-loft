@@ -1,10 +1,8 @@
 FROM node:lts-alpine AS builder
 
-RUN apk add --no-cache openssh-client git
+RUN apk add --no-cache git
 
-RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
-
-RUN --mount=type=ssh git clone git@github.com:hsimah-services/hblake.git /app
+RUN git clone https://github.com/hsimah-services/hblake.git /app
 
 WORKDIR /app
 
