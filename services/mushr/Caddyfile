@@ -1,6 +1,7 @@
 {
 	admin :8880
 	servers {
+		protocols h1 h2
 		trusted_proxies static private_ranges
 	}
 }

@@ -759,6 +759,28 @@ loft-ctl rebuild pupyrus
 sudo docker exec pupyrus-db mariadb-upgrade -u root -p
 ```
 
+### Pulsr SSL errors after idle (HTTP/3 QUIC timeout)
+
+**Symptom:** After leaving Phanpy idle for a few minutes, API calls fail with SSL/protocol errors in the browser console. The Phanpy UI still loads (from service worker cache), but all GoToSocial API requests (`/api/*`) fail. Recovery requires logging out, clearing browser cache, and waiting 30-60 seconds.
+
+**Cause:** Caddy enables HTTP/3 (QUIC over UDP) by default for all HTTPS listeners. After idle, the QUIC connection's server-side idle timeout expires. When the user returns, the browser tries to reuse the stale QUIC connection, causing SSL errors. The browser eventually falls back to HTTP/2 over TCP, but this takes 30-60 seconds.
+
+**Fix:** HTTP/3 is disabled globally in the Caddyfile via `protocols h1 h2` in the `servers` block. This was already applied — if the issue recurs after a Caddyfile change, verify the setting is still present:
+
+```bash
+# Verify protocols setting
+sudo docker exec mushr caddy validate --config /etc/caddy/Caddyfile
+
+# Check that HTTP/3 is not advertised
+curl -sI https://pulsr.hsimah.com | grep -i alt-svc
+# Should return nothing (no h3 advertisement)
+
+# If the setting was removed, rebuild mushr
+loft-ctl rebuild mushr
+```
+
+**Why not HTTP/3?** HTTP/3 (QUIC) is designed for lossy, high-latency connections (mobile networks, intercontinental links). On a LAN, HTTP/2 over TCP is equally fast and handles idle connections gracefully via TCP keepalive.
+
 ## 11. Triage Flowchart
 
 When something is broken, follow this decision tree:

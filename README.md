@@ -26,7 +26,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Sonarr | `linuxserver/sonarr` | 8989 (host) | `/opt/sonarr` | TV management |
 | Lidarr | `linuxserver/lidarr` | 8686 (host) | `/opt/lidarr` | Music management |
 | Jackett | `linuxserver/jackett` | 9117 | `/opt/jackett` | Indexer proxy |
-| Mushr (proxy) | `caddy:2-alpine` + Cloudflare DNS module (custom build) | 80, 443, 8880 | `Caddyfile`, `Dockerfile.caddy` | Reverse proxy with HTTPS (Let's Encrypt via DNS-01) + LAN HTTP fallback |
+| Mushr (proxy) | `caddy:2-alpine` + Cloudflare DNS module (custom build) | 80, 443, 8880 | `Caddyfile`, `Dockerfile.caddy` | Reverse proxy with HTTPS (Let's Encrypt via DNS-01) + LAN HTTP fallback; HTTP/3 disabled (`protocols h1 h2`) to prevent QUIC idle timeout issues |
 | Mushr (tunnel) | `cloudflare/cloudflared` | — (outbound only) | — | Cloudflare Tunnel — exposes Pulsr and Hblake externally without open ports |
 | Mushr (DNS) | `drpsychick/dnsmasq` | 53/udp, 53/tcp | `dnsmasq.conf` | Wildcard DNS — resolves `*.space-needle` and `*.loft.hsimah.com` to LAN IP |
 | Pupyrus | `wordpress` + `mariadb` + `redis` | 8081 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
