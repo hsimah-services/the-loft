@@ -1,8 +1,6 @@
 services:
   hblake:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: nginx:alpine
     container_name: hblake
     restart: unless-stopped
     logging:
@@ -10,10 +8,16 @@ services:
       options:
         max-size: "5m"
         max-file: "3"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - html:/usr/share/nginx/html
     ports:
       - "8085:80"
     networks:
       - loft-proxy
+
+volumes:
+  html:
 
 networks:
   loft-proxy:

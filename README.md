@@ -37,7 +37,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Howlr snapclient | `ivdata/snapclient` | host network | `.env` per host | Snapcast client (receives stream, outputs to speakers) |
 | Pulsr | `superseriousbusiness/gotosocial` | — (via Caddy) | `/opt/pulsr/data` | Self-hosted fediverse instance (GoToSocial) for status updates, household messaging, and fleet status reporting |
 | Pulsr Phanpy | `ghcr.io/yitsushi/phanpy-docker` | — | — | Web client for GoToSocial (served at `pulsr.space-needle/`) |
-| Hblake | `nginx:alpine` | 8085 (bridge) | — | Static personal website served at `hbla.ke` |
+| Hblake | `nginx:alpine` | 8085 (bridge) | `nginx.conf`, `html` volume | Static personal website served at `hbla.ke` (dist deployed by CI via `docker cp`) |
 
 Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`media-vpn`). Radarr, Sonarr, and Lidarr use host networking. All six are managed together in `services/media/docker-compose.yml`.
 
@@ -109,8 +109,7 @@ the-loft/
 │   │   └── .env.example
 │   └── hblake/
 │       ├── docker-compose.yml
-│       └── html/
-│           └── index.html
+│       └── nginx.conf
 ├── control-plane/
 │   ├── common.sh
 │   ├── package-collector.sh              # Package update cache for fleet status reporting
