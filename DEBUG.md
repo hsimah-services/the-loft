@@ -729,6 +729,7 @@ cat /etc/cron.d/loft-package-collector
 **Symptom:** `pupyrus-db` exits immediately or enters a restart loop. WordPress and Redis are unaffected.
 
 **Cause:** Usually one of:
+- Corrupt transaction coordinator log (unclean shutdown / host reboot)
 - Corrupt InnoDB files (crash during write)
 - Disk full (`/opt/pupyrus/db` on root filesystem)
 - Permission issues on `/opt/pupyrus/db`
@@ -748,13 +749,23 @@ ls -la /opt/pupyrus/db/
 # 4. Check exit code
 sudo docker inspect pupyrus-db --format '{{.State.ExitCode}}'
 
-# 5. If InnoDB corruption, try recovery mode:
+# 5. If "Bad magic header in tc log" / "Crash recovery failed":
+#    The tc.log is a small transaction coordinator file — safe to delete.
+#    MariaDB will recreate it on startup.
+sudo docker compose -f /srv/the-loft/services/pupyrus/docker-compose.yml down
+sudo rm /opt/pupyrus/db/tc.log
+sudo docker compose -f /srv/the-loft/services/pupyrus/docker-compose.yml up -d db
+sudo docker logs -f pupyrus-db  # wait for "ready for connections"
+# Then bring up the rest:
+sudo docker compose -f /srv/the-loft/services/pupyrus/docker-compose.yml up -d
+
+# 6. If InnoDB corruption, try recovery mode:
 #    Add to docker-compose environment:
 #      MARIADB_AUTO_UPGRADE: "1"
 #    Then rebuild:
 loft-ctl rebuild pupyrus
 
-# 6. If data format incompatible after major version upgrade:
+# 7. If data format incompatible after major version upgrade:
 #    Run mariadb-upgrade inside the container
 sudo docker exec pupyrus-db mariadb-upgrade -u root -p
 ```

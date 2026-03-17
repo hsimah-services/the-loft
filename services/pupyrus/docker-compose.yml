@@ -1,6 +1,6 @@
 services:
   db:
-    image: mariadb:latest
+    image: mariadb:12.2
     container_name: pupyrus-db
     logging:
       driver: json-file
@@ -14,6 +14,7 @@ services:
       MARIADB_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - /opt/pupyrus/db:/var/lib/mysql
+    stop_grace_period: 60s
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
