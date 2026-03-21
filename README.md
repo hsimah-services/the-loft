@@ -32,8 +32,15 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Pupyrus | `wordpress` + `mariadb` + `redis` | 8081 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
 | Iditarod | `actions/actions-runner` (custom build) | — | `.env` per host | Self-hosted GitHub Actions runner (org-level, serves all hsimah-services repos) |
 | Howlr snapserver | `ivdata/snapserver` | 1704, 1705, 1780 (host) | `/opt/howlr`, `config/snapserver.conf`, `snapserver-data` volume | Snapcast sync engine + snapweb UI (speaker groups persist via volume) |
-| Howlr shairport-sync | `mikebrady/shairport-sync` | host network | `config/shairport-sync.conf` | AirPlay receiver (feeds snapserver) |
-| Howlr librespot | `giof71/librespot` | host network | — | Spotify Connect receiver (feeds snapserver) |
+| Howlr shairport-sync | `mikebrady/shairport-sync` | host network | `config/shairport-sync.conf` | AirPlay receiver — all speakers (feeds snapserver) |
+| Howlr shairport-sync-viking | `mikebrady/shairport-sync` | host network | `config/shairport-sync-viking.conf` | AirPlay receiver — viking only |
+| Howlr shairport-sync-fjord | `mikebrady/shairport-sync` | host network | `config/shairport-sync-fjord.conf` | AirPlay receiver — fjord only |
+| Howlr librespot | `giof71/librespot` | host network | — | Spotify Connect receiver — all speakers (feeds snapserver) |
+| Howlr librespot-viking | `giof71/librespot` | host network | — | Spotify Connect receiver — viking only |
+| Howlr librespot-fjord | `giof71/librespot` | host network | — | Spotify Connect receiver — fjord only |
+| Howlr gmrender | `giof71/gmrender-resurrect` | host network | — | DLNA receiver — all speakers (feeds snapserver) |
+| Howlr gmrender-viking | `giof71/gmrender-resurrect` | host network | — | DLNA receiver — viking only |
+| Howlr gmrender-fjord | `giof71/gmrender-resurrect` | host network | — | DLNA receiver — fjord only |
 | Howlr snapclient | `ivdata/snapclient` | host network | `.env` per host | Snapcast client (receives stream, outputs to speakers) |
 | Pulsr | `superseriousbusiness/gotosocial` | — (via Caddy) | `/opt/pulsr/data` | Self-hosted fediverse instance (GoToSocial) for status updates, household messaging, and fleet status reporting |
 | Pulsr Phanpy | `ghcr.io/yitsushi/phanpy-docker` | — | — | Web client for GoToSocial (served at `pulsr.space-needle/`) |
@@ -51,9 +58,12 @@ A shared `loft-proxy` Docker bridge network connects Caddy to bridge-networked s
 
 A Cloudflare Tunnel (`mushr-tunnel`) provides external access to Pulsr and Hblake from outside the LAN. The tunnel makes outbound-only connections to Cloudflare's edge — no router ports need to be opened. LAN clients still resolve `pulsr.hsimah.com` and `hbla.ke` via dnsmasq to the LAN IP, so local traffic bypasses the tunnel entirely. Pulsr uses `pulsr.hsimah.com` (not `*.loft.hsimah.com`) because Cloudflare's free Universal SSL only covers single-level subdomains. Hblake uses its own domain (`hbla.ke`).
 
-Howlr uses Docker Compose profiles: `COMPOSE_PROFILES=server` on space-needle runs snapserver + shairport-sync + librespot; `COMPOSE_PROFILES=client` on Pis runs snapclient. The `.env` file controls which profile is active.
+Howlr uses Docker Compose profiles: `COMPOSE_PROFILES=server` on space-needle runs snapserver + 3 AirPlay receivers (shairport-sync) + 3 Spotify Connect receivers (librespot) + 3 DLNA receivers (gmrender-resurrect); `COMPOSE_PROFILES=client` on Pis runs snapclient. Each protocol has three targets: all speakers, viking only, and fjord only — selectable directly from phone/tablet. The `.env` file controls which profile is active.
 
-**Known issue:** The AirPlay stream uses AirPlay 2 format (48kHz/32-bit) which crashes the snapweb browser client. Use native snapclient devices (viking, fjord) for AirPlay playback. Spotify Connect works on all clients including snapweb.
+**Known issues:**
+- The AirPlay streams use AirPlay 2 format (48kHz/32-bit) which crashes the snapweb browser client. Use native snapclient devices (viking, fjord) for AirPlay playback. Spotify Connect and DLNA streams (44.1kHz/16-bit) work on all clients including snapweb.
+- Spotify Connect: only one target can be active per Spotify account at a time. Family plan members with separate logins can stream to different rooms simultaneously.
+- Multiple shairport-sync instances on host network may conflict on NQPTP timing ports (319/320 UDP). If AirPlay 2 discovery fails, a custom entrypoint to share NQPTP may be needed.
 
 ### Directory Layout
 
@@ -95,7 +105,9 @@ the-loft/
 │   │   ├── docker-compose.yml
 │   │   ├── config/
 │   │   │   ├── snapserver.conf
-│   │   │   └── shairport-sync.conf
+│   │   │   ├── shairport-sync.conf
+│   │   │   ├── shairport-sync-viking.conf
+│   │   │   └── shairport-sync-fjord.conf
 │   │   └── .env.example
 │   ├── mushr/
 │   │   ├── docker-compose.yml
@@ -227,8 +239,15 @@ Docker log rotation is configured at two levels:
 | mushr-dns | 5m | 3 | DNS query logging |
 | mushr-tunnel | 5m | 3 | Cloudflare Tunnel connection logging |
 | snapserver | 5m | 3 | Audio distribution logging |
-| shairport-sync | 5m | 3 | AirPlay receiver logging |
-| librespot | 5m | 3 | Spotify Connect logging |
+| shairport-sync | 5m | 3 | AirPlay receiver logging (all speakers) |
+| shairport-sync-viking | 5m | 3 | AirPlay receiver logging (viking) |
+| shairport-sync-fjord | 5m | 3 | AirPlay receiver logging (fjord) |
+| librespot | 5m | 3 | Spotify Connect logging (all speakers) |
+| librespot-viking | 5m | 3 | Spotify Connect logging (viking) |
+| librespot-fjord | 5m | 3 | Spotify Connect logging (fjord) |
+| gmrender | 5m | 3 | DLNA receiver logging (all speakers) |
+| gmrender-viking | 5m | 3 | DLNA receiver logging (viking) |
+| gmrender-fjord | 5m | 3 | DLNA receiver logging (fjord) |
 | snapclient | 5m | 3 | Audio client logging |
 | pulsr | 10m | 3 | Fediverse instance (GoToSocial) |
 | pulsr-phanpy | 5m | 3 | Phanpy web client (static files) |
@@ -498,7 +517,7 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Media | `NORDVPN_TOKEN`, `PUID`, `PGID`, `TZ` |
 | Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `GRAPHQL_JWT_AUTH_SECRET_KEY` |
 | Iditarod | `GITHUB_ORG`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS`, `DOCKER_GID` |
-| Howlr (server) | `COMPOSE_PROFILES=server`, `LIBRESPOT_NAME` |
+| Howlr (server) | `COMPOSE_PROFILES=server`, `LIBRESPOT_NAME`, `LIBRESPOT_NAME_VIKING`, `LIBRESPOT_NAME_FJORD`, `GMRENDER_NAME`, `GMRENDER_NAME_VIKING`, `GMRENDER_NAME_FJORD` |
 | Howlr (client) | `COMPOSE_PROFILES=client`, `SNAPSERVER_HOST`, `SOUND_DEVICE`, `HOST_ID` |
 | Mushr | `LOFT_DOMAIN`, `CLOUDFLARE_API_TOKEN`, `TUNNEL_TOKEN` (edit `dnsmasq.conf` with LAN IP before deploying) |
 | Pulsr | `GTS_HOST`, `GTS_PROTOCOL`, `GTS_TOKEN` (for `pulsr-ctl post`), `TZ` |
