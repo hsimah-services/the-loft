@@ -1,7 +1,7 @@
 services:
-  hblake:
+  pawst:
     image: nginx:alpine
-    container_name: hblake
+    container_name: pawst
     restart: unless-stopped
     logging:
       driver: json-file
@@ -10,14 +10,16 @@ services:
         max-file: "3"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - html:/usr/share/nginx/html
+      - hblake-html:/usr/share/nginx/hblake
+      - hsimah-html:/usr/share/nginx/hsimah
     ports:
       - "8085:80"
     networks:
       - loft-proxy
 
 volumes:
-  html:
+  hblake-html:
+  hsimah-html:
 
 networks:
   loft-proxy:

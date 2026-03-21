@@ -89,11 +89,20 @@ snapweb.{$LOFT_DOMAIN} {
 
 hbla.ke {
 	import cloudflare_tls
-	reverse_proxy hblake:80
+	reverse_proxy pawst:80
 }
 
 http://hbla.ke {
 	redir https://hbla.ke{uri} permanent
+}
+
+hsimah.com {
+	import cloudflare_tls
+	reverse_proxy pawst:80
+}
+
+http://hsimah.com {
+	redir https://hsimah.com{uri} permanent
 }
 
 {$LOFT_DOMAIN} {
@@ -150,8 +159,12 @@ http://snapweb.space-needle:80 {
 	reverse_proxy host.docker.internal:1780
 }
 
-http://hblake.space-needle:80 {
-	reverse_proxy hblake:80
+http://pawst.space-needle:80 {
+	reverse_proxy pawst:80
+}
+
+http://hsimah.space-needle:80 {
+	reverse_proxy pawst:80
 }
 
 http://space-needle:80 {

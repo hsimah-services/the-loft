@@ -30,7 +30,7 @@ Debugging guide for Docker services on The Loft fleet. All commands assume you'r
 | **iditarod** | `iditarod` |
 | **howlr** | `howlr-snapserver`, `howlr-shairport-sync`, `howlr-librespot`, `howlr-snapclient` |
 | **pulsr** | `pulsr`, `pulsr-phanpy` |
-| **hblake** | `hblake` |
+| **pawst** | `pawst` |
 
 ### Health Check URLs (space-needle)
 
@@ -45,7 +45,7 @@ Debugging guide for Docker services on The Loft fleet. All commands assume you'r
 | mushr | `http://localhost:8880/config/` | Yes |
 | snapweb | `http://localhost:1780` | Yes |
 | pulsr | `https://pulsr.hsimah.com/api/v1/instance` | Yes |
-| hblake | `http://localhost:8085` | Yes |
+| pawst | `http://localhost:8085` | Yes |
 | transmission | `http://localhost:9091` | Warn only (VPN) |
 | soulseek | `http://localhost:6080` | Warn only (VPN) |
 
@@ -299,7 +299,7 @@ sudo docker network inspect loft-proxy --format '{{range .Containers}}{{.Name}} 
 sudo docker network inspect loft-proxy
 ```
 
-Expected members of `loft-proxy`: `mushr`, `mushr-tunnel`, `pupyrus`, `pulsr`, `pulsr-phanpy`, `hblake`
+Expected members of `loft-proxy`: `mushr`, `mushr-tunnel`, `pupyrus`, `pulsr`, `pulsr-phanpy`, `pawst`
 
 ### Container-to-container connectivity
 
@@ -310,8 +310,8 @@ sudo docker exec mushr wget -q -O /dev/null http://pupyrus:80 && echo "OK" || ec
 # Test from mushr to pulsr
 sudo docker exec mushr wget -q -O /dev/null http://pulsr:8080 && echo "OK" || echo "FAIL"
 
-# Test from mushr to hblake
-sudo docker exec mushr wget -q -O /dev/null http://hblake:80 && echo "OK" || echo "FAIL"
+# Test from mushr to pawst
+sudo docker exec mushr wget -q -O /dev/null http://pawst:80 && echo "OK" || echo "FAIL"
 ```
 
 ### DNS resolution (mushr-dns / dnsmasq)
@@ -322,6 +322,7 @@ dig @localhost radarr.space-needle +short
 dig @localhost sonarr.loft.hsimah.com +short
 dig @localhost pulsr.hsimah.com +short
 dig @localhost hbla.ke +short
+dig @localhost hsimah.com +short
 
 # All should return the LAN IP configured in dnsmasq.conf
 
@@ -357,7 +358,7 @@ sudo ss -tlnp
 #   1780  — howlr-snapserver (Snapweb UI)
 #   7878  — radarr
 #   8081  — pupyrus (WordPress)
-#   8085  — hblake
+#   8085  — pawst
 #   8686  — lidarr
 #   8880  — mushr (Caddy admin API)
 #   8989  — sonarr
@@ -378,6 +379,7 @@ sudo docker logs mushr-tunnel 2>&1 | grep -i "registered\|error\|failed"
 # Test external access
 curl -sk -o /dev/null -w '%{http_code}' https://pulsr.hsimah.com/api/v1/instance
 curl -sk -o /dev/null -w '%{http_code}' https://hbla.ke
+curl -sk -o /dev/null -w '%{http_code}' https://hsimah.com
 ```
 
 ## 7. Storage / Disk
