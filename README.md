@@ -60,6 +60,8 @@ A Cloudflare Tunnel (`mushr-tunnel`) provides external access to Pulsr and Pawst
 
 Howlr uses Docker Compose profiles: `COMPOSE_PROFILES=server` on space-needle runs snapserver + 3 AirPlay receivers (shairport-sync) + 3 Spotify Connect receivers (librespot) + 3 DLNA receivers (gmrender-resurrect); `COMPOSE_PROFILES=client` on Pis runs snapclient. Each protocol has three targets: all speakers, viking only, and fjord only — selectable directly from phone/tablet. The `.env` file controls which profile is active.
 
+Snapserver uses **meta streams** to simplify room selection: three per-room streams (The Loft, Viking, Fjord) each combine their AirPlay, Spotify, and DLNA protocol pipes. Users assign Snapcast client groups to a room's meta stream and then play audio via any protocol — the meta stream automatically plays whichever source is active (priority: AirPlay > Spotify > DLNA). The underlying 9 protocol pipe streams are hidden from snapweb (`codec=null`).
+
 **Known issues:**
 - The AirPlay streams use AirPlay 2 format (48kHz/32-bit) which crashes the snapweb browser client. Use native snapclient devices (viking, fjord) for AirPlay playback. Spotify Connect and DLNA streams (44.1kHz/16-bit) work on all clients including snapweb.
 - Spotify Connect: only one target can be active per Spotify account at a time. Family plan members with separate logins can stream to different rooms simultaneously.
