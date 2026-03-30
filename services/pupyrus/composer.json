@@ -1,0 +1,27 @@
+{
+    "name": "hsimah-services/pupyrus-plugins",
+    "description": "Composer-managed WordPress plugins for Pupyrus",
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://wpackagist.org",
+            "only": ["wpackagist-plugin/*"]
+        }
+    ],
+    "require": {
+        "composer/installers": "^2.0",
+        "wp-graphql/wp-graphql": "^1.0",
+        "wp-graphql/wp-graphql-jwt-authentication": "^0.7",
+        "wpackagist-plugin/redis-cache": "^2.0"
+    },
+    "extra": {
+        "installer-paths": {
+            "wp-content/plugins/{$name}/": ["type:wordpress-plugin"]
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "composer/installers": true
+        }
+    }
+}

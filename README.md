@@ -29,7 +29,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Mushr (proxy) | `caddy:2-alpine` + Cloudflare DNS module (custom build) | 80, 443, 8880 | `Caddyfile`, `Dockerfile.caddy` | Reverse proxy with HTTPS (Let's Encrypt via DNS-01) + LAN HTTP fallback; HTTP/3 disabled (`protocols h1 h2`) to prevent QUIC idle timeout issues |
 | Mushr (tunnel) | `cloudflare/cloudflared` | — (outbound only) | — | Cloudflare Tunnel — exposes Pulsr, hbla.ke, and hsimah.com externally without open ports |
 | Mushr (DNS) | `drpsychick/dnsmasq` | 53/udp, 53/tcp | `dnsmasq.conf` | Wildcard DNS — resolves `*.space-needle` and `*.loft.hsimah.com` to LAN IP |
-| Pupyrus | `wordpress` + `mariadb` + `redis` | 8081 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
+| Pupyrus | `wordpress` (custom build) + `mariadb` + `redis` | 8081 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache); plugins managed via Composer |
 | Iditarod | `actions/actions-runner` (custom build) | — | `.env` per host | Self-hosted GitHub Actions runner (org-level, serves all hsimah-services repos) |
 | Howlr snapserver | `ivdata/snapserver` | 1704, 1705, 1780 (host) | `/opt/howlr`, `config/snapserver.conf`, `snapserver-data` volume | Snapcast sync engine + snapweb UI (speaker groups persist via volume) |
 | Howlr shairport-sync | `mikebrady/shairport-sync` | host network | `config/shairport-sync.conf` | AirPlay receiver — all speakers (feeds snapserver) |
@@ -96,7 +96,11 @@ the-loft/
 │   │   └── .env.example
 │   ├── pupyrus/
 │   │   ├── docker-compose.yml
-│   │   ├── setup.sh                       # Per-service setup (WordPress install)
+│   │   ├── Dockerfile                    # Custom WordPress image with Composer
+│   │   ├── composer.json                 # Plugin declarations (WPGraphQL, JWT Auth, Redis Cache)
+│   │   ├── composer.lock                 # Locked dependency versions
+│   │   ├── install-plugins.sh            # CMD script: composer install → apache2-foreground
+│   │   ├── setup.sh                      # Per-service setup (WordPress install + plugin activation)
 │   │   └── .env.example
 │   ├── iditarod/
 │   │   ├── docker-compose.yml
@@ -512,6 +516,31 @@ To access Pulsr and Pawst from outside the LAN:
 
 Traffic flow: Internet → Cloudflare Edge → `cloudflared` tunnel → `https://mushr:443` → Caddy → target service. LAN clients bypass the tunnel entirely (dnsmasq resolves `pulsr.hsimah.com`, `hbla.ke`, and `hsimah.com` to the LAN IP).
 
+## Pupyrus Plugin Management
+
+Pupyrus WordPress plugins are managed via Composer and version-controlled in `services/pupyrus/composer.json`. The custom Dockerfile copies Composer into the WordPress image, and `install-plugins.sh` runs `composer install` on every container start — copying the lock file from the image to the bind mount and installing plugins into `wp-content/plugins/`.
+
+### Adding or updating plugins
+
+```bash
+# Edit composer.json to add/change requirements, then regenerate the lock file:
+docker run --rm -v "$(pwd)/services/pupyrus:/app" -w /app composer:latest update --no-dev --prefer-dist
+
+# Clean up generated directories (not needed in git):
+rm -rf services/pupyrus/vendor services/pupyrus/wp-content
+
+# Commit composer.json + composer.lock, then on host:
+sudo loft-ctl rebuild pupyrus
+```
+
+### Current plugins
+
+| Plugin | Package | Source |
+|--------|---------|--------|
+| WPGraphQL | `wp-graphql/wp-graphql` | Packagist |
+| WPGraphQL JWT Authentication | `wp-graphql/wp-graphql-jwt-authentication` | Packagist |
+| Redis Object Cache | `wpackagist-plugin/redis-cache` | WPackagist |
+
 ## Environment Files
 
 Each service that needs secrets has a `.env.example` template. Copy it to `.env` and fill in real values. The `.env` files are gitignored.
@@ -520,7 +549,7 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 |---------|--------------------|
 | Plex | `PLEX_CLAIM`, `PUID`, `PGID`, `TZ` |
 | Media | `NORDVPN_TOKEN`, `PUID`, `PGID`, `TZ` |
-| Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `GRAPHQL_JWT_AUTH_SECRET_KEY` |
+| Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `WORDPRESS_ADMIN_PASSWORD`, `GRAPHQL_JWT_AUTH_SECRET_KEY` |
 | Iditarod | `GITHUB_ORG`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS`, `DOCKER_GID` |
 | Howlr (server) | `COMPOSE_PROFILES=server`, `LIBRESPOT_NAME`, `LIBRESPOT_NAME_VIKING`, `LIBRESPOT_NAME_FJORD`, `GMRENDER_NAME`, `GMRENDER_NAME_VIKING`, `GMRENDER_NAME_FJORD` |
 | Howlr (client) | `COMPOSE_PROFILES=client`, `SNAPSERVER_HOST`, `SOUND_DEVICE`, `HOST_ID` |
@@ -534,5 +563,5 @@ A GitHub Actions workflow validates on every push:
 - All base `docker-compose.yml` files pass `docker compose config --quiet`
 - Howlr compose validated with both `COMPOSE_PROFILES=server` and `COMPOSE_PROFILES=client`
 - All compose + override combinations validate
-- All shell scripts (`setup.sh`, `loft-ctl`, `pulsr-ctl`, `control-plane/*.sh`, `services/*/setup.sh`) pass `bash -n` syntax check
+- All shell scripts (`setup.sh`, `loft-ctl`, `pulsr-ctl`, `control-plane/*.sh`, `services/*/*.sh`) pass `bash -n` syntax check
 - All `host.conf` files pass `bash -n` syntax check

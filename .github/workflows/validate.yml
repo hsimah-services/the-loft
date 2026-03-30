@@ -55,7 +55,7 @@ jobs:
 
       - name: Syntax-check shell scripts
         run: |
-          for f in setup.sh loft-ctl pulsr-ctl control-plane/*.sh services/*/setup.sh; do
+          for f in setup.sh loft-ctl pulsr-ctl control-plane/*.sh services/*/*.sh; do
             echo "Checking $f..."
             bash -n "$f"
           done

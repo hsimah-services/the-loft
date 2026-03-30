@@ -22,4 +22,16 @@ if docker ps --format '{{.Names}}' | grep -q '^pupyrus$'; then
         --admin_email="hamishblake+papyrus@gmail.com"
     info "WordPress installed"
   fi
+
+  # Activate Composer-managed plugins
+  info "Activating plugins..."
+  # shellcheck disable=SC2086
+  docker compose ${compose_args} --profile cli run --rm cli \
+    wp plugin activate wp-graphql wp-graphql-jwt-authentication redis-cache
+
+  # Enable Redis object cache drop-in
+  info "Enabling Redis object cache..."
+  # shellcheck disable=SC2086
+  docker compose ${compose_args} --profile cli run --rm cli \
+    wp redis enable
 fi
