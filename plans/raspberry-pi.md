@@ -231,7 +231,7 @@ Identical to space-needle:
 
 **Differences from space-needle:**
 - `littledog` gets `audio` group (for howlr sound output) but **not** `render` or `video` (no GPU workloads)
-- No Plex, media, or pupyrus services
+- No Pawpcorn, stellarr, or pupyrus services
 
 ---
 

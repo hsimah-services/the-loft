@@ -8,7 +8,7 @@ Fleet configuration for The Loft — a mono-repo managing all hosts (space-needl
 
 | Host | Role | Services |
 |------|------|----------|
-| `space-needle` | Primary server | mushr, plex, media, pupyrus, iditarod, howlr (server), pulsr (+ phanpy), pawst |
+| `space-needle` | Primary server | mushr, pawpcorn, stellarr, pupyrus, iditarod, howlr (server), pulsr (+ phanpy), pawst |
 | `viking` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 | `fjord` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 
@@ -18,8 +18,8 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 
 | Service | Image | Ports | Config | Purpose |
 |---------|-------|-------|--------|---------|
-| Plex | `plexinc/pms-docker` | host network | `/opt/plex/config` | Media server |
-| Media VPN | `bubuntux/nordvpn` | 9091, 6080 | — | Shared NordLynx VPN for Transmission + Soulseek |
+| Pawpcorn | `plexinc/pms-docker` | host network | `/opt/pawpcorn/config` | Media server (Plex) |
+| Stellarr VPN | `bubuntux/nordvpn` | 9091, 6080 | — | Shared NordLynx VPN for Transmission + Soulseek |
 | Transmission | `linuxserver/transmission` | 9091 (via VPN) | `/opt/transmission` | Torrent client |
 | Soulseek | `realies/soulseek` | 6080 (via VPN) | `/opt/soulseek` | P2P music |
 | Radarr | `linuxserver/radarr` | 7878 (host) | `/opt/radarr` | Movie management |
@@ -37,7 +37,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Pulsr Phanpy | `ghcr.io/yitsushi/phanpy-docker` | — | — | Web client for GoToSocial (served at `pulsr.space-needle/`) |
 | Pawst | `nginx:alpine` | 8085 (bridge) | `nginx.conf`, `hblake-html` + `hsimah-html` volumes | Static blogs — serves `hbla.ke` and `hsimah.com` via Nginx server_name routing (dist deployed by CI via `docker cp`) |
 
-Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`media-vpn`). Radarr, Sonarr, and Lidarr use host networking. All six are managed together in `services/media/docker-compose.yml`.
+Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`stellarr-vpn`). Radarr, Sonarr, and Lidarr use host networking. All six are managed together in `services/stellarr/docker-compose.yml`.
 
 Transmission torrents are automatically cleaned up by a cron job that runs nightly at midnight on space-needle. The `remove-torrents.sh` script (bind-mounted into the container) uses `transmission-remote` to find and remove any torrents that have reached a 200% seed ratio, deleting the download data. This is safe because Radarr/Sonarr/Lidarr hardlink files into `/mammoth/library` — the library copies are independent of the download directory. The cron job is installed to `/etc/cron.d/transmission-cleanup` by `setup.sh`. Docker log rotation (20m/3 files) handles Transmission's logging; no separate log rotation is needed.
 
@@ -76,10 +76,10 @@ the-loft/
 │       ├── host.conf
 │       └── profile.jpg                        # Pulsr avatar for fleet account
 ├── services/
-│   ├── plex/
+│   ├── pawpcorn/
 │   │   ├── docker-compose.yml
 │   │   └── .env.example
-│   ├── media/
+│   ├── stellarr/
 │   │   ├── docker-compose.yml
 │   │   ├── setup.sh                       # Per-service setup (transmission cron)
 │   │   ├── transmission/
@@ -112,6 +112,7 @@ the-loft/
 │       └── nginx.conf
 ├── control-plane/
 │   ├── common.sh
+│   ├── image-collector.sh               # Docker image update checker for fleet status reporting
 │   ├── package-collector.sh              # Package update cache for fleet status reporting
 │   └── pulsr-collector.sh                # CPU sampler for fleet status reporting
 ├── plans/
@@ -154,18 +155,18 @@ Host-specific groups (e.g. `render,video` on space-needle) are configured in `ho
 ```
 /mammoth                          XFS volume (/dev/sda1)
   /library
-    /movies                       Plex + Radarr
-    /tv                           Plex + Sonarr
-    /music                        Plex + Lidarr + Soulseek shared
-    /videos                       Plex
-    /stand-up                     Plex
+    /movies                       Pawpcorn + Radarr
+    /tv                           Pawpcorn + Sonarr
+    /music                        Pawpcorn + Lidarr + Soulseek shared
+    /videos                       Pawpcorn
+    /stand-up                     Pawpcorn
   /downloads
     /transmission                 Transmission downloads
     /soulseek                     Soulseek downloads
-  /plex/transcode                 Plex transcoding workspace
+  /pawpcorn/transcode             Plex transcoding workspace
 
 /opt
-  /plex/config                    Plex configuration
+  /pawpcorn/config                Plex configuration
   /radarr                         Radarr configuration
   /sonarr                         Sonarr configuration
   /lidarr                         Lidarr configuration
@@ -214,7 +215,7 @@ Docker log rotation is configured at two levels:
 |---------|----------|----------|--------|
 | vpn | 20m | 5 | VPN reconnections and network events |
 | transmission | 20m | 3 | Transfer activity logging |
-| plex | 20m | 3 | Media scanning and transcoding |
+| pawpcorn | 20m | 3 | Media scanning and transcoding |
 | db (mariadb) | 10m | 5 | Query logs can spike; longer retention |
 | wordpress | 5m | 3 | Relatively quiet |
 | redis | 5m | 3 | Low-volume object cache |
@@ -259,8 +260,8 @@ cd /srv/the-loft
 cp services/iditarod/.env.example services/iditarod/.env
 cp services/howlr/.env.example services/howlr/.env
 # On space-needle also:
-cp services/plex/.env.example services/plex/.env
-cp services/media/.env.example services/media/.env
+cp services/pawpcorn/.env.example services/pawpcorn/.env
+cp services/stellarr/.env.example services/stellarr/.env
 cp services/pupyrus/.env.example services/pupyrus/.env
 cp services/mushr/.env.example services/mushr/.env
 cp services/pulsr/.env.example services/pulsr/.env
@@ -280,26 +281,26 @@ loft-ctl
 
 # Start / stop containers
 loft-ctl start --all
-loft-ctl start plex media
-loft-ctl stop media
+loft-ctl start pawpcorn stellarr
+loft-ctl stop stellarr
 
 # Full rebuild (down + pull images + up — fresh mounts)
 loft-ctl rebuild --all
-loft-ctl rebuild plex
+loft-ctl rebuild pawpcorn
 
 # Run health checks (defaults to all services)
 loft-ctl health
-loft-ctl health plex media
+loft-ctl health pawpcorn stellarr
 
 # Update: git pull + rebuild + health check
 loft-ctl update --all
-loft-ctl update plex media
+loft-ctl update pawpcorn stellarr
 
 # Update from a specific branch
 loft-ctl update --branch feature/ssl --all
 
 # Rebuild without pulling git changes
-loft-ctl update --no-pull plex
+loft-ctl update --no-pull pawpcorn
 ```
 
 ### Managing Pulsr accounts
@@ -355,7 +356,8 @@ Each fleet host automatically posts system metrics to Pulsr (GoToSocial) every 6
 - Each host gets its own GoToSocial account (e.g. `space_needle`, `viking`, `fjord`)
 - A CPU sampler (`control-plane/pulsr-collector.sh`) runs every minute via cron, appending CPU usage % to `/var/log/loft/cpu.log`
 - A package collector (`control-plane/package-collector.sh`) runs every 6 hours via cron, caching security/total update counts and reboot-required status to `/var/log/loft/packages.log`
-- Every 6 hours, `pulsr-ctl report` reads the CPU log and package cache, collects memory/disk/git metrics, and posts a status update
+- An image collector (`control-plane/image-collector.sh`) runs daily via cron, checking running Docker containers for available image updates via `skopeo` and caching results to `/var/log/loft/images.log`
+- Every 6 hours, `pulsr-ctl report` reads the CPU log, package cache, and image cache, collects memory/disk/git metrics, and posts a status update
 - Reports include hashtags `#LoftServiceUpdate` and `#<HostName>Update` for filtering
 
 ### Cron Jobs
@@ -363,6 +365,7 @@ Each fleet host automatically posts system metrics to Pulsr (GoToSocial) every 6
 | Cron File | Schedule | Purpose |
 |-----------|----------|---------|
 | `/etc/cron.d/loft-cpu-collector` | Every minute | Sample CPU usage to `/var/log/loft/cpu.log` |
+| `/etc/cron.d/loft-image-collector` | Daily at 5:25 AM | Check Docker images for updates to `/var/log/loft/images.log` |
 | `/etc/cron.d/loft-package-collector` | Every 6 hours (30 min before report) | Cache package update counts to `/var/log/loft/packages.log` |
 | `/etc/cron.d/loft-pulsr-report` | Every 6 hours | Post status report to Pulsr |
 
@@ -425,7 +428,7 @@ Real Let's Encrypt certificates via Cloudflare DNS-01 challenge. No open ports o
 | `https://sonarr.loft.hsimah.com` | Sonarr |
 | `https://lidarr.loft.hsimah.com` | Lidarr |
 | `https://jackett.loft.hsimah.com` | Jackett |
-| `https://plex.loft.hsimah.com` | Plex |
+| `https://pawpcorn.loft.hsimah.com` | Pawpcorn (Plex) |
 | `https://pupyrus.loft.hsimah.com` | WordPress |
 | `https://pulsr.hsimah.com` | Phanpy web client (default) / GoToSocial API |
 | `https://transmission.loft.hsimah.com` | Transmission |
@@ -446,7 +449,7 @@ HTTP-only, no TLS. Kept for backward compatibility.
 | `http://sonarr.space-needle` | Sonarr |
 | `http://lidarr.space-needle` | Lidarr |
 | `http://jackett.space-needle` | Jackett |
-| `http://plex.space-needle` | Plex |
+| `http://pawpcorn.space-needle` | Pawpcorn (Plex) |
 | `http://pupyrus.space-needle` | WordPress |
 | `https://pulsr.space-needle` | Pulsr (self-signed TLS via `tls internal`) |
 | `http://transmission.space-needle` | Transmission |
@@ -497,8 +500,8 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 
 | Service | Required Variables |
 |---------|--------------------|
-| Plex | `PLEX_CLAIM`, `PUID`, `PGID`, `TZ` |
-| Media | `NORDVPN_TOKEN`, `PUID`, `PGID`, `TZ` |
+| Pawpcorn | `PLEX_CLAIM`, `PUID`, `PGID`, `TZ` |
+| Stellarr | `NORDVPN_TOKEN`, `PUID`, `PGID`, `TZ` |
 | Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `GRAPHQL_JWT_AUTH_SECRET_KEY` |
 | Iditarod | `GITHUB_ORG`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS`, `DOCKER_GID` |
 | Howlr (server) | `COMPOSE_PROFILES=server` |

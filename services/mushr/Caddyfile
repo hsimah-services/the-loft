@@ -57,7 +57,7 @@ jackett.{$LOFT_DOMAIN} {
 	reverse_proxy host.docker.internal:9117
 }
 
-plex.{$LOFT_DOMAIN} {
+pawpcorn.{$LOFT_DOMAIN} {
 	import cloudflare_tls
 	reverse_proxy host.docker.internal:32400
 }
@@ -135,7 +135,7 @@ http://jackett.space-needle:80 {
 	reverse_proxy host.docker.internal:9117
 }
 
-http://plex.space-needle:80 {
+http://pawpcorn.space-needle:80 {
 	reverse_proxy host.docker.internal:32400
 }
 

@@ -57,7 +57,7 @@ usage() {
   echo "  user-token    Get an API token for automated posting"
   echo "  set-avatar    Set profile picture for the authenticated account"
   echo "  post          Post a status to GoToSocial"
-  echo "  report        Post fleet status report (CPU, memory, disk, packages, git commit)"
+  echo "  report        Post fleet status report (CPU, memory, disk, packages, images, git commit)"
   echo ""
   echo "Options for user-add:"
   echo "  --username <name>    Account username (required)"
@@ -620,10 +620,52 @@ do_report() {
     fi
   fi
 
+  # ── Docker image update metrics from collector log ──
+  local img_log="/var/log/loft/images.log"
+  local img_section="Images: no data"
+  if [[ -f "$img_log" && -s "$img_log" ]]; then
+    local update_count=0
+    local current_count=0
+    local error_count=0
+    local update_lines=""
+
+    while IFS='|' read -r cname cimage clocal cremote cstatus; do
+      case "$cstatus" in
+        update)
+          (( update_count++ )) || true
+          local detail="  ${cname}"
+          if [[ "$clocal" != "unknown" && "$cremote" != "unknown" ]]; then
+            detail+="  ${clocal} -> ${cremote}"
+          fi
+          update_lines+="${detail}"$'\n'
+          ;;
+        current)
+          (( current_count++ )) || true
+          ;;
+        error)
+          (( error_count++ )) || true
+          ;;
+      esac
+    done < "$img_log"
+
+    if [[ $update_count -gt 0 ]]; then
+      img_section="Images: ${update_count} update(s) available"$'\n'
+      img_section+="${update_lines%$'\n'}"
+    else
+      img_section="Images: all ${current_count} current"
+    fi
+    if [[ $error_count -gt 0 ]]; then
+      img_section+=$'\n'"  (${error_count} image(s) could not be checked)"
+    fi
+  fi
+
   # ── Git commit ──
   local git_commit="unknown"
+  local git_remote="unknown"
   if command -v git &>/dev/null; then
     git_commit="$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+    git -C "$REPO_DIR" fetch --quiet 2>/dev/null || true
+    git_remote="$(git -C "$REPO_DIR" rev-parse --short origin/main 2>/dev/null || echo "unknown")"
   fi
 
   # ── Build status message ──
@@ -635,10 +677,15 @@ do_report() {
     status_msg+="${disk_section}"$'\n'
   fi
   status_msg+="${pkg_section}"$'\n'
+  status_msg+="${img_section}"$'\n'
   if [[ -n "$reboot_section" ]]; then
     status_msg+="${reboot_section}"$'\n'
   fi
-  status_msg+="Commit: ${git_commit}"$'\n'
+  if [[ "$git_commit" == "$git_remote" ]]; then
+    status_msg+="Commit: ${git_commit} (up to date)"$'\n'
+  else
+    status_msg+="Commit: ${git_commit} -> ${git_remote} (behind)"$'\n'
+  fi
   status_msg+=""$'\n'
   status_msg+="#LoftServiceUpdate #${pascal_name}Update"
 

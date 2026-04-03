@@ -1,7 +1,7 @@
 services:
   vpn:
     image: ghcr.io/bubuntux/nordvpn
-    container_name: media-vpn
+    container_name: stellarr-vpn
     cap_add:
       - NET_ADMIN
       - NET_RAW

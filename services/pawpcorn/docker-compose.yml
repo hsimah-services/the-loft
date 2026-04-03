@@ -1,6 +1,6 @@
 services:
-  plex:
-    container_name: plex
+  pawpcorn:
+    container_name: pawpcorn
     image: plexinc/pms-docker:latest
     restart: unless-stopped
     logging:
@@ -15,8 +15,8 @@ services:
       - PLEX_CLAIM=${PLEX_CLAIM}
     network_mode: host
     volumes:
-      - /opt/plex/config:/config
-      - /mammoth/plex/transcode:/transcode
+      - /opt/pawpcorn/config:/config
+      - /mammoth/pawpcorn/transcode:/transcode
       - /mammoth/library/movies:/data/Movies
       - /mammoth/library/tv:/data/TV
       - /mammoth/library/music:/data/Music

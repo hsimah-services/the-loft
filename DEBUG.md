@@ -24,8 +24,8 @@ Debugging guide for Docker services on The Loft fleet. All commands assume you'r
 | Service | Containers |
 |---------|-----------|
 | **mushr** | `mushr`, `mushr-tunnel`, `mushr-dns` |
-| **plex** | `plex` |
-| **media** | `media-vpn`, `transmission`, `soulseek`, `radarr`, `sonarr`, `lidarr`, `jackett` |
+| **pawpcorn** | `pawpcorn` |
+| **stellarr** | `stellarr-vpn`, `transmission`, `soulseek`, `radarr`, `sonarr`, `lidarr`, `jackett` |
 | **pupyrus** | `pupyrus-db`, `pupyrus-redis`, `pupyrus`, `pupyrus-cli` (cli profile only) |
 | **iditarod** | `iditarod` |
 | **howlr** | `howlr-snapserver`, `howlr-shairport-sync`, `howlr-librespot`, `howlr-snapclient` |
@@ -36,7 +36,7 @@ Debugging guide for Docker services on The Loft fleet. All commands assume you'r
 
 | Label | URL | Required? |
 |-------|-----|-----------|
-| plex | `http://localhost:32400/web` | Yes |
+| pawpcorn | `http://localhost:32400/web` | Yes |
 | radarr | `http://localhost:7878` | Yes |
 | sonarr | `http://localhost:8989` | Yes |
 | lidarr | `http://localhost:8686` | Yes |
@@ -134,7 +134,7 @@ sudo cat $(sudo docker inspect <container> --format '{{.LogPath}}')
 ### System logs
 
 ```bash
-# Cron jobs (CPU collector, package collector, transmission cleanup, pulsr reports)
+# Cron jobs (CPU collector, image collector, package collector, transmission cleanup, pulsr reports)
 sudo grep -i loft /var/log/syslog | tail -20
 
 # CPU metrics (sampled every minute by pulsr-collector.sh)
@@ -142,6 +142,9 @@ sudo cat /var/log/loft/cpu.log
 
 # Package update cache (refreshed every 6 hours by package-collector.sh)
 sudo cat /var/log/loft/packages.log
+
+# Docker image update cache (refreshed daily by image-collector.sh)
+sudo cat /var/log/loft/images.log
 
 # Docker daemon logs
 sudo journalctl -u docker --since "1h"
@@ -156,7 +159,7 @@ sudo journalctl -u docker --since "1h"
 loft-ctl health
 
 # Specific services
-loft-ctl health plex media
+loft-ctl health pawpcorn stellarr
 loft-ctl health pupyrus
 ```
 
@@ -172,7 +175,7 @@ curl -sk -o /dev/null -w '%{http_code}' --max-time 5 <url>
 
 # Examples
 curl -sk -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8081      # pupyrus
-curl -sk -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:32400/web # plex
+curl -sk -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:32400/web # pawpcorn
 curl -sk -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8880/config/ # mushr (Caddy)
 curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://pulsr.hsimah.com/api/v1/instance # pulsr
 
@@ -330,17 +333,17 @@ dig @localhost hsimah.com +short
 sudo docker logs mushr-dns --tail 20
 ```
 
-### VPN status (media-vpn)
+### VPN status (stellarr-vpn)
 
 ```bash
 # Check if VPN is connected
-sudo docker exec media-vpn curl -s https://api.nordvpn.com/vpn/check/full | python3 -m json.tool
+sudo docker exec stellarr-vpn curl -s https://api.nordvpn.com/vpn/check/full | python3 -m json.tool
 
 # Check VPN container logs for connection issues
-sudo docker logs media-vpn --tail 30
+sudo docker logs stellarr-vpn --tail 30
 
 # Test connectivity through VPN
-sudo docker exec media-vpn curl -s https://ifconfig.me
+sudo docker exec stellarr-vpn curl -s https://ifconfig.me
 ```
 
 ### Port listening
@@ -362,9 +365,9 @@ sudo ss -tlnp
 #   8686  — lidarr
 #   8880  — mushr (Caddy admin API)
 #   8989  — sonarr
-#   9091  — transmission (via media-vpn)
+#   9091  — transmission (via stellarr-vpn)
 #   9117  — jackett
-#   32400 — plex
+#   32400 — pawpcorn
 ```
 
 ### Cloudflare Tunnel
@@ -487,7 +490,7 @@ curl -s http://localhost:8880/config/apps/http/ | python3 -m json.tool
 echo | openssl s_client -connect localhost:443 -servername radarr.loft.hsimah.com 2>/dev/null | openssl x509 -noout -dates -subject
 
 # Check all domains
-for domain in radarr sonarr lidarr jackett plex pupyrus transmission soulseek snapweb; do
+for domain in radarr sonarr lidarr jackett pawpcorn pupyrus transmission soulseek snapweb; do
   echo -n "${domain}.loft.hsimah.com: "
   echo | openssl s_client -connect localhost:443 -servername ${domain}.loft.hsimah.com 2>/dev/null | openssl x509 -noout -dates 2>/dev/null || echo "NO CERT"
 done
@@ -540,7 +543,7 @@ loft-ctl start mushr
 | Service | Why |
 |---------|-----|
 | **pupyrus** | Deletes MariaDB database (`/opt/pupyrus/db`) — all WordPress content lost |
-| **plex** | Deletes Plex config (`/opt/plex/config`) — library metadata, watch history, all settings |
+| **pawpcorn** | Deletes Plex config (`/opt/pawpcorn/config`) — library metadata, watch history, all settings |
 | **pulsr** | Deletes GoToSocial data (`/opt/pulsr/data`) — all posts, accounts, media |
 | **mushr** | Deletes TLS certificates (`caddy-data`) — triggers re-issuance (rate limits apply) |
 | **howlr** | Deletes snapserver speaker group config (`snapserver-data` volume) |
@@ -553,14 +556,14 @@ loft-ctl start mushr
 
 **Symptom:** `loft-ctl health` shows WARNING for transmission/soulseek but everything else is OK.
 
-**Cause:** VPN tunnel (`media-vpn`) is disconnected. Transmission and Soulseek route through it.
+**Cause:** VPN tunnel (`stellarr-vpn`) is disconnected. Transmission and Soulseek route through it.
 
 **Fix:**
 ```bash
-sudo docker logs media-vpn --tail 20  # Check for connection errors
-sudo docker restart media-vpn         # Restart VPN
+sudo docker logs stellarr-vpn --tail 20  # Check for connection errors
+sudo docker restart stellarr-vpn         # Restart VPN
 # Wait 30s for reconnect, then:
-loft-ctl health media
+loft-ctl health stellarr
 ```
 
 ### mushr-tunnel won't start

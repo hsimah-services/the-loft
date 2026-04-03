@@ -45,7 +45,7 @@ info "Services: ${SERVICES[*]}"
 
 # ─── 2. System packages ──────────────────────────────────────────────────────
 info "Installing system packages..."
-PACKAGES=(git curl jq)
+PACKAGES=(git curl jq skopeo)
 [[ "$STORAGE_FS" == "xfs" ]] && PACKAGES+=(xfsprogs)
 apt-get update -qq
 apt-get install -y -qq "${PACKAGES[@]}" > /dev/null
@@ -333,6 +333,14 @@ cat > /etc/cron.d/loft-package-collector <<EOF
 EOF
 chmod 644 /etc/cron.d/loft-package-collector
 info "Installed package collector cron job"
+
+# Docker image update checker (daily, 5 min before package collector)
+cat > /etc/cron.d/loft-image-collector <<EOF
+# Docker image update checker — installed by setup.sh
+25 5 * * * root ${REPO_DIR}/control-plane/image-collector.sh
+EOF
+chmod 644 /etc/cron.d/loft-image-collector
+info "Installed image collector cron job"
 
 # Status report cron (every 6 hours)
 cat > /etc/cron.d/loft-pulsr-report <<EOF

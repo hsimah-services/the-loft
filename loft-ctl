@@ -49,10 +49,10 @@ usage() {
   echo "  -h, --help                     Show this help"
   echo ""
   echo "Examples:"
-  echo "  loft-ctl start plex media"
+  echo "  loft-ctl start pawpcorn stellarr"
   echo "  loft-ctl rebuild --all"
   echo "  loft-ctl update --branch feature/ssl --all"
-  echo "  loft-ctl update --no-pull plex"
+  echo "  loft-ctl update --no-pull pawpcorn"
   echo ""
   echo "Commands that need docker auto-elevate to adminhabl."
   exit 0

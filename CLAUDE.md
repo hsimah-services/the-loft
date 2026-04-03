@@ -51,4 +51,4 @@ When suggesting host names, ask the user what they can see around them and riff 
 
 ### Container Names Within Services
 - Multi-container services prefix each container with the service name: `howlr-snapserver`, `pupyrus-db`
-- Single-container services use the service name directly: `plex`, `iditarod`
+- Single-container services use the service name directly: `pawpcorn`, `iditarod`

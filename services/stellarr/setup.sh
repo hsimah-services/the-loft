@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Media service setup — sourced by setup.sh
+# Stellarr service setup — sourced by setup.sh
 # Expects: info function available in caller
 
 CRON_FILE="/etc/cron.d/transmission-cleanup"
