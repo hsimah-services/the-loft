@@ -19,7 +19,7 @@ if docker ps --format '{{.Names}}' | grep -q '^pupyrus$'; then
         --title="Pupyrus" \
         --admin_user="adminhabl" \
         --admin_password="${WORDPRESS_ADMIN_PASSWORD}" \
-        --admin_email="hamishblake+papyrus@gmail.com"
+        --admin_email="${WORDPRESS_ADMIN_EMAIL}"
     info "WordPress installed"
   fi
 fi
