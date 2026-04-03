@@ -1,8 +1,8 @@
 services:
   # ── Server profile ──────────────────────────────────────────────
-  snapserver:
-    image: ivdata/snapserver:latest
-    container_name: howlr-snapserver
+  music-assistant:
+    image: ghcr.io/music-assistant/server:latest
+    container_name: howlr
     profiles:
       - server
     network_mode: host
@@ -10,186 +10,10 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "5m"
+        max-size: "10m"
         max-file: "3"
     volumes:
-      - snapcast-pipes:/tmp/snapcast
-      - snapserver-data:/var/lib/snapserver
-      - ./config/snapserver.conf:/etc/snapserver.conf:ro
-
-  # ── AirPlay receivers ─────────────────────────────────────────
-  shairport-sync:
-    image: mikebrady/shairport-sync:latest
-    container_name: howlr-shairport-sync
-    profiles:
-      - server
-    network_mode: host
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "3"
-    volumes:
-      - snapcast-pipes:/tmp/snapcast
-      - ./config/shairport-sync.conf:/etc/shairport-sync.conf:ro
-
-  shairport-sync-viking:
-    image: mikebrady/shairport-sync:latest
-    container_name: howlr-shairport-sync-viking
-    profiles:
-      - server
-    network_mode: host
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "3"
-    volumes:
-      - snapcast-pipes:/tmp/snapcast
-      - ./config/shairport-sync-viking.conf:/etc/shairport-sync.conf:ro
-
-  shairport-sync-fjord:
-    image: mikebrady/shairport-sync:latest
-    container_name: howlr-shairport-sync-fjord
-    profiles:
-      - server
-    network_mode: host
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "3"
-    volumes:
-      - snapcast-pipes:/tmp/snapcast
-      - ./config/shairport-sync-fjord.conf:/etc/shairport-sync.conf:ro
-
-  # ── Spotify Connect receivers ──────────────────────────────────
-  librespot:
-    image: giof71/librespot:latest
-    container_name: howlr-librespot
-    profiles:
-      - server
-    network_mode: host
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "3"
-    volumes:
-      - snapcast-pipes:/tmp/snapcast
-    environment:
-      DEVICE_NAME: ${LIBRESPOT_NAME:-The Loft Spotify}
-      BACKEND: pipe
-      DEVICE: /tmp/snapcast/spotify-fifo
-      BITRATE: "320"
-      INITIAL_VOLUME: "100"
-      ENABLE_VOLUME_NORMALISATION: "Y"
-      DEVICE_TYPE: speaker
-
-  librespot-viking:
-    image: giof71/librespot:latest
-    container_name: howlr-librespot-viking
-    profiles:
-      - server
-    network_mode: host
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "3"
-    volumes:
-      - snapcast-pipes:/tmp/snapcast
-    environment:
-      DEVICE_NAME: ${LIBRESPOT_NAME_VIKING:-The Loft Spotify - Viking}
-      BACKEND: pipe
-      DEVICE: /tmp/snapcast/spotify-fifo-viking
-      BITRATE: "320"
-      INITIAL_VOLUME: "100"
-      ENABLE_VOLUME_NORMALISATION: "Y"
-      DEVICE_TYPE: speaker
-
-  librespot-fjord:
-    image: giof71/librespot:latest
-    container_name: howlr-librespot-fjord
-    profiles:
-      - server
-    network_mode: host
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "3"
-    volumes:
-      - snapcast-pipes:/tmp/snapcast
-    environment:
-      DEVICE_NAME: ${LIBRESPOT_NAME_FJORD:-The Loft Spotify - Fjord}
-      BACKEND: pipe
-      DEVICE: /tmp/snapcast/spotify-fifo-fjord
-      BITRATE: "320"
-      INITIAL_VOLUME: "100"
-      ENABLE_VOLUME_NORMALISATION: "Y"
-      DEVICE_TYPE: speaker
-
-  # ── DLNA receivers (gmrender-resurrect) ────────────────────────
-  gmrender:
-    image: giof71/gmrender-resurrect:latest
-    container_name: howlr-gmrender
-    profiles:
-      - server
-    network_mode: host
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "3"
-    volumes:
-      - snapcast-pipes:/tmp/snapcast
-    environment:
-      FRIENDLY_NAME: ${GMRENDER_NAME:-The Loft DLNA}
-      GSTOUT_AUDIOPIPE: "audioresample ! audioconvert ! audio/x-raw,rate=44100,channels=2,format=S16LE ! filesink location=/tmp/snapcast/dlna-fifo"
-
-  gmrender-viking:
-    image: giof71/gmrender-resurrect:latest
-    container_name: howlr-gmrender-viking
-    profiles:
-      - server
-    network_mode: host
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "3"
-    volumes:
-      - snapcast-pipes:/tmp/snapcast
-    environment:
-      FRIENDLY_NAME: ${GMRENDER_NAME_VIKING:-The Loft DLNA - Viking}
-      GSTOUT_AUDIOPIPE: "audioresample ! audioconvert ! audio/x-raw,rate=44100,channels=2,format=S16LE ! filesink location=/tmp/snapcast/dlna-fifo-viking"
-
-  gmrender-fjord:
-    image: giof71/gmrender-resurrect:latest
-    container_name: howlr-gmrender-fjord
-    profiles:
-      - server
-    network_mode: host
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "3"
-    volumes:
-      - snapcast-pipes:/tmp/snapcast
-    environment:
-      FRIENDLY_NAME: ${GMRENDER_NAME_FJORD:-The Loft DLNA - Fjord}
-      GSTOUT_AUDIOPIPE: "audioresample ! audioconvert ! audio/x-raw,rate=44100,channels=2,format=S16LE ! filesink location=/tmp/snapcast/dlna-fifo-fjord"
+      - /opt/howlr:/data
 
   # ── Client profile ─────────────────────────────────────────────
   snapclient:
@@ -209,7 +33,3 @@ services:
     environment:
       HOST: ${SNAPSERVER_HOST}
       EXTRA_ARGS: "--soundcard ${SOUND_DEVICE:-default} --hostID ${HOST_ID}"
-
-volumes:
-  snapcast-pipes:
-  snapserver-data:

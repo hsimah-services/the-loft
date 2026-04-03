@@ -87,6 +87,11 @@ snapweb.{$LOFT_DOMAIN} {
 	reverse_proxy host.docker.internal:1780
 }
 
+howlr.{$LOFT_DOMAIN} {
+	import cloudflare_tls
+	reverse_proxy host.docker.internal:8095
+}
+
 hbla.ke {
 	import cloudflare_tls
 	reverse_proxy pawst:80
@@ -157,6 +162,10 @@ http://soulseek.space-needle:80 {
 
 http://snapweb.space-needle:80 {
 	reverse_proxy host.docker.internal:1780
+}
+
+http://howlr.space-needle:80 {
+	reverse_proxy host.docker.internal:8095
 }
 
 http://pawst.space-needle:80 {
