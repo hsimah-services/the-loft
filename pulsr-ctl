@@ -20,6 +20,28 @@ error() { echo -e "${RED}[ERROR]${NC} $*"; }
 # space-needle → space_needle (GoToSocial usernames can't have hyphens)
 hostname_to_username() { echo "${1//-/_}"; }
 
+# Add thousands commas to a number (locale-independent)
+_add_commas() {
+  local n="$1" len=${#1} result="" i
+  for (( i=0; i<len; i++ )); do
+    (( i > 0 && (len - i) % 3 == 0 )) && result+=","
+    result+="${n:$i:1}"
+  done
+  echo "$result"
+}
+
+# Format a value in MB as human-readable with thousands commas
+format_mb() {
+  local mb="$1"
+  if (( mb >= 1024 )); then
+    local gb_whole=$(( mb / 1024 ))
+    local gb_frac=$(( (mb % 1024) * 10 / 1024 ))
+    echo "$(_add_commas "$gb_whole").${gb_frac} GB"
+  else
+    echo "$(_add_commas "$mb") MB"
+  fi
+}
+
 # space-needle → SpaceNeedle (for hashtags and display names)
 hostname_to_pascal() {
   local result=""
@@ -572,7 +594,7 @@ do_report() {
   local mem_total_mb=$(( mem_total_kb / 1024 ))
   local mem_used_mb=$(( (mem_total_kb - mem_avail_kb) / 1024 ))
   local mem_pct=$(( (mem_total_kb - mem_avail_kb) * 100 / mem_total_kb ))
-  local mem_section="Memory: ${mem_used_mb} MB / ${mem_total_mb} MB (${mem_pct}%)"
+  local mem_section="Memory: $(format_mb "$mem_used_mb") / $(format_mb "$mem_total_mb") (${mem_pct}%)"
 
   # ── Disk metrics ──
   local disk_section=""
@@ -596,7 +618,7 @@ do_report() {
     size_mb="$(echo "$df_line" | awk '{gsub(/M/,"",$2); print $2}')"
     if [[ -n "$used_mb" && -n "$size_mb" && "$size_mb" -gt 0 ]]; then
       local disk_pct=$(( used_mb * 100 / size_mb ))
-      disk_section+="Disk ${disk_path}: ${used_mb} MB / ${size_mb} MB (${disk_pct}%)"$'\n'
+      disk_section+="Disk ${disk_path}: $(format_mb "$used_mb") / $(format_mb "$size_mb") (${disk_pct}%)"$'\n'
     fi
   done
   # Remove trailing newline
