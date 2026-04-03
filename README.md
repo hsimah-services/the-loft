@@ -367,6 +367,7 @@ Each fleet host automatically posts system metrics to Pulsr (GoToSocial) every 6
 | `/etc/cron.d/loft-cpu-collector` | Every minute | Sample CPU usage to `/var/log/loft/cpu.log` |
 | `/etc/cron.d/loft-image-collector` | Daily at 5:25 AM | Check Docker images for updates to `/var/log/loft/images.log` |
 | `/etc/cron.d/loft-package-collector` | Every 6 hours (30 min before report) | Cache package update counts to `/var/log/loft/packages.log` |
+| `/etc/cron.d/loft-wifi-watchdog` | Every 5 minutes | Restart dhcpcd if wlan0 loses IPv4 (no-op on hosts without WiFi) |
 | `/etc/cron.d/loft-pulsr-report` | Every 6 hours | Post status report to Pulsr |
 
 ### Account Provisioning

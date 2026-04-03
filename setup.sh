@@ -342,6 +342,15 @@ EOF
 chmod 644 /etc/cron.d/loft-image-collector
 info "Installed image collector cron job"
 
+# WiFi watchdog (every 5 minutes) — restarts dhcpcd if wlan0 loses its IPv4 address
+# Harmless on hosts without wlan0 (short-circuits on first check)
+cat > /etc/cron.d/loft-wifi-watchdog <<EOF
+# WiFi DHCP watchdog — restart dhcpcd if wlan0 loses IPv4 — installed by setup.sh
+*/5 * * * * root ip link show wlan0 &>/dev/null && ! ip -4 addr show wlan0 2>/dev/null | grep -q inet && logger -t loft-wifi-watchdog "wlan0 lost IPv4, restarting dhcpcd" && systemctl restart dhcpcd 2>/dev/null
+EOF
+chmod 644 /etc/cron.d/loft-wifi-watchdog
+info "Installed WiFi watchdog cron job"
+
 # Status report cron (every 6 hours)
 cat > /etc/cron.d/loft-pulsr-report <<EOF
 # Fleet status report to Pulsr — installed by setup.sh
