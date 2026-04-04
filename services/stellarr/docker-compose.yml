@@ -21,10 +21,9 @@ services:
       # - 8080:8080  # unknown — uncomment if needed
       - 51413:51413
       - 51413:51413/udp
-      # Soulseek
-      - 6080:6080
-      - 61122:61122
-      - 61123:61123
+      # Soulseek (slskd)
+      - 5030:5030
+      - 50300:50300
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1
     restart: unless-stopped
@@ -50,22 +49,20 @@ services:
     depends_on:
       - vpn
 
-  soulseek:
-    image: realies/soulseek
-    container_name: soulseek
+  slskd:
+    image: slskd/slskd:latest
+    container_name: slskd
     logging:
       driver: json-file
       options:
         max-size: "5m"
         max-file: "3"
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
+      - SLSKD_REMOTE_CONFIGURATION=true
     volumes:
-      - /opt/soulseek:/data/.SoulseekQt
-      - /mammoth/downloads/soulseek:/data/Soulseek Downloads
-      - /mammoth/library/music:/data/Soulseek Shared Folder
-      - /opt/soulseek/logs:/data/Soulseek Chat Logs
+      - /opt/slskd:/app
+      - /mammoth/downloads/soulseek:/downloads
+      - /mammoth/library/music:/music:ro
     restart: unless-stopped
     network_mode: service:vpn
     depends_on:
@@ -110,7 +107,7 @@ services:
     network_mode: host
 
   lidarr:
-    image: lscr.io/linuxserver/lidarr:latest
+    image: lscr.io/linuxserver/lidarr:nightly
     container_name: lidarr
     logging:
       driver: json-file

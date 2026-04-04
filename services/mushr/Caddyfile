@@ -79,7 +79,7 @@ transmission.{$LOFT_DOMAIN} {
 
 soulseek.{$LOFT_DOMAIN} {
 	import cloudflare_tls
-	reverse_proxy host.docker.internal:6080
+	reverse_proxy host.docker.internal:5030
 }
 
 snapweb.{$LOFT_DOMAIN} {
@@ -157,7 +157,7 @@ http://transmission.space-needle:80 {
 }
 
 http://soulseek.space-needle:80 {
-	reverse_proxy host.docker.internal:6080
+	reverse_proxy host.docker.internal:5030
 }
 
 http://snapweb.space-needle:80 {

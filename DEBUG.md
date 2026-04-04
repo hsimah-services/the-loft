@@ -25,7 +25,7 @@ Debugging guide for Docker services on The Loft fleet. All commands assume you'r
 |---------|-----------|
 | **mushr** | `mushr`, `mushr-tunnel`, `mushr-dns` |
 | **pawpcorn** | `pawpcorn` |
-| **stellarr** | `stellarr-vpn`, `transmission`, `soulseek`, `radarr`, `sonarr`, `lidarr`, `jackett` |
+| **stellarr** | `stellarr-vpn`, `transmission`, `slskd`, `radarr`, `sonarr`, `lidarr`, `jackett` |
 | **pupyrus** | `pupyrus-db`, `pupyrus-redis`, `pupyrus`, `pupyrus-cli` (cli profile only) |
 | **iditarod** | `iditarod` |
 | **howlr** | `howlr-snapserver`, `howlr-shairport-sync`, `howlr-librespot`, `howlr-snapclient` |
@@ -47,7 +47,7 @@ Debugging guide for Docker services on The Loft fleet. All commands assume you'r
 | pulsr | `https://pulsr.hsimah.com/api/v1/instance` | Yes |
 | pawst | `http://localhost:8085` | Yes |
 | transmission | `http://localhost:9091` | Warn only (VPN) |
-| soulseek | `http://localhost:6080` | Warn only (VPN) |
+| slskd | `http://localhost:5030` | Warn only (VPN) |
 
 ## 2. Container State
 
@@ -181,7 +181,7 @@ curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://pulsr.hsimah.com/ap
 
 # VPN-dependent (may return 000 if VPN is down — that's expected)
 curl -sk -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:9091  # transmission
-curl -sk -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:6080  # soulseek
+curl -sk -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:5030  # slskd
 ```
 
 ### Docker healthcheck inspection
@@ -356,6 +356,7 @@ sudo ss -tlnp
 #   53    — mushr-dns (dnsmasq)
 #   80    — mushr (Caddy HTTP)
 #   443   — mushr (Caddy HTTPS)
+#   5030  — slskd (via stellarr-vpn)
 #   1704  — howlr-snapserver (Snapcast stream)
 #   1705  — howlr-snapserver (Snapcast control)
 #   1780  — howlr-snapserver (Snapweb UI)
@@ -554,9 +555,9 @@ loft-ctl start mushr
 
 ### VPN-dependent health checks failing
 
-**Symptom:** `loft-ctl health` shows WARNING for transmission/soulseek but everything else is OK.
+**Symptom:** `loft-ctl health` shows WARNING for transmission/slskd but everything else is OK.
 
-**Cause:** VPN tunnel (`stellarr-vpn`) is disconnected. Transmission and Soulseek route through it.
+**Cause:** VPN tunnel (`stellarr-vpn`) is disconnected. Transmission and slskd route through it.
 
 **Fix:**
 ```bash

@@ -19,12 +19,12 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Service | Image | Ports | Config | Purpose |
 |---------|-------|-------|--------|---------|
 | Pawpcorn | `plexinc/pms-docker` | host network | `/opt/pawpcorn/config` | Media server (Plex) |
-| Stellarr VPN | `bubuntux/nordvpn` | 9091, 6080 | — | Shared NordLynx VPN for Transmission + Soulseek |
+| Stellarr VPN | `bubuntux/nordvpn` | 9091, 5030 | — | Shared NordLynx VPN for Transmission + slskd |
 | Transmission | `linuxserver/transmission` | 9091 (via VPN) | `/opt/transmission` | Torrent client |
-| Soulseek | `realies/soulseek` | 6080 (via VPN) | `/opt/soulseek` | P2P music |
+| slskd | `slskd/slskd` | 5030 (via VPN) | `/opt/slskd` | Soulseek client (API-driven) — indexer + download client for Lidarr via plugin |
 | Radarr | `linuxserver/radarr` | 7878 (host) | `/opt/radarr` | Movie management |
 | Sonarr | `linuxserver/sonarr` | 8989 (host) | `/opt/sonarr` | TV management |
-| Lidarr | `linuxserver/lidarr` | 8686 (host) | `/opt/lidarr` | Music management |
+| Lidarr | `linuxserver/lidarr:nightly` | 8686 (host) | `/opt/lidarr` | Music management (nightly branch for plugin support) |
 | Jackett | `linuxserver/jackett` | 9117 | `/opt/jackett` | Indexer proxy |
 | Mushr (proxy) | `caddy:2-alpine` + Cloudflare DNS module (custom build) | 80, 443, 8880 | `Caddyfile`, `Dockerfile.caddy` | Reverse proxy with HTTPS (Let's Encrypt via DNS-01) + LAN HTTP fallback; HTTP/3 disabled (`protocols h1 h2`) to prevent QUIC idle timeout issues |
 | Mushr (tunnel) | `cloudflare/cloudflared` | — (outbound only) | — | Cloudflare Tunnel — exposes Pulsr, hbla.ke, and hsimah.com externally without open ports |
@@ -37,7 +37,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Pulsr Phanpy | `ghcr.io/yitsushi/phanpy-docker` | — | — | Web client for GoToSocial (served at `pulsr.space-needle/`) |
 | Pawst | `nginx:alpine` | 8085 (bridge) | `nginx.conf`, `hblake-html` + `hsimah-html` volumes | Static blogs — serves `hbla.ke` and `hsimah.com` via Nginx server_name routing (dist deployed by CI via `docker cp`) |
 
-Transmission and Soulseek route through a shared NordVPN (NordLynx) container (`stellarr-vpn`). Radarr, Sonarr, and Lidarr use host networking. All six are managed together in `services/stellarr/docker-compose.yml`.
+Transmission and slskd route through a shared NordVPN (NordLynx) container (`stellarr-vpn`). Radarr, Sonarr, and Lidarr use host networking. All seven are managed together in `services/stellarr/docker-compose.yml`. Lidarr uses the `nightly` tag to enable the [Lidarr.Plugin.Slskd](https://github.com/allquiet-hub/Lidarr.Plugin.Slskd) plugin, which adds slskd as both an indexer and download client.
 
 Transmission torrents are automatically cleaned up by a cron job that runs nightly at midnight on space-needle. The `remove-torrents.sh` script (bind-mounted into the container) uses `transmission-remote` to find and remove any torrents that have reached a 200% seed ratio, deleting the download data. This is safe because Radarr/Sonarr/Lidarr hardlink files into `/mammoth/library` — the library copies are independent of the download directory. The cron job is installed to `/etc/cron.d/transmission-cleanup` by `setup.sh`. Docker log rotation (20m/3 files) handles Transmission's logging; no separate log rotation is needed.
 
@@ -157,12 +157,12 @@ Host-specific groups (e.g. `render,video` on space-needle) are configured in `ho
   /library
     /movies                       Pawpcorn + Radarr
     /tv                           Pawpcorn + Sonarr
-    /music                        Pawpcorn + Lidarr + Soulseek shared
+    /music                        Pawpcorn + Lidarr + slskd shared
     /videos                       Pawpcorn
     /stand-up                     Pawpcorn
   /downloads
     /transmission                 Transmission downloads
-    /soulseek                     Soulseek downloads
+    /soulseek                     slskd downloads
   /pawpcorn/transcode             Plex transcoding workspace
 
 /opt
@@ -172,8 +172,7 @@ Host-specific groups (e.g. `render,video` on space-needle) are configured in `ho
   /lidarr                         Lidarr configuration
   /jackett                        Jackett configuration
   /transmission                   Transmission configuration
-  /soulseek                       Soulseek configuration
-  /soulseek/logs                  Soulseek chat logs
+  /slskd                          slskd configuration + state
   /pupyrus/html                   WordPress files
   /pupyrus/db                     MariaDB data
   /iditarod                       GitHub Actions runner workdir
@@ -222,7 +221,7 @@ Docker log rotation is configured at two levels:
 | cli | 1m | 2 | Only runs occasionally |
 | iditarod | 5m | 3 | CI runner — logs mostly during builds |
 | radarr/sonarr/lidarr | 5m | 3 | Moderate media management logging |
-| soulseek | 5m | 3 | Moderate logging |
+| slskd | 5m | 3 | Moderate logging |
 | jackett | 5m | 3 | Moderate logging |
 | mushr (caddy) | 5m | 3 | Reverse proxy access logging |
 | mushr-dns | 5m | 3 | DNS query logging |
@@ -433,7 +432,7 @@ Real Let's Encrypt certificates via Cloudflare DNS-01 challenge. No open ports o
 | `https://pupyrus.loft.hsimah.com` | WordPress |
 | `https://pulsr.hsimah.com` | Phanpy web client (default) / GoToSocial API |
 | `https://transmission.loft.hsimah.com` | Transmission |
-| `https://soulseek.loft.hsimah.com` | Soulseek |
+| `https://soulseek.loft.hsimah.com` | slskd |
 | `https://howlr.loft.hsimah.com` | Music Assistant (Howlr) |
 | `https://snapweb.loft.hsimah.com` | Snapweb |
 | `https://hbla.ke` | Pawst (hbla.ke blog) |
@@ -454,7 +453,7 @@ HTTP-only, no TLS. Kept for backward compatibility.
 | `http://pupyrus.space-needle` | WordPress |
 | `https://pulsr.space-needle` | Pulsr (self-signed TLS via `tls internal`) |
 | `http://transmission.space-needle` | Transmission |
-| `http://soulseek.space-needle` | Soulseek |
+| `http://soulseek.space-needle` | slskd |
 | `http://howlr.space-needle` | Music Assistant (Howlr) |
 | `http://snapweb.space-needle` | Snapweb |
 | `http://pawst.space-needle` | Pawst (hbla.ke blog) |
