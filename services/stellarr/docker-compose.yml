@@ -62,7 +62,7 @@ services:
       - SLSKD_SOULSEEK_USERNAME=${SLSKD_SOULSEEK_USERNAME}
       - SLSKD_SOULSEEK_PASSWORD=${SLSKD_SOULSEEK_PASSWORD}
       - SLSKD_DOWNLOADS_DIR=/downloads/complete
-      - SLSKD_INCOMPLETE_DIR=/downloads/incomplete
+      - SLSKD_INCOMPLETE_DIR=/downloads/downloading
       - SLSKD_SHARED_DIR=/music
     volumes:
       - /opt/slskd:/app
