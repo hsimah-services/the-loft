@@ -125,6 +125,7 @@ services:
       - /opt/lidarr:/config
       - /mammoth/library/music:/music
       - /mammoth/downloads/transmission:/downloads
+      - /mammoth/downloads/soulseek/complete:/downloads/soulseek
     restart: unless-stopped
     network_mode: host
 
