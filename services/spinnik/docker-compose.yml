@@ -1,0 +1,35 @@
+services:
+  spinnik-icecast:
+    image: libretime/icecast:2.4.4
+    container_name: spinnik-icecast
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    ports:
+      - "8000:8000"
+    environment:
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD}
+      ICECAST_ADMIN_PASSWORD: ${ICECAST_ADMIN_PASSWORD}
+
+  spinnik-darkice:
+    build:
+      context: .
+      dockerfile: Dockerfile.darkice
+      network: host
+    image: spinnik-darkice:latest
+    container_name: spinnik-darkice
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    devices:
+      - /dev/snd:/dev/snd
+    volumes:
+      - ./darkice.cfg:/etc/darkice.cfg:ro
+    depends_on:
+      - spinnik-icecast

@@ -11,7 +11,7 @@ Fleet configuration for The Loft — a mono-repo managing all hosts (space-needl
 | `space-needle` | Primary server | mushr, pawpcorn, stellarr, pupyrus, iditarod, howlr (server), pulsr (+ phanpy), pawst |
 | `viking` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 | `fjord` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
-| `calavera` | Surface Pro 2 (kiosk) | howlr (client), spinnik |
+| `calavera` | Surface Pro 2 (kiosk + turntable) | howlr (client), spinnik |
 
 Each host has a config file at `hosts/<hostname>/host.conf` that declares its services, storage, directories, and health check URLs. A single `setup.sh` provisions any host by reading its config. Services that need post-deploy configuration have a `services/<name>/setup.sh` script that is automatically sourced after deployment.
 
@@ -31,12 +31,14 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Mushr (tunnel) | `cloudflare/cloudflared` | — (outbound only) | — | Cloudflare Tunnel — exposes Pulsr, hbla.ke, and hsimah.com externally without open ports |
 | Mushr (DNS) | `drpsychick/dnsmasq` | 53/udp, 53/tcp | `dnsmasq.conf` | Wildcard DNS — resolves `*.space-needle` and `*.loft.hsimah.com` to LAN IP |
 | Pupyrus | `wordpress` + `mariadb` + `redis` | 8081 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
-| Iditarod | `actions/actions-runner` (custom build) | — | `.env` per host | Self-hosted GitHub Actions runner (org-level, serves all hsimah-services repos) |
+| Iditarod | `actions/actions-runner` (custom build) | — | `.env` per host, `/etc/loft/iditarod-app.pem` | Self-hosted GitHub Actions runner (org-level, serves all hsimah-services repos). Authenticates via GitHub App (private key → JWT → installation token) — no expiring PATs |
 | Howlr (Music Assistant) | `ghcr.io/music-assistant/server` | 1704, 1705, 1780, 8095 (host) | `/opt/howlr` | Music library manager + multi-room audio server with built-in Snapcast, Spotify Connect, and AirPlay receiver |
 | Howlr snapclient | `ivdata/snapclient` | host network | `.env` per host | Snapcast client (receives stream, outputs to speakers) |
 | Pulsr | `superseriousbusiness/gotosocial` | — (via Caddy) | `/opt/pulsr/data` | Self-hosted fediverse instance (GoToSocial) for status updates, household messaging, and fleet status reporting |
 | Pulsr Phanpy | `ghcr.io/yitsushi/phanpy-docker` | — | — | Web client for GoToSocial (served at `pulsr.space-needle/`) |
 | Pawst | `nginx:alpine` | 8085 (bridge) | `nginx.conf`, `hblake-html` + `hsimah-html` volumes | Static blogs — serves `hbla.ke` and `hsimah.com` via Nginx server_name routing (dist deployed by CI via `docker cp`) |
+| Spinnik (Icecast) | `libretime/icecast:2.4.4` | 8000 | env vars | Icecast streaming server — serves vinyl audio from the LP5X turntable |
+| Spinnik (DarkIce) | Custom build (`debian:bookworm-slim` + darkice) | — | `darkice.cfg` | Captures LP5X USB audio and encodes Ogg Vorbis stream to Icecast |
 
 Transmission and slskd route through a shared NordVPN (NordLynx) container (`stellarr-vpn`). Radarr, Sonarr, and Lidarr use host networking. All seven are managed together in `services/stellarr/docker-compose.yml`. Lidarr uses the `nightly` tag to enable the [Lidarr.Plugin.Slskd](https://github.com/allquiet-hub/Lidarr.Plugin.Slskd) plugin, which adds slskd as both an indexer and download client.
 
@@ -58,6 +60,8 @@ Music Assistant provides a web UI (`howlr.loft.hsimah.com`) where you can browse
 - Spotify Connect and AirPlay Receiver plugins are early-stage with 0.5–5 second startup latency on play/pause/skip. Ongoing playback is real-time with no degradation.
 - Spotify Connect: only one target can be active per Spotify account at a time. Family plan members with separate logins can stream to different rooms simultaneously.
 - Music Assistant server requires Raspberry Pi 4+ for arm64; Pi 3 B+ hosts (viking, fjord) run snapclient only.
+
+Spinnik (spin + Sputnik) runs on calavera and streams vinyl audio from an Audio-Technica LP5X turntable connected via USB. DarkIce captures the LP5X's ALSA device, encodes to Ogg Vorbis (~256kbps), and sends the stream to a local Icecast server at `http://calavera:8000/vinyl`. Music Assistant on space-needle picks up this URL as a radio station and distributes the audio to all Snapcast clients across the fleet. A udev rule pins the LP5X's USB audio chip (TI PCM2900C, `08bb:29c0`) to a stable ALSA device name `LP5X` so DarkIce can always reference `plughw:LP5X,0` regardless of USB enumeration order.
 
 ### Directory Layout
 
@@ -110,9 +114,14 @@ the-loft/
 │   │   ├── docker-compose.yml
 │   │   ├── setup.sh                       # Per-service setup (fleet account provisioning)
 │   │   └── .env.example
-│   └── pawst/
+│   ├── pawst/
+│   │   ├── docker-compose.yml
+│   │   └── nginx.conf
+│   └── spinnik/
 │       ├── docker-compose.yml
-│       └── nginx.conf
+│       ├── Dockerfile.darkice
+│       ├── darkice.cfg
+│       └── .env.example
 ├── control-plane/
 │   ├── common.sh
 │   ├── image-collector.sh               # Docker image update checker for fleet status reporting
@@ -238,6 +247,8 @@ Docker log rotation is configured at two levels:
 | pulsr | 10m | 3 | Fediverse instance (GoToSocial) |
 | pulsr-phanpy | 5m | 3 | Phanpy web client (static files) |
 | pawst | 5m | 3 | Static blogs — hbla.ke + hsimah.com (nginx) |
+| spinnik-icecast | 5m | 3 | Icecast streaming server |
+| spinnik-darkice | 5m | 3 | DarkIce audio encoder |
 
 ## Security Model
 
@@ -247,7 +258,7 @@ Docker log rotation is configured at two levels:
 - **Sudo**: `adminhabl` has full sudo via `/etc/sudoers.d/adminhabl`
 - **Containers**: All run as `littledog` (UID/GID 1003), a nologin service account
 - **External access**: Pulsr and Pawst (hbla.ke + hsimah.com) are exposed externally via Cloudflare Tunnel (outbound-only, no open ports). All other services remain LAN-only
-- **Kiosk lockdown** (calavera): nftables blocks all non-LAN outbound traffic; Chromium managed policies restrict URL navigation to the allowlist; Cage compositor prevents app switching or escape; kiosk user has no sudo or docker access
+- **Kiosk lockdown** (calavera): nftables restricts traffic to LAN only (RFC 1918 ranges) — inbound from LAN is accepted, all internet-bound traffic is dropped; Chromium managed policies restrict URL navigation to the allowlist; Cage compositor prevents app switching or escape; kiosk user has no sudo or docker access. `loft-ctl rebuild`/`update` automatically flush and restore the firewall (with Docker restart) on kiosk hosts
 
 ## Debugging
 
@@ -283,6 +294,27 @@ cp services/pulsr/.env.example services/pulsr/.env
 # Then run setup as root:
 sudo bash setup.sh
 ```
+
+### Iditarod — GitHub App setup (one-time)
+
+The iditarod runner authenticates via a GitHub App instead of a Personal Access Token. The app's private key never expires, so the runner won't crash-loop when credentials rotate.
+
+1. Create a GitHub App at `https://github.com/organizations/hsimah-services/settings/apps/new`
+   - **Webhook**: Uncheck (no events needed)
+   - **Permissions**: Organization > Self-hosted runners: Read and write
+   - **Install scope**: Only on this account
+2. Note the **App ID** from the app settings page
+3. Generate a private key (downloads a `.pem` file)
+4. Install the app on the `hsimah-services` organization — note the **Installation ID** from the URL (`/installations/{id}`)
+5. Copy the `.pem` file to each host running iditarod:
+
+```bash
+sudo mkdir -p /etc/loft
+sudo cp iditarod-app.pem /etc/loft/iditarod-app.pem
+sudo chmod 600 /etc/loft/iditarod-app.pem
+```
+
+6. Set `GITHUB_APP_ID` and `GITHUB_APP_INSTALLATION_ID` in `services/iditarod/.env`
 
 ### Managing services
 
@@ -431,7 +463,7 @@ See `plans/raspberry-pi.md` for the full provisioning guide.
 
 ## Calavera — Kiosk Display
 
-A Surface Pro 2 (x86_64, 4GB RAM, Ubuntu) in a dock, used as a touchscreen kiosk displaying the Pupyrus WordPress dashboard with service icons.
+A Surface Pro 2 (x86_64, 4GB RAM, Ubuntu) in a dock, used as a touchscreen kiosk displaying the Pupyrus WordPress dashboard with service icons. Also connected to an Audio-Technica LP5X turntable via USB — the spinnik service streams vinyl audio to the fleet via Icecast.
 
 ### Architecture
 
@@ -445,7 +477,7 @@ nftables: outbound traffic limited to RFC 1918 private ranges only
 
 - **Cage**: Minimal Wayland compositor (~5MB) that displays exactly one fullscreen app with no window management, panels, or escape vectors
 - **Chromium managed policies**: `URLBlocklist` blocks all URLs by default; `URLAllowlist` permits only `*.loft.hsimah.com`, `*.space-needle`, `pulsr.hsimah.com`, `hbla.ke`, `hsimah.com`, and `calavera`
-- **nftables firewall**: Outbound traffic restricted to RFC 1918 private ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) — no internet access
+- **nftables firewall**: Traffic restricted to RFC 1918 private ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) — LAN inbound accepted, internet blocked. `loft-ctl` automatically flushes/restores the firewall for `rebuild` and `update` commands
 - **Display**: 10.6" 1080p touchscreen at 150% scaling (`--force-device-scale-factor=1.5`)
 - **Power**: Suspend, sleep, and hibernate are masked; lid switch is ignored (always-on display)
 
@@ -550,11 +582,12 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Pawpcorn | `PLEX_CLAIM`, `PUID`, `PGID`, `TZ` |
 | Stellarr | `NORDVPN_TOKEN`, `PUID`, `PGID`, `TZ` |
 | Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `GRAPHQL_JWT_AUTH_SECRET_KEY` |
-| Iditarod | `GITHUB_ORG`, `GITHUB_ACCESS_TOKEN`, `RUNNER_NAME`, `RUNNER_LABELS`, `DOCKER_GID` |
+| Iditarod | `GITHUB_ORG`, `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_KEY_PATH`, `RUNNER_NAME`, `RUNNER_LABELS`, `DOCKER_GID` |
 | Howlr (server) | `COMPOSE_PROFILES=server` |
 | Howlr (client) | `COMPOSE_PROFILES=client`, `SNAPSERVER_HOST`, `SOUND_DEVICE`, `HOST_ID` |
 | Mushr | `LOFT_DOMAIN`, `CLOUDFLARE_API_TOKEN`, `TUNNEL_TOKEN` (edit `dnsmasq.conf` with LAN IP before deploying) |
 | Pulsr | `GTS_HOST`, `GTS_PROTOCOL`, `GTS_TOKEN` (for `pulsr-ctl post`), `TZ` |
+| Spinnik | `ICECAST_SOURCE_PASSWORD`, `ICECAST_ADMIN_PASSWORD` (source password must match `darkice.cfg`) |
 
 ## CI
 

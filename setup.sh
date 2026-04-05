@@ -393,6 +393,9 @@ table inet filter {
     type filter hook input priority 0; policy drop;
     ct state established,related accept
     iif lo accept
+    ip saddr 10.0.0.0/8 accept
+    ip saddr 172.16.0.0/12 accept
+    ip saddr 192.168.0.0/16 accept
     ip protocol icmp accept
     tcp dport 22 accept
     udp sport 67 udp dport 68 accept
@@ -464,6 +467,15 @@ DPMS
   info "Removed iio-sensor-proxy (screen rotation disabled)"
 
   info "Kiosk provisioning complete"
+fi
+
+# ─── 11c. Audio device pinning (spinnik hosts only) ────────────────────────
+if printf '%s\n' "${SERVICES[@]}" | grep -qx spinnik; then
+  info "Installing LP5X ALSA device pinning udev rule..."
+  echo 'SUBSYSTEM=="sound", ATTRS{idVendor}=="08bb", ATTRS{idProduct}=="29c0", ATTR{id}="LP5X"' \
+    > /etc/udev/rules.d/99-lp5x.rules
+  udevadm control --reload-rules 2>/dev/null || true
+  info "LP5X udev rule installed (plughw:LP5X,0)"
 fi
 
 # ─── 12. Cron jobs ───────────────────────────────────────────────────────────
