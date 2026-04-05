@@ -13,7 +13,7 @@ RUN apt-get update -qq \
        https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
        > /etc/apt/sources.list.d/docker.list \
     && apt-get update -qq \
-    && apt-get install -y -qq docker-ce-cli docker-compose-plugin > /dev/null \
+    && apt-get install -y -qq docker-ce-cli docker-compose-plugin gosu > /dev/null \
     && rm -rf /var/lib/apt/lists/*
 
 # Match host docker group GID so runner can use the mounted socket
@@ -22,7 +22,5 @@ RUN groupmod -g ${DOCKER_GID} docker && usermod -aG docker runner
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
-
-USER runner
 
 ENTRYPOINT ["/entrypoint.sh"]

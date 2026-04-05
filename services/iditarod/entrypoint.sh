@@ -84,7 +84,7 @@ if [[ -z "$REG_TOKEN" || "$REG_TOKEN" == "null" ]]; then
 fi
 
 echo "Registering runner '${RUNNER_NAME}' with labels: ${RUNNER_LABELS}..."
-"${RUNNER_HOME}/config.sh" \
+gosu runner "${RUNNER_HOME}/config.sh" \
   --url "${ORG_URL}" \
   --token "${REG_TOKEN}" \
   --name "${RUNNER_NAME}" \
@@ -107,7 +107,7 @@ cleanup() {
       | jq -r '.token')
 
     if [[ -n "$REMOVE_TOKEN" && "$REMOVE_TOKEN" != "null" ]]; then
-      "${RUNNER_HOME}/config.sh" remove --token "${REMOVE_TOKEN}"
+      gosu runner "${RUNNER_HOME}/config.sh" remove --token "${REMOVE_TOKEN}"
       echo "Runner deregistered."
     else
       echo "WARNING: Failed to get removal token. Runner may need manual removal."
@@ -121,5 +121,5 @@ trap cleanup SIGTERM SIGINT
 
 # ─── Run ────────────────────────────────────────────────────────────────────
 echo "Starting runner..."
-"${RUNNER_HOME}/run.sh" &
+gosu runner "${RUNNER_HOME}/run.sh" &
 wait $!
