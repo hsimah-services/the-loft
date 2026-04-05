@@ -258,8 +258,14 @@ See [DEBUG.md](DEBUG.md) for a comprehensive debugging guide covering container 
 ### Fresh host setup
 
 ```bash
+# Generate an SSH key for GitHub access
+sudo ssh-keygen -t ed25519 -C "<hostname>@loft.hsimah.com"
+sudo cat /root/.ssh/id_ed25519.pub
+# Add the public key as a read-only deploy key at:
+# https://github.com/hsimah-services/the-loft/settings/keys
+
 # Clone the repo
-sudo git clone <repo-url> /srv/the-loft
+sudo git clone git@github.com:hsimah-services/the-loft.git /srv/the-loft
 cd /srv/the-loft
 
 # Copy .env.example files and fill in secrets for this host's services
