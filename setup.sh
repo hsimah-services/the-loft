@@ -118,6 +118,17 @@ else
 fi
 usermod -aG pack-member hsimah 2>/dev/null || true
 
+# kiosk — locked-down display account (kiosk hosts only)
+if [[ "${KIOSK_ENABLED:-false}" == "true" ]]; then
+  if ! id kiosk &>/dev/null; then
+    useradd -m -s /bin/bash kiosk
+    info "Created user kiosk"
+  else
+    info "User kiosk already exists"
+  fi
+  usermod -aG video kiosk 2>/dev/null || true
+fi
+
 # ─── 6. SSH lockdown ─────────────────────────────────────────────────────────
 info "Configuring SSH..."
 
@@ -315,6 +326,146 @@ for service in "${SERVICES[@]}"; do
   fi
 done
 
+# ─── 11b. Kiosk provisioning (kiosk hosts only) ─────────────────────────────
+if [[ "${KIOSK_ENABLED:-false}" == "true" ]]; then
+  info "Provisioning kiosk mode..."
+
+  # ── Packages ──────────────────────────────────────────────────────────────
+  info "Installing kiosk packages..."
+  apt-get install -y -qq cage chromium-browser greetd nftables > /dev/null
+
+  # ── greetd auto-login ─────────────────────────────────────────────────────
+  info "Configuring greetd auto-login..."
+  mkdir -p /etc/greetd
+  cat > /etc/greetd/config.toml <<EOF
+[terminal]
+vt = 7
+
+[default_session]
+command = "cage -- chromium-browser --kiosk --noerrdialogs --disable-infobars --no-first-run --disable-translate --ozone-platform=wayland --force-device-scale-factor=${KIOSK_SCALE} ${KIOSK_URL}"
+user = "kiosk"
+EOF
+
+  systemctl enable greetd
+  systemctl disable gdm3 2>/dev/null || true
+  info "greetd configured (VT 7, user kiosk)"
+
+  # ── Chromium managed policies ─────────────────────────────────────────────
+  info "Deploying Chromium managed policies..."
+  mkdir -p /etc/chromium/policies/managed
+  cat > /etc/chromium/policies/managed/kiosk.json <<POLICY
+{
+  "URLBlocklist": ["*"],
+  "URLAllowlist": [
+    "loft.hsimah.com",
+    ".loft.hsimah.com",
+    ".space-needle",
+    "space-needle",
+    "pulsr.hsimah.com",
+    "hbla.ke",
+    "hsimah.com",
+    "calavera"
+  ],
+  "HomepageLocation": "${KIOSK_URL}",
+  "HomepageIsNewTabPage": false,
+  "RestoreOnStartup": 4,
+  "RestoreOnStartupURLs": ["${KIOSK_URL}"],
+  "BookmarkBarEnabled": false,
+  "DeveloperToolsAvailability": 2,
+  "IncognitoModeAvailability": 1,
+  "BrowserSignin": 0,
+  "SyncDisabled": true,
+  "PasswordManagerEnabled": false,
+  "TranslateEnabled": false,
+  "EditBookmarksEnabled": false,
+  "DefaultBrowserSettingEnabled": false
+}
+POLICY
+  info "Chromium URL allowlist deployed"
+
+  # ── nftables firewall (LAN-only) ─────────────────────────────────────────
+  info "Deploying nftables firewall (LAN-only)..."
+  cat > /etc/nftables.conf <<'NFT'
+flush ruleset
+
+table inet filter {
+  chain input {
+    type filter hook input priority 0; policy drop;
+    ct state established,related accept
+    iif lo accept
+    ip protocol icmp accept
+    tcp dport 22 accept
+    udp sport 67 udp dport 68 accept
+  }
+  chain output {
+    type filter hook output priority 0; policy drop;
+    ct state established,related accept
+    oif lo accept
+    ip daddr 10.0.0.0/8 accept
+    ip daddr 172.16.0.0/12 accept
+    ip daddr 192.168.0.0/16 accept
+    ip protocol icmp accept
+    udp sport 68 udp dport 67 accept
+  }
+  chain forward {
+    type filter hook forward priority 0; policy drop;
+  }
+}
+NFT
+  systemctl enable nftables
+  info "nftables firewall enabled (LAN-only outbound)"
+
+  # ── Disable suspend/sleep/screen blank ────────────────────────────────────
+  info "Disabling suspend/sleep/hibernate..."
+  systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+
+  mkdir -p /etc/systemd/logind.conf.d
+  cat > /etc/systemd/logind.conf.d/kiosk.conf <<'LOGIND'
+[Login]
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+HandleLidSwitchDocked=ignore
+LOGIND
+  info "Lid switch and sleep targets disabled"
+
+  # ── Disable screen blanking (keep display on 24/7) ───────────────────────
+  info "Disabling screen blanking..."
+
+  # Kernel console blanker — disable at boot via kernel cmdline
+  GRUB_FILE="/etc/default/grub"
+  if [[ -f "$GRUB_FILE" ]]; then
+    if ! grep -q "consoleblank=0" "$GRUB_FILE"; then
+      sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 consoleblank=0"/' "$GRUB_FILE"
+      update-grub 2>/dev/null || true
+      info "Added consoleblank=0 to kernel cmdline (takes effect after reboot)"
+    else
+      info "consoleblank=0 already in kernel cmdline"
+    fi
+  fi
+
+  # Also set at runtime for current boot
+  echo 0 > /sys/module/kernel/parameters/consoleblank 2>/dev/null || true
+
+  # Disable DPMS (display power management) via udev rule for DRM devices
+  cat > /etc/udev/rules.d/99-dpms-off.rules <<'DPMS'
+# Disable DPMS on all DRM connectors — keep screen on 24/7
+ACTION=="add", SUBSYSTEM=="drm", RUN+="/bin/sh -c 'for f in /sys/class/drm/card*-*/dpms; do echo On > $f 2>/dev/null; done'"
+DPMS
+  info "DPMS disabled via udev rule (screen stays on 24/7)"
+
+  # ── Surface Pro 2 WiFi stability ──────────────────────────────────────────
+  info "Installing Surface Pro 2 WiFi udev rule..."
+  echo 'ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="1286", ATTR{power/autosuspend}="-1"' \
+    > /etc/udev/rules.d/99-surface-wifi.rules
+  info "Marvell WiFi USB autosuspend disabled"
+
+  # ── Remove screen rotation sensor ────────────────────────────────────────
+  apt-get remove -y iio-sensor-proxy 2>/dev/null || true
+  info "Removed iio-sensor-proxy (screen rotation disabled)"
+
+  info "Kiosk provisioning complete"
+fi
+
 # ─── 12. Cron jobs ───────────────────────────────────────────────────────────
 info "Configuring cron jobs..."
 
@@ -427,7 +578,9 @@ echo "============================================"
 echo ""
 
 info "Users:"
-for user in littledog adminhabl hsimah; do
+VERIFY_USERS=(littledog adminhabl hsimah)
+[[ "${KIOSK_ENABLED:-false}" == "true" ]] && VERIFY_USERS+=(kiosk)
+for user in "${VERIFY_USERS[@]}"; do
   if id "$user" &>/dev/null; then
     echo "  $(id "$user")"
   else
@@ -467,6 +620,23 @@ fi
 echo ""
 info "Docker containers:"
 docker ps --format "  {{.Names}}: {{.Status}}" 2>/dev/null || warn "  Could not list containers"
+
+if [[ "${KIOSK_ENABLED:-false}" == "true" ]]; then
+  echo ""
+  info "Kiosk config:"
+  echo "  URL: ${KIOSK_URL}"
+  echo "  Scale: ${KIOSK_SCALE}"
+  if systemctl is-enabled greetd &>/dev/null; then
+    echo "  greetd: enabled"
+  else
+    warn "  greetd: not enabled"
+  fi
+  if systemctl is-enabled nftables &>/dev/null; then
+    echo "  nftables: enabled"
+  else
+    warn "  nftables: not enabled"
+  fi
+fi
 
 echo ""
 info "Done. Remember to:"

@@ -11,6 +11,7 @@ Fleet configuration for The Loft — a mono-repo managing all hosts (space-needl
 | `space-needle` | Primary server | mushr, pawpcorn, stellarr, pupyrus, iditarod, howlr (server), pulsr (+ phanpy), pawst |
 | `viking` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
 | `fjord` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
+| `calavera` | Surface Pro 2 (kiosk) | howlr (client), spinnik |
 
 Each host has a config file at `hosts/<hostname>/host.conf` that declares its services, storage, directories, and health check URLs. A single `setup.sh` provisions any host by reading its config. Services that need post-deploy configuration have a `services/<name>/setup.sh` script that is automatically sourced after deployment.
 
@@ -72,9 +73,11 @@ the-loft/
 │   ├── viking/
 │   │   ├── host.conf
 │   │   └── profile.jpg                        # Pulsr avatar for fleet account
-│   └── fjord/
-│       ├── host.conf
-│       └── profile.jpg                        # Pulsr avatar for fleet account
+│   ├── fjord/
+│   │   ├── host.conf
+│   │   └── profile.jpg                        # Pulsr avatar for fleet account
+│   └── calavera/
+│       └── host.conf                          # Kiosk host (Surface Pro 2)
 ├── services/
 │   ├── pawpcorn/
 │   │   ├── docker-compose.yml
@@ -147,6 +150,7 @@ Consistent across all hosts:
 | `littledog` | 1003 | `pack-member` (1003) | `/usr/sbin/nologin` | `docker` + host-specific | Service account for all containers |
 | `adminhabl` | auto | `adminhabl` | `/bin/bash` | `sudo`, `docker`, `pack-member` | Admin (passworded, no SSH) |
 | `hsimah` | auto | `hsimah` | `/bin/bash` | `pack-member` | SSH user, manages repo |
+| `kiosk` | auto | `kiosk` | `/bin/bash` | `video` | Kiosk display account (kiosk hosts only) |
 
 Host-specific groups (e.g. `render,video` on space-needle) are configured in `host.conf` via `LITTLEDOG_EXTRA_GROUPS`.
 
@@ -200,6 +204,9 @@ Each host is defined by `hosts/<hostname>/host.conf`, a bash-sourceable file dec
 | `SERVICE_ENDPOINTS_WARN` | Associative array mapping service name → space-separated warn-only endpoint labels |
 | `HEALTH_URLS` | Associative array of `label:tier` → URL (tiers: `local`, `lan`, `ssl`) |
 | `HEALTH_URLS_WARN` | Associative array of `label:tier` → URL (warn-only, e.g. VPN-dependent) |
+| `KIOSK_ENABLED` | Enable kiosk provisioning — `true`/`false` (default: `false`) |
+| `KIOSK_URL` | URL to display in the kiosk browser (requires `KIOSK_ENABLED=true`) |
+| `KIOSK_SCALE` | Display scale factor, e.g. `1.5` (requires `KIOSK_ENABLED=true`) |
 
 ## Log Rotation
 
@@ -240,6 +247,7 @@ Docker log rotation is configured at two levels:
 - **Sudo**: `adminhabl` has full sudo via `/etc/sudoers.d/adminhabl`
 - **Containers**: All run as `littledog` (UID/GID 1003), a nologin service account
 - **External access**: Pulsr and Pawst (hbla.ke + hsimah.com) are exposed externally via Cloudflare Tunnel (outbound-only, no open ports). All other services remain LAN-only
+- **Kiosk lockdown** (calavera): nftables blocks all non-LAN outbound traffic; Chromium managed policies restrict URL navigation to the allowlist; Cage compositor prevents app switching or escape; kiosk user has no sudo or docker access
 
 ## Debugging
 
@@ -378,6 +386,7 @@ Fleet accounts are created automatically by `setup.sh` on space-needle (which ho
 | space-needle | `space_needle` | `space-needle@loft.hsimah.com` |
 | viking | `viking` | `viking@loft.hsimah.com` |
 | fjord | `fjord` | `fjord@loft.hsimah.com` |
+| calavera | `calavera` | `calavera@loft.hsimah.com` |
 
 API tokens are stored at `/etc/loft/pulsr.env` on each host (created by `setup.sh`). The `REPORT_DISKS` variable in each host's `host.conf` controls which mount points are included in disk metrics.
 
@@ -413,6 +422,38 @@ sudo bash setup.sh
 ```
 
 See `plans/raspberry-pi.md` for the full provisioning guide.
+
+## Calavera — Kiosk Display
+
+A Surface Pro 2 (x86_64, 4GB RAM, Ubuntu) in a dock, used as a touchscreen kiosk displaying the Pupyrus WordPress dashboard with service icons.
+
+### Architecture
+
+```
+greetd (auto-login as kiosk user)
+  └── cage (Wayland kiosk compositor — single fullscreen app)
+       └── chromium --kiosk (URL-restricted via managed policies)
+
+nftables: outbound traffic limited to RFC 1918 private ranges only
+```
+
+- **Cage**: Minimal Wayland compositor (~5MB) that displays exactly one fullscreen app with no window management, panels, or escape vectors
+- **Chromium managed policies**: `URLBlocklist` blocks all URLs by default; `URLAllowlist` permits only `*.loft.hsimah.com`, `*.space-needle`, `pulsr.hsimah.com`, `hbla.ke`, `hsimah.com`, and `calavera`
+- **nftables firewall**: Outbound traffic restricted to RFC 1918 private ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) — no internet access
+- **Display**: 10.6" 1080p touchscreen at 150% scaling (`--force-device-scale-factor=1.5`)
+- **Power**: Suspend, sleep, and hibernate are masked; lid switch is ignored (always-on display)
+
+### Kiosk Host Config Variables
+
+| Variable | Purpose |
+|----------|---------|
+| `KIOSK_ENABLED` | Enable kiosk provisioning (`true`/`false`) |
+| `KIOSK_URL` | URL to display on startup |
+| `KIOSK_SCALE` | Display scale factor (e.g. `1.5` for 150%) |
+
+### Adding Services to the Allowlist
+
+To allow the kiosk to navigate to additional URLs, edit `/etc/chromium/policies/managed/kiosk.json` on calavera and add entries to the `URLAllowlist` array. Re-run `setup.sh` to restore the default allowlist.
 
 ## Mushr — Reverse Proxy & LAN DNS
 
