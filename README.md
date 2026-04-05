@@ -27,7 +27,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Sonarr | `linuxserver/sonarr` | 8989 (host) | `/opt/sonarr` | TV management |
 | Lidarr | `linuxserver/lidarr:nightly` | 8686 (host) | `/opt/lidarr` | Music management (nightly branch for plugin support) |
 | Jackett | `linuxserver/jackett` | 9117 | `/opt/jackett` | Indexer proxy |
-| Mushr (proxy) | `caddy:2-alpine` + Cloudflare DNS module (custom build) | 80, 443, 8880 | `Caddyfile`, `Dockerfile.caddy` | Reverse proxy with HTTPS (Let's Encrypt via DNS-01) + LAN HTTP fallback; HTTP/3 disabled (`protocols h1 h2`) to prevent QUIC idle timeout issues |
+| Mushr (proxy) | `caddy:2-alpine` + Cloudflare DNS module (custom build) | 80, 443, 8880 | `Caddyfile`, `Dockerfile.caddy`, `spinnik-ui/` | Reverse proxy with HTTPS (Let's Encrypt via DNS-01) + LAN HTTP fallback; HTTP/3 disabled (`protocols h1 h2`) to prevent QUIC idle timeout issues; serves Spinnik vinyl controller UI with server-side MA API auth proxy |
 | Mushr (tunnel) | `cloudflare/cloudflared` | — (outbound only) | — | Cloudflare Tunnel — exposes Pulsr, hbla.ke, and hsimah.com externally without open ports |
 | Mushr (DNS) | `drpsychick/dnsmasq` | 53/udp, 53/tcp | `dnsmasq.conf` | Wildcard DNS — resolves `*.space-needle` and `*.loft.hsimah.com` to LAN IP |
 | Pupyrus | `wordpress` + `mariadb` + `redis` | 8081 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
@@ -61,7 +61,7 @@ Music Assistant provides a web UI (`howlr.loft.hsimah.com`) where you can browse
 - Spotify Connect: only one target can be active per Spotify account at a time. Family plan members with separate logins can stream to different rooms simultaneously.
 - Music Assistant server requires Raspberry Pi 4+ for arm64; Pi 3 B+ hosts (viking, fjord) run snapclient only.
 
-Spinnik (spin + Sputnik) runs on calavera and streams vinyl audio from an Audio-Technica LP5X turntable connected via USB. DarkIce captures the LP5X's ALSA device, encodes to Ogg Vorbis (~256kbps), and sends the stream to a local Icecast server at `http://calavera:8000/vinyl`. Music Assistant on space-needle picks up this URL as a radio station and distributes the audio to all Snapcast clients across the fleet. A udev rule pins the LP5X's USB audio chip (TI PCM2900C, `08bb:29c0`) to a stable ALSA device name `LP5X` so DarkIce can always reference `plughw:LP5X,0` regardless of USB enumeration order.
+Spinnik (spin + Sputnik) runs on calavera and streams vinyl audio from an Audio-Technica LP5X turntable connected via USB. DarkIce captures the LP5X's ALSA device, encodes to Ogg Vorbis (~256kbps), and sends the stream to a local Icecast server at `http://calavera:8000/vinyl`. Music Assistant on space-needle picks up this URL as a radio station and distributes the audio to all Snapcast clients across the fleet. A udev rule pins the LP5X's USB audio chip (TI PCM2900C, `08bb:29c0`) to a stable ALSA device name `LP5X` so DarkIce can always reference `plughw:LP5X,0` regardless of USB enumeration order. The Spinnik web controller (`spinnik.loft.hsimah.com`) is a touch-optimized UI served by Caddy on space-needle that lets the kiosk user start/stop vinyl playback and switch between speaker groups. Caddy proxies Music Assistant API calls with server-side Bearer token injection so the browser never handles auth.
 
 ### Directory Layout
 
@@ -109,6 +109,8 @@ the-loft/
 │   │   ├── Dockerfile.caddy
 │   │   ├── Caddyfile
 │   │   ├── dnsmasq.conf
+│   │   ├── spinnik-ui/
+│   │   │   └── index.html                       # Vinyl turntable web controller
 │   │   └── .env.example
 │   ├── pulsr/
 │   │   ├── docker-compose.yml
@@ -463,7 +465,7 @@ See `plans/raspberry-pi.md` for the full provisioning guide.
 
 ## Calavera — Kiosk Display
 
-A Surface Pro 2 (x86_64, 4GB RAM, Ubuntu) in a dock, used as a touchscreen kiosk displaying the Pupyrus WordPress dashboard with service icons. Also connected to an Audio-Technica LP5X turntable via USB — the spinnik service streams vinyl audio to the fleet via Icecast.
+A Surface Pro 2 (x86_64, 4GB RAM, Ubuntu) in a dock, used as a touchscreen kiosk displaying the Spinnik vinyl turntable controller — a touch-optimized web UI for starting/stopping vinyl playback and choosing speaker groups (Upstairs, Downstairs, All). Also connected to an Audio-Technica LP5X turntable via USB — the spinnik service streams vinyl audio to the fleet via Icecast.
 
 ### Architecture
 
@@ -513,6 +515,7 @@ Real Let's Encrypt certificates via Cloudflare DNS-01 challenge. No open ports o
 | `https://transmission.loft.hsimah.com` | Transmission |
 | `https://soulseek.loft.hsimah.com` | slskd |
 | `https://howlr.loft.hsimah.com` | Music Assistant (Howlr) |
+| `https://spinnik.loft.hsimah.com` | Spinnik (vinyl turntable controller) |
 | `https://snapweb.loft.hsimah.com` | Snapweb |
 | `https://hbla.ke` | Pawst (hbla.ke blog) |
 | `https://hsimah.com` | Pawst (hsimah.com blog) |
@@ -534,6 +537,7 @@ HTTP-only, no TLS. Kept for backward compatibility.
 | `http://transmission.space-needle` | Transmission |
 | `http://soulseek.space-needle` | slskd |
 | `http://howlr.space-needle` | Music Assistant (Howlr) |
+| `http://spinnik.space-needle` | Spinnik (vinyl turntable controller) |
 | `http://snapweb.space-needle` | Snapweb |
 | `http://pawst.space-needle` | Pawst (hbla.ke blog) |
 | `http://hsimah.space-needle` | Pawst (hsimah.com blog) |
@@ -585,7 +589,7 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Iditarod | `GITHUB_ORG`, `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_KEY_PATH`, `RUNNER_NAME`, `RUNNER_LABELS`, `DOCKER_GID` |
 | Howlr (server) | `COMPOSE_PROFILES=server` |
 | Howlr (client) | `COMPOSE_PROFILES=client`, `SNAPSERVER_HOST`, `SOUND_DEVICE`, `HOST_ID` |
-| Mushr | `LOFT_DOMAIN`, `CLOUDFLARE_API_TOKEN`, `TUNNEL_TOKEN` (edit `dnsmasq.conf` with LAN IP before deploying) |
+| Mushr | `LOFT_DOMAIN`, `CLOUDFLARE_API_TOKEN`, `TUNNEL_TOKEN`, `MA_API_TOKEN` (edit `dnsmasq.conf` with LAN IP before deploying) |
 | Pulsr | `GTS_HOST`, `GTS_PROTOCOL`, `GTS_TOKEN` (for `pulsr-ctl post`), `TZ` |
 | Spinnik | `ICECAST_SOURCE_PASSWORD`, `ICECAST_ADMIN_PASSWORD` (source password must match `darkice.cfg`) |
 

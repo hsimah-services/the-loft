@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Loft Turntable</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #121212;
+    color: #e0e0e0;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    overflow: hidden;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    padding: 1.5rem;
+  }
+
+  h1 {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 0.02em;
+  }
+
+  #status {
+    font-size: 1.1rem;
+    color: #999;
+    min-height: 1.4em;
+    text-align: center;
+  }
+
+  #status.error { color: #ef5350; }
+
+  #play-btn {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 3px solid #555;
+    background: #1e1e1e;
+    color: #e0e0e0;
+    font-size: 2.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  #play-btn:active {
+    background: #333;
+    border-color: #888;
+  }
+
+  #play-btn.playing {
+    border-color: #4caf50;
+    color: #4caf50;
+  }
+
+  #play-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .group-bar {
+    display: flex;
+    gap: 0.75rem;
+    width: 100%;
+    max-width: 480px;
+  }
+
+  .group-btn {
+    flex: 1;
+    min-height: 56px;
+    border-radius: 12px;
+    border: 2px solid #444;
+    background: #1e1e1e;
+    color: #ccc;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .group-btn:active {
+    background: #333;
+  }
+
+  .group-btn.selected {
+    border-color: #90caf9;
+    background: #1a2a3a;
+    color: #90caf9;
+  }
+
+  .group-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+</style>
+</head>
+<body>
+  <h1>The Loft Turntable</h1>
+  <div id="status">Connecting...</div>
+  <button id="play-btn" disabled></button>
+  <div class="group-bar">
+    <button class="group-btn" data-group="upstairs" disabled>Upstairs</button>
+    <button class="group-btn" data-group="downstairs" disabled>Downstairs</button>
+    <button class="group-btn" data-group="all" disabled>All</button>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  var VINYL_URL = "http://calavera:8000/vinyl";
+  var POLL_MS = 3000;
+  var TIMEOUT_MS = 5000;
+
+  var playBtn = document.getElementById("play-btn");
+  var statusEl = document.getElementById("status");
+  var groupBtns = document.querySelectorAll(".group-btn");
+
+  // State
+  var queues = [];          // [{queue_id, display_name, ...}]
+  var groupMap = {};        // "upstairs"|"downstairs"|"all" -> queue_id
+  var selectedGroup = "all";
+  var isPlaying = false;
+  var activeQueueId = null;
+  var busy = false;
+  var msgId = 0;
+
+  // ── API helper ──────────────────────────────────────────────────────
+
+  function api(command, args) {
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); }, TIMEOUT_MS);
+    return fetch("/api/spinnik", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: ctrl.signal,
+      body: JSON.stringify({
+        message_id: String(++msgId),
+        command: command,
+        args: args || {}
+      })
+    }).then(function (r) {
+      clearTimeout(timer);
+      return r.json();
+    }).then(function (data) {
+      if (data.error_code) throw new Error(data.details || data.error_code);
+      return data.result;
+    });
+  }
+
+  // ── Map queue names to groups ───────────────────────────────────────
+
+  function mapGroups(queueList) {
+    groupMap = {};
+    for (var i = 0; i < queueList.length; i++) {
+      var q = queueList[i];
+      var name = (q.display_name || "").toLowerCase();
+      if (name.indexOf("upstairs") !== -1) groupMap.upstairs = q.queue_id;
+      if (name.indexOf("downstairs") !== -1) groupMap.downstairs = q.queue_id;
+      // "all" matches a group whose name suggests all rooms
+      if (name.indexOf("all") !== -1 || name.indexOf("everywhere") !== -1 || name.indexOf("whole") !== -1) {
+        groupMap.all = q.queue_id;
+      }
+    }
+    // If no "all" group found, fall back to first queue
+    if (!groupMap.all && queueList.length) {
+      groupMap.all = queueList[0].queue_id;
+    }
+  }
+
+  // ── Detect playback state ──────────────────────────────────────────
+
+  function detectPlayback(queueList) {
+    isPlaying = false;
+    activeQueueId = null;
+
+    for (var i = 0; i < queueList.length; i++) {
+      var q = queueList[i];
+      if (q.state === "playing" || q.state === "paused") {
+        isPlaying = q.state === "playing";
+        activeQueueId = q.queue_id;
+
+        // Match active queue back to a group name for UI
+        for (var g in groupMap) {
+          if (groupMap[g] === q.queue_id) {
+            selectedGroup = g;
+            break;
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────
+
+  function render() {
+    // Play button
+    playBtn.textContent = isPlaying ? "\u25A0" : "\u25B6";
+    playBtn.classList.toggle("playing", isPlaying);
+    playBtn.disabled = busy || !Object.keys(groupMap).length;
+
+    // Group buttons
+    for (var i = 0; i < groupBtns.length; i++) {
+      var btn = groupBtns[i];
+      var g = btn.getAttribute("data-group");
+      btn.classList.toggle("selected", g === selectedGroup);
+      btn.disabled = busy || !groupMap[g];
+    }
+
+    // Status
+    if (busy) return; // don't update status while busy
+    if (!Object.keys(groupMap).length) {
+      statusEl.textContent = "No speaker groups found";
+      statusEl.className = "error";
+    } else if (isPlaying) {
+      var label = selectedGroup.charAt(0).toUpperCase() + selectedGroup.slice(1);
+      statusEl.textContent = "Playing \u2022 " + label;
+      statusEl.className = "";
+    } else {
+      statusEl.textContent = "Stopped";
+      statusEl.className = "";
+    }
+  }
+
+  // ── Poll ───────────────────────────────────────────────────────────
+
+  function poll() {
+    api("player_queues/all").then(function (result) {
+      queues = result || [];
+      mapGroups(queues);
+      detectPlayback(queues);
+      render();
+    }).catch(function (err) {
+      statusEl.textContent = "Connection lost";
+      statusEl.className = "error";
+    });
+  }
+
+  // ── Actions ────────────────────────────────────────────────────────
+
+  function doPlay() {
+    if (busy) return;
+    var queueId = groupMap[selectedGroup];
+    if (!queueId) return;
+
+    busy = true;
+    statusEl.textContent = "Starting...";
+    render();
+
+    api("player_queues/play_media", {
+      queue_id: queueId,
+      media: [VINYL_URL],
+      option: "replace",
+      radio_mode: false
+    }).then(function () {
+      isPlaying = true;
+      activeQueueId = queueId;
+    }).catch(function (err) {
+      statusEl.textContent = "Error: " + err.message;
+      statusEl.className = "error";
+    }).then(function () {
+      busy = false;
+      render();
+    });
+  }
+
+  function doStop() {
+    if (busy) return;
+    var queueId = activeQueueId || groupMap[selectedGroup];
+    if (!queueId) return;
+
+    busy = true;
+    statusEl.textContent = "Stopping...";
+    render();
+
+    api("player_queues/stop", { queue_id: queueId }).then(function () {
+      isPlaying = false;
+      activeQueueId = null;
+    }).catch(function (err) {
+      statusEl.textContent = "Error: " + err.message;
+      statusEl.className = "error";
+    }).then(function () {
+      busy = false;
+      render();
+    });
+  }
+
+  function doSwitchGroup(newGroup) {
+    if (busy) return;
+    if (newGroup === selectedGroup) return;
+    if (!groupMap[newGroup]) return;
+
+    if (isPlaying && activeQueueId) {
+      // Transfer playback to new group
+      busy = true;
+      statusEl.textContent = "Switching...";
+      render();
+
+      api("player_queues/transfer", {
+        source_queue_id: activeQueueId,
+        target_queue_id: groupMap[newGroup],
+        auto_play: true
+      }).then(function () {
+        selectedGroup = newGroup;
+        activeQueueId = groupMap[newGroup];
+      }).catch(function (err) {
+        statusEl.textContent = "Error: " + err.message;
+        statusEl.className = "error";
+      }).then(function () {
+        busy = false;
+        render();
+      });
+    } else {
+      // Not playing — just update selection locally
+      selectedGroup = newGroup;
+      render();
+    }
+  }
+
+  // ── Event listeners ────────────────────────────────────────────────
+
+  playBtn.addEventListener("click", function () {
+    if (isPlaying) doStop(); else doPlay();
+  });
+
+  for (var i = 0; i < groupBtns.length; i++) {
+    groupBtns[i].addEventListener("click", function () {
+      doSwitchGroup(this.getAttribute("data-group"));
+    });
+  }
+
+  // ── Init ───────────────────────────────────────────────────────────
+
+  poll();
+  setInterval(poll, POLL_MS);
+})();
+</script>
+</body>
+</html>
