@@ -107,9 +107,21 @@
     opacity: 0.4;
     cursor: default;
   }
+
+  #viz {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+  }
+
+  h1, #status, #play-btn, .group-bar {
+    position: relative;
+    z-index: 1;
+  }
 </style>
 </head>
 <body>
+  <canvas id="viz"></canvas>
   <h1>The Loft Turntable</h1>
   <div id="status">Connecting...</div>
   <button id="play-btn" disabled></button>
@@ -139,6 +151,69 @@
   var activeQueueId = null;
   var busy = false;
   var msgId = 0;
+
+  // ── Visualizer ─────────────────────────────────────────────────────
+
+  var vizCanvas = document.getElementById("viz");
+  var vizCtx = vizCanvas.getContext("2d");
+  var audioCtx = null;
+  var analyser = null;
+  var audioEl = null;
+  var vizActive = false;
+
+  function resizeCanvas() {
+    vizCanvas.width = window.innerWidth;
+    vizCanvas.height = window.innerHeight;
+  }
+  window.addEventListener("resize", resizeCanvas);
+  resizeCanvas();
+
+  function ensureAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 64;
+    analyser.smoothingTimeConstant = 0.8;
+    audioEl = new Audio("/stream");
+    audioEl.crossOrigin = "anonymous";
+    var source = audioCtx.createMediaElementSource(audioEl);
+    source.connect(analyser);
+  }
+
+  function startViz() {
+    if (vizActive || !audioCtx) return;
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    audioEl.play().catch(function () {});
+    vizActive = true;
+    drawViz();
+  }
+
+  function stopViz() {
+    vizActive = false;
+    if (audioEl) audioEl.pause();
+    vizCtx.clearRect(0, 0, vizCanvas.width, vizCanvas.height);
+  }
+
+  function drawViz() {
+    if (!vizActive) return;
+    requestAnimationFrame(drawViz);
+
+    var bufLen = analyser.frequencyBinCount;
+    var data = new Uint8Array(bufLen);
+    analyser.getByteFrequencyData(data);
+
+    var w = vizCanvas.width;
+    var h = vizCanvas.height;
+    vizCtx.clearRect(0, 0, w, h);
+
+    var barW = w / bufLen;
+    var gap = 2;
+    for (var i = 0; i < bufLen; i++) {
+      var barH = (data[i] / 255) * h * 0.6;
+      vizCtx.fillStyle = "rgba(76, 175, 80, 0.12)";
+      vizCtx.fillRect(i * barW, h - barH, barW - gap, barH);
+    }
+  }
 
   // ── API helper ──────────────────────────────────────────────────────
 
@@ -222,6 +297,10 @@
       btn.classList.toggle("selected", g === selectedGroup);
       btn.disabled = busy || !groupMap[g];
     }
+
+    // Visualizer
+    if (isPlaying && !vizActive) startViz();
+    if (!isPlaying && vizActive) stopViz();
 
     // Status
     if (busy) return; // don't update status while busy
@@ -336,6 +415,7 @@
   // ── Event listeners ────────────────────────────────────────────────
 
   playBtn.addEventListener("click", function () {
+    ensureAudio();
     if (isPlaying) doStop(); else doPlay();
   });
 
