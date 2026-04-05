@@ -15,6 +15,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - runner-work:/home/runner/actions-runner/_work
+      - ${GITHUB_APP_KEY_PATH:-/etc/loft/iditarod-app.pem}:/run/secrets/github_app_key:ro
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock
 
