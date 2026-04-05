@@ -258,7 +258,7 @@ Docker log rotation is configured at two levels:
 - **Sudo**: `adminhabl` has full sudo via `/etc/sudoers.d/adminhabl`
 - **Containers**: All run as `littledog` (UID/GID 1003), a nologin service account
 - **External access**: Pulsr and Pawst (hbla.ke + hsimah.com) are exposed externally via Cloudflare Tunnel (outbound-only, no open ports). All other services remain LAN-only
-- **Kiosk lockdown** (calavera): nftables blocks all non-LAN outbound traffic; Chromium managed policies restrict URL navigation to the allowlist; Cage compositor prevents app switching or escape; kiosk user has no sudo or docker access
+- **Kiosk lockdown** (calavera): nftables restricts traffic to LAN only (RFC 1918 ranges) — inbound from LAN is accepted, all internet-bound traffic is dropped; Chromium managed policies restrict URL navigation to the allowlist; Cage compositor prevents app switching or escape; kiosk user has no sudo or docker access. `loft-ctl rebuild`/`update` automatically flush and restore the firewall (with Docker restart) on kiosk hosts
 
 ## Debugging
 
@@ -477,7 +477,7 @@ nftables: outbound traffic limited to RFC 1918 private ranges only
 
 - **Cage**: Minimal Wayland compositor (~5MB) that displays exactly one fullscreen app with no window management, panels, or escape vectors
 - **Chromium managed policies**: `URLBlocklist` blocks all URLs by default; `URLAllowlist` permits only `*.loft.hsimah.com`, `*.space-needle`, `pulsr.hsimah.com`, `hbla.ke`, `hsimah.com`, and `calavera`
-- **nftables firewall**: Outbound traffic restricted to RFC 1918 private ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) — no internet access
+- **nftables firewall**: Traffic restricted to RFC 1918 private ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) — LAN inbound accepted, internet blocked. `loft-ctl` automatically flushes/restores the firewall for `rebuild` and `update` commands
 - **Display**: 10.6" 1080p touchscreen at 150% scaling (`--force-device-scale-factor=1.5`)
 - **Power**: Suspend, sleep, and hibernate are masked; lid switch is ignored (always-on display)
 
