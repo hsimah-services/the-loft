@@ -35,15 +35,17 @@
 
 # ─── Spinnik snippet (vinyl turntable controller) ─────────────────────────────
 (spinnik_routes) {
-	handle /api/spinnik {
+	@spinnik_api path /api/spinnik
+	handle @spinnik_api {
 		rewrite * /api
 		reverse_proxy host.docker.internal:8095 {
 			header_up Authorization "Bearer {env.MA_API_TOKEN}"
 		}
 	}
-	handle /stream {
+	@stream path /stream
+	handle @stream {
 		rewrite * /vinyl
-		reverse_proxy calavera:8000
+		reverse_proxy {env.ICECAST_HOST}:8000
 	}
 	handle {
 		root * /srv/spinnik-ui
