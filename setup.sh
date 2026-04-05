@@ -346,8 +346,8 @@ command = "cage -- chromium-browser --kiosk --noerrdialogs --disable-infobars --
 user = "kiosk"
 EOF
 
-  systemctl enable greetd
   systemctl disable gdm3 2>/dev/null || true
+  systemctl enable greetd
   info "greetd configured (VT 7, user kiosk)"
 
   # ── Chromium managed policies ─────────────────────────────────────────────
