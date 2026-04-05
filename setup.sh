@@ -466,6 +466,15 @@ DPMS
   info "Kiosk provisioning complete"
 fi
 
+# ─── 11c. Audio device pinning (spinnik hosts only) ────────────────────────
+if printf '%s\n' "${SERVICES[@]}" | grep -qx spinnik; then
+  info "Installing LP5X ALSA device pinning udev rule..."
+  echo 'SUBSYSTEM=="sound", ATTRS{idVendor}=="08bb", ATTRS{idProduct}=="29c0", ATTR{id}="LP5X"' \
+    > /etc/udev/rules.d/99-lp5x.rules
+  udevadm control --reload-rules 2>/dev/null || true
+  info "LP5X udev rule installed (plughw:LP5X,0)"
+fi
+
 # ─── 12. Cron jobs ───────────────────────────────────────────────────────────
 info "Configuring cron jobs..."
 
