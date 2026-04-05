@@ -393,6 +393,9 @@ table inet filter {
     type filter hook input priority 0; policy drop;
     ct state established,related accept
     iif lo accept
+    ip saddr 10.0.0.0/8 accept
+    ip saddr 172.16.0.0/12 accept
+    ip saddr 192.168.0.0/16 accept
     ip protocol icmp accept
     tcp dport 22 accept
     udp sport 67 udp dport 68 accept
