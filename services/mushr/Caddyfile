@@ -41,10 +41,6 @@
 			header_up Authorization "Bearer {env.MA_API_TOKEN}"
 		}
 	}
-	handle /stream {
-		rewrite * /vinyl
-		reverse_proxy calavera:8000
-	}
 	handle {
 		root * /srv/spinnik-ui
 		file_server
