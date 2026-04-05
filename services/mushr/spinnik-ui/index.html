@@ -114,9 +114,9 @@
   <div id="status">Connecting...</div>
   <button id="play-btn" disabled></button>
   <div class="group-bar">
-    <button class="group-btn" data-group="upstairs" disabled>Upstairs</button>
-    <button class="group-btn" data-group="downstairs" disabled>Downstairs</button>
-    <button class="group-btn" data-group="all" disabled>All</button>
+    <button class="group-btn" data-group="Upstairs" disabled>Upstairs</button>
+    <button class="group-btn" data-group="Downstairs" disabled>Downstairs</button>
+    <button class="group-btn" data-group="All" disabled>All</button>
   </div>
 
 <script>
@@ -133,8 +133,8 @@
 
   // State
   var queues = [];          // [{queue_id, display_name, ...}]
-  var groupMap = {};        // "upstairs"|"downstairs"|"all" -> queue_id
-  var selectedGroup = "all";
+  var groupMap = {};        // "Upstairs"|"Downstairs"|"All" -> queue_id
+  var selectedGroup = "All";
   var isPlaying = false;
   var activeQueueId = null;
   var busy = false;
@@ -170,16 +170,16 @@
     for (var i = 0; i < queueList.length; i++) {
       var q = queueList[i];
       var name = (q.display_name || "").toLowerCase();
-      if (name.indexOf("upstairs") !== -1) groupMap.upstairs = q.queue_id;
-      if (name.indexOf("downstairs") !== -1) groupMap.downstairs = q.queue_id;
-      // "all" matches a group whose name suggests all rooms
-      if (name.indexOf("all") !== -1 || name.indexOf("everywhere") !== -1 || name.indexOf("whole") !== -1) {
-        groupMap.all = q.queue_id;
+      if (name.indexOf("Upstairs") !== -1) groupMap.Upstairs = q.queue_id;
+      if (name.indexOf("Downstairs") !== -1) groupMap.Downstairs = q.queue_id;
+      // "All" matches a group whose name suggests all rooms
+      if (name.indexOf("All") !== -1 || name.indexOf("everywhere") !== -1 || name.indexOf("whole") !== -1) {
+        groupMap.All = q.queue_id;
       }
     }
-    // If no "all" group found, fall back to first queue
-    if (!groupMap.all && queueList.length) {
-      groupMap.all = queueList[0].queue_id;
+    // If no "All" group found, fall back to first queue
+    if (!groupMap.All && queueList.length) {
+      groupMap.All = queueList[0].queue_id;
     }
   }
 
