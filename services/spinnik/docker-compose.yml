@@ -18,6 +18,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.darkice
+      network: host
     image: spinnik-darkice:latest
     container_name: spinnik-darkice
     restart: unless-stopped
