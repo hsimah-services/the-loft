@@ -27,6 +27,21 @@
     padding: 3.8rem;
   }
 
+  #viz {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  h1, #status, #play-btn, .group-bar {
+    position: relative;
+    z-index: 1;
+  }
+
   h1 {
     font-size: 4.6rem;
     font-weight: 600;
@@ -110,6 +125,7 @@
 </style>
 </head>
 <body>
+  <canvas id="viz"></canvas>
   <h1>The Loft Turntable</h1>
   <div id="status">Connecting...</div>
   <button id="play-btn" disabled></button>
@@ -123,7 +139,6 @@
 (function () {
   "use strict";
 
-  var VINYL_URL = "http://calavera:8000/vinyl";
   var POLL_MS = 3000;
   var TIMEOUT_MS = 5000;
 
@@ -139,6 +154,72 @@
   var activeQueueId = null;
   var busy = false;
   var msgId = 0;
+
+  // ── Visualizer ──────────────────────────────────────────────────────
+
+  var canvas = document.getElementById("viz");
+  var canvasCtx = canvas.getContext("2d");
+  var audioCtx = null;
+  var analyser = null;
+  var audioEl = null;
+  var vizRunning = false;
+
+  function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener("resize", resizeCanvas);
+  resizeCanvas();
+
+  function ensureAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 64;
+
+    audioEl = new Audio("/stream");
+    audioEl.crossOrigin = "anonymous";
+    var source = audioCtx.createMediaElementSource(audioEl);
+    // Connect to analyser only — no destination (no sound from kiosk speakers)
+    source.connect(analyser);
+  }
+
+  function startViz() {
+    if (vizRunning) return;
+    vizRunning = true;
+    audioEl.play();
+    renderViz();
+  }
+
+  function stopViz() {
+    vizRunning = false;
+    if (audioEl) audioEl.pause();
+    // Clear the canvas
+    canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function renderViz() {
+    if (!vizRunning) return;
+    requestAnimationFrame(renderViz);
+
+    var bufferLength = analyser.frequencyBinCount; // 32 bars
+    var dataArray = new Uint8Array(bufferLength);
+    analyser.getByteFrequencyData(dataArray);
+
+    canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+    var barWidth = canvas.width / bufferLength;
+    var maxBarHeight = canvas.height * 0.6;
+
+    for (var i = 0; i < bufferLength; i++) {
+      var barHeight = (dataArray[i] / 255) * maxBarHeight;
+      var x = i * barWidth;
+      var y = canvas.height - barHeight;
+
+      canvasCtx.fillStyle = "rgba(76, 175, 80, 0.12)";
+      canvasCtx.fillRect(x, y, barWidth - 1, barHeight);
+    }
+  }
 
   // ── API helper ──────────────────────────────────────────────────────
 
@@ -223,6 +304,12 @@
       btn.disabled = busy || !groupMap[g];
     }
 
+    // Visualizer
+    if (audioCtx) {
+      if (isPlaying) startViz();
+      else stopViz();
+    }
+
     // Status
     if (busy) return; // don't update status while busy
     if (!Object.keys(groupMap).length) {
@@ -259,13 +346,16 @@
     var queueId = groupMap[selectedGroup];
     if (!queueId) return;
 
+    // Initialize audio on first user gesture
+    ensureAudio();
+
     busy = true;
     statusEl.textContent = "Starting...";
     render();
 
     api("player_queues/play_media", {
       queue_id: queueId,
-      media: [VINYL_URL],
+      media: ["http://calavera:8000/vinyl"],
       option: "replace",
       radio_mode: false
     }).then(function () {
