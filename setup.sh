@@ -364,7 +364,8 @@ EOF
     "pulsr.hsimah.com",
     "hbla.ke",
     "hsimah.com",
-    "calavera"
+    "calavera",
+    "localhost"
   ],
   "HomepageLocation": "${KIOSK_URL}",
   "HomepageIsNewTabPage": false,
