@@ -413,6 +413,16 @@ table inet filter {
   }
   chain forward {
     type filter hook forward priority 0; policy drop;
+    ct state established,related accept
+    ip saddr 10.0.0.0/8 ip daddr 10.0.0.0/8 accept
+    ip saddr 10.0.0.0/8 ip daddr 172.16.0.0/12 accept
+    ip saddr 10.0.0.0/8 ip daddr 192.168.0.0/16 accept
+    ip saddr 172.16.0.0/12 ip daddr 10.0.0.0/8 accept
+    ip saddr 172.16.0.0/12 ip daddr 172.16.0.0/12 accept
+    ip saddr 172.16.0.0/12 ip daddr 192.168.0.0/16 accept
+    ip saddr 192.168.0.0/16 ip daddr 10.0.0.0/8 accept
+    ip saddr 192.168.0.0/16 ip daddr 172.16.0.0/12 accept
+    ip saddr 192.168.0.0/16 ip daddr 192.168.0.0/16 accept
   }
 }
 NFT
