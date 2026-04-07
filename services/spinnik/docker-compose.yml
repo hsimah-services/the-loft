@@ -33,3 +33,23 @@ services:
       - ./darkice.cfg:/etc/darkice.cfg:ro
     depends_on:
       - spinnik-icecast
+
+  spinnik-ui:
+    image: nginx:alpine
+    container_name: spinnik-ui
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    volumes:
+      - ./nginx.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./ui:/usr/share/nginx/html:ro
+    ports:
+      - "8080:80"
+    environment:
+      - MA_HOST=${MA_HOST}
+      - MA_API_TOKEN=${MA_API_TOKEN}
+    depends_on:
+      - spinnik-icecast

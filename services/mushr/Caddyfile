@@ -33,20 +33,6 @@
 	}
 }
 
-# ─── Spinnik snippet (vinyl turntable controller) ─────────────────────────────
-(spinnik_routes) {
-	handle /api/spinnik {
-		rewrite * /api
-		reverse_proxy host.docker.internal:8095 {
-			header_up Authorization "Bearer {env.MA_API_TOKEN}"
-		}
-	}
-	handle {
-		root * /srv/spinnik-ui
-		file_server
-	}
-}
-
 # ══════════════════════════════════════════════════════════════════════════════
 # HTTPS routes — *.loft.hsimah.com (Let's Encrypt via Cloudflare DNS-01)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -104,11 +90,6 @@ snapweb.{$LOFT_DOMAIN} {
 howlr.{$LOFT_DOMAIN} {
 	import cloudflare_tls
 	reverse_proxy host.docker.internal:8095
-}
-
-spinnik.{$LOFT_DOMAIN} {
-	import cloudflare_tls
-	import spinnik_routes
 }
 
 hbla.ke {
@@ -185,10 +166,6 @@ http://snapweb.space-needle:80 {
 
 http://howlr.space-needle:80 {
 	reverse_proxy host.docker.internal:8095
-}
-
-http://spinnik.space-needle:80 {
-	import spinnik_routes
 }
 
 http://pawst.space-needle:80 {

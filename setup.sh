@@ -332,7 +332,7 @@ if [[ "${KIOSK_ENABLED:-false}" == "true" ]]; then
 
   # ── Packages ──────────────────────────────────────────────────────────────
   info "Installing kiosk packages..."
-  apt-get install -y -qq cage chromium-browser greetd nftables > /dev/null
+  apt-get install -y -qq cage chromium-browser greetd > /dev/null
 
   # ── greetd auto-login ─────────────────────────────────────────────────────
   info "Configuring greetd auto-login..."
@@ -364,7 +364,8 @@ EOF
     "pulsr.hsimah.com",
     "hbla.ke",
     "hsimah.com",
-    "calavera"
+    "calavera",
+    "localhost"
   ],
   "HomepageLocation": "${KIOSK_URL}",
   "HomepageIsNewTabPage": false,
@@ -382,41 +383,6 @@ EOF
 }
 POLICY
   info "Chromium URL allowlist deployed"
-
-  # ── nftables firewall (LAN-only) ─────────────────────────────────────────
-  info "Deploying nftables firewall (LAN-only)..."
-  cat > /etc/nftables.conf <<'NFT'
-flush ruleset
-
-table inet filter {
-  chain input {
-    type filter hook input priority 0; policy drop;
-    ct state established,related accept
-    iif lo accept
-    ip saddr 10.0.0.0/8 accept
-    ip saddr 172.16.0.0/12 accept
-    ip saddr 192.168.0.0/16 accept
-    ip protocol icmp accept
-    tcp dport 22 accept
-    udp sport 67 udp dport 68 accept
-  }
-  chain output {
-    type filter hook output priority 0; policy drop;
-    ct state established,related accept
-    oif lo accept
-    ip daddr 10.0.0.0/8 accept
-    ip daddr 172.16.0.0/12 accept
-    ip daddr 192.168.0.0/16 accept
-    ip protocol icmp accept
-    udp sport 68 udp dport 67 accept
-  }
-  chain forward {
-    type filter hook forward priority 0; policy drop;
-  }
-}
-NFT
-  systemctl enable nftables
-  info "nftables firewall enabled (LAN-only outbound)"
 
   # ── Disable suspend/sleep/screen blank ────────────────────────────────────
   info "Disabling suspend/sleep/hibernate..."

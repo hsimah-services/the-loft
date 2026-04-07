@@ -20,7 +20,6 @@ services:
       - .env
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./spinnik-ui:/srv/spinnik-ui:ro
       - caddy-data:/data
       - caddy-config:/config
     extra_hosts:
