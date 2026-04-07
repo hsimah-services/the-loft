@@ -28,29 +28,6 @@ source "$HOST_CONF"
 # ─── Source common helpers ────────────────────────────────────────────────────
 source "${REPO_DIR}/control-plane/common.sh"
 
-# ─── Kiosk firewall helpers ──────────────────────────────────────────────────
-# Kiosk hosts block all non-LAN traffic via nftables. Docker operations
-# (pull, build) need internet, so we temporarily flush the rules.
-KIOSK_FIREWALL_FLUSHED=false
-
-kiosk_open_network() {
-  if [[ "${KIOSK_ENABLED:-false}" == "true" && "$KIOSK_FIREWALL_FLUSHED" == "false" ]]; then
-    info "Kiosk host — opening firewall for network access..."
-    sudo nft delete table inet loft-kiosk 2>/dev/null || true
-    KIOSK_FIREWALL_FLUSHED=true
-  fi
-}
-
-kiosk_restore_network() {
-  if [[ "$KIOSK_FIREWALL_FLUSHED" == "true" ]]; then
-    info "Restoring kiosk firewall..."
-    sudo nft -f /etc/nftables.conf
-    KIOSK_FIREWALL_FLUSHED=false
-  fi
-}
-
-trap kiosk_restore_network EXIT
-
 # ─── Usage ────────────────────────────────────────────────────────────────────
 usage() {
   echo "Usage: loft-ctl <command> [options] [service ...]"
@@ -105,10 +82,6 @@ case "$1" in
         done
         if ! $_no_pull; then
           _git_branch="${_branch:-main}"
-          if [[ "${KIOSK_ENABLED:-false}" == "true" ]]; then
-            info "Kiosk host — opening firewall for git pull..."
-            su - adminhabl -c 'sudo nft delete table inet loft-kiosk 2>/dev/null || true'
-          fi
           info "Pulling latest code as $(whoami)..."
           git -C "$REPO_DIR" fetch --all --prune
           git -C "$REPO_DIR" checkout "$_git_branch"
@@ -283,12 +256,12 @@ case "$COMMAND" in
     done
     ;;
   rebuild)
-    kiosk_open_network
+
     for svc in "${TARGETS[@]}"; do
       do_rebuild "$svc" || (( overall++ ))
       echo ""
     done
-    kiosk_restore_network
+
     ;;
   health)
     info "Running health checks: ${TARGETS[*]}"
@@ -301,12 +274,12 @@ case "$COMMAND" in
   update)
     do_git_update || { error "Git update failed"; exit 1; }
     echo ""
-    kiosk_open_network
+
     for svc in "${TARGETS[@]}"; do
       do_rebuild "$svc" || (( overall++ ))
       echo ""
     done
-    kiosk_restore_network
+
     info "Running health checks..."
     echo ""
     for svc in "${TARGETS[@]}"; do
