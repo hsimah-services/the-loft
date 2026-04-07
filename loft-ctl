@@ -36,8 +36,7 @@ KIOSK_FIREWALL_FLUSHED=false
 kiosk_open_network() {
   if [[ "${KIOSK_ENABLED:-false}" == "true" && "$KIOSK_FIREWALL_FLUSHED" == "false" ]]; then
     info "Kiosk host — opening firewall for network access..."
-    sudo nft flush ruleset
-    sudo systemctl restart docker
+    sudo nft delete table inet loft-kiosk 2>/dev/null || true
     KIOSK_FIREWALL_FLUSHED=true
   fi
 }
@@ -46,7 +45,6 @@ kiosk_restore_network() {
   if [[ "$KIOSK_FIREWALL_FLUSHED" == "true" ]]; then
     info "Restoring kiosk firewall..."
     sudo nft -f /etc/nftables.conf
-    sudo systemctl restart docker
     KIOSK_FIREWALL_FLUSHED=false
   fi
 }
@@ -109,7 +107,7 @@ case "$1" in
           _git_branch="${_branch:-main}"
           if [[ "${KIOSK_ENABLED:-false}" == "true" ]]; then
             info "Kiosk host — opening firewall for git pull..."
-            su - adminhabl -c 'sudo nft flush ruleset'
+            su - adminhabl -c 'sudo nft delete table inet loft-kiosk 2>/dev/null || true'
           fi
           info "Pulling latest code as $(whoami)..."
           git -C "$REPO_DIR" fetch --all --prune

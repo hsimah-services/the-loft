@@ -386,10 +386,14 @@ POLICY
 
   # ── nftables firewall (LAN-only) ─────────────────────────────────────────
   info "Deploying nftables firewall (LAN-only)..."
+  # NOTE: Do NOT use 'flush ruleset' — it destroys Docker's iptables-nft
+  # NAT/masquerade rules, breaking container networking. Instead, flush
+  # only our own table. Docker manages its own forwarding via iptables.
   cat > /etc/nftables.conf <<'NFT'
-flush ruleset
+table inet loft-kiosk;
+flush table inet loft-kiosk;
 
-table inet filter {
+table inet loft-kiosk {
   chain input {
     type filter hook input priority 0; policy drop;
     ct state established,related accept
@@ -410,19 +414,6 @@ table inet filter {
     ip daddr 192.168.0.0/16 accept
     ip protocol icmp accept
     udp sport 68 udp dport 67 accept
-  }
-  chain forward {
-    type filter hook forward priority 0; policy drop;
-    ct state established,related accept
-    ip saddr 10.0.0.0/8 ip daddr 10.0.0.0/8 accept
-    ip saddr 10.0.0.0/8 ip daddr 172.16.0.0/12 accept
-    ip saddr 10.0.0.0/8 ip daddr 192.168.0.0/16 accept
-    ip saddr 172.16.0.0/12 ip daddr 10.0.0.0/8 accept
-    ip saddr 172.16.0.0/12 ip daddr 172.16.0.0/12 accept
-    ip saddr 172.16.0.0/12 ip daddr 192.168.0.0/16 accept
-    ip saddr 192.168.0.0/16 ip daddr 10.0.0.0/8 accept
-    ip saddr 192.168.0.0/16 ip daddr 172.16.0.0/12 accept
-    ip saddr 192.168.0.0/16 ip daddr 192.168.0.0/16 accept
   }
 }
 NFT
