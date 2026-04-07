@@ -342,7 +342,7 @@ if [[ "${KIOSK_ENABLED:-false}" == "true" ]]; then
 vt = 7
 
 [default_session]
-command = "cage -- chromium-browser --kiosk --noerrdialogs --disable-infobars --no-first-run --disable-translate --ozone-platform=wayland --force-device-scale-factor=${KIOSK_SCALE} ${KIOSK_URL}"
+command = "cage -s -- chromium-browser --kiosk --noerrdialogs --disable-infobars --no-first-run --disable-translate --ozone-platform=wayland --force-device-scale-factor=${KIOSK_SCALE} ${KIOSK_URL}"
 user = "kiosk"
 EOF
 
