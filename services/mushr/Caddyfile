@@ -52,6 +52,11 @@ lidarr.{$LOFT_DOMAIN} {
 	reverse_proxy host.docker.internal:8686
 }
 
+bazarr.{$LOFT_DOMAIN} {
+	import cloudflare_tls
+	reverse_proxy host.docker.internal:6767
+}
+
 jackett.{$LOFT_DOMAIN} {
 	import cloudflare_tls
 	reverse_proxy host.docker.internal:9117
@@ -129,6 +134,10 @@ http://sonarr.space-needle:80 {
 
 http://lidarr.space-needle:80 {
 	reverse_proxy host.docker.internal:8686
+}
+
+http://bazarr.space-needle:80 {
+	reverse_proxy host.docker.internal:6767
 }
 
 http://jackett.space-needle:80 {
