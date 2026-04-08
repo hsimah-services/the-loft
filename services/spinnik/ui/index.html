@@ -122,6 +122,38 @@
     opacity: 0.4;
     cursor: default;
   }
+
+  /* ── Busy indicators ─────────────────────────────────────────────── */
+
+  @keyframes busy-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes busy-pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.7; }
+  }
+
+  #play-btn.busy {
+    opacity: 0.6;
+    border-color: transparent;
+  }
+
+  #play-btn.busy::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 8px solid transparent;
+    border-top-color: #4caf50;
+    border-right-color: #4caf50;
+    animation: busy-spin 1.2s linear infinite;
+  }
+
+  .group-btn.busy-target {
+    border-color: #90caf9;
+    animation: busy-pulse 1.2s ease-in-out infinite;
+  }
 </style>
 </head>
 <body>
@@ -153,6 +185,7 @@
   var isPlaying = false;
   var activeQueueId = null;
   var busy = false;
+  var busyTarget = null;
   var msgId = 0;
 
   // ── Visualizer ──────────────────────────────────────────────────────
@@ -163,6 +196,8 @@
   var analyser = null;
   var audioEl = null;
   var vizRunning = false;
+  var smoothedData = null;
+  var SMOOTHING = 0.82;
 
   function resizeCanvas() {
     canvas.width = window.innerWidth;
@@ -194,7 +229,7 @@
   function stopViz() {
     vizRunning = false;
     if (audioEl) audioEl.pause();
-    // Clear the canvas
+    smoothedData = null;
     canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
@@ -206,18 +241,63 @@
     var dataArray = new Uint8Array(bufferLength);
     analyser.getByteFrequencyData(dataArray);
 
+    // Initialize smoothed data on first frame
+    if (!smoothedData || smoothedData.length !== bufferLength) {
+      smoothedData = new Float32Array(bufferLength);
+    }
+
+    // Smooth: rise instantly, decay gradually
+    for (var i = 0; i < bufferLength; i++) {
+      var raw = dataArray[i] / 255;
+      smoothedData[i] = Math.max(raw, smoothedData[i] * SMOOTHING);
+    }
+
     canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
     var barWidth = canvas.width / bufferLength;
+    var baseline = canvas.height * 0.72;
     var maxBarHeight = canvas.height * 0.6;
+    var radius = 4;
 
     for (var i = 0; i < bufferLength; i++) {
-      var barHeight = (dataArray[i] / 255) * maxBarHeight;
-      var x = i * barWidth;
-      var y = canvas.height - barHeight;
+      var val = smoothedData[i];
+      var barHeight = val * maxBarHeight;
+      if (barHeight < 1) continue;
 
-      canvasCtx.fillStyle = "rgba(76, 175, 80, 0.12)";
-      canvasCtx.fillRect(x, y, barWidth - 1, barHeight);
+      var x = i * barWidth;
+      var w = barWidth - 2;
+      var y = baseline - barHeight;
+
+      // HSL color: green (120) → teal (170) → blue (210) across bars
+      var hue = 120 + (i / (bufferLength - 1)) * 90;
+      var alpha = 0.22 + val * 0.18;
+      var color = "hsla(" + hue + ", 65%, 55%, " + alpha + ")";
+      var glowColor = "hsla(" + hue + ", 65%, 55%, " + (alpha * 0.6) + ")";
+
+      // Glow
+      canvasCtx.save();
+      canvasCtx.shadowBlur = 12;
+      canvasCtx.shadowColor = glowColor;
+
+      // Main bar with rounded top
+      canvasCtx.fillStyle = color;
+      canvasCtx.beginPath();
+      canvasCtx.moveTo(x, baseline);
+      canvasCtx.lineTo(x, y + radius);
+      canvasCtx.arcTo(x, y, x + radius, y, radius);
+      canvasCtx.arcTo(x + w, y, x + w, y + radius, radius);
+      canvasCtx.lineTo(x + w, baseline);
+      canvasCtx.closePath();
+      canvasCtx.fill();
+
+      canvasCtx.restore();
+
+      // Reflection: 30% height, 25% opacity, no glow
+      var reflHeight = barHeight * 0.3;
+      var reflAlpha = alpha * 0.25;
+      var reflColor = "hsla(" + hue + ", 65%, 55%, " + reflAlpha + ")";
+      canvasCtx.fillStyle = reflColor;
+      canvasCtx.fillRect(x, baseline, w, reflHeight);
     }
   }
 
@@ -294,6 +374,7 @@
     // Play button
     playBtn.textContent = isPlaying ? "\u25A0" : "\u25B6";
     playBtn.classList.toggle("playing", isPlaying);
+    playBtn.classList.toggle("busy", busy);
     playBtn.disabled = busy || !Object.keys(groupMap).length;
 
     // Group buttons
@@ -301,6 +382,7 @@
       var btn = groupBtns[i];
       var g = btn.getAttribute("data-group");
       btn.classList.toggle("selected", g === selectedGroup);
+      btn.classList.toggle("busy-target", g === busyTarget);
       btn.disabled = busy || !groupMap[g];
     }
 
@@ -399,6 +481,7 @@
     if (isPlaying && activeQueueId) {
       // Transfer playback to new group
       busy = true;
+      busyTarget = newGroup;
       statusEl.textContent = "Switching...";
       render();
 
@@ -414,6 +497,7 @@
         statusEl.className = "error";
       }).then(function () {
         busy = false;
+        busyTarget = null;
         render();
       });
     } else {
