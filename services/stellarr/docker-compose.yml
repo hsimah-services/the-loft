@@ -61,7 +61,7 @@ services:
       - SLSKD_REMOTE_CONFIGURATION=true
       - SLSKD_SOULSEEK_USERNAME=${SLSKD_SOULSEEK_USERNAME}
       - SLSKD_SOULSEEK_PASSWORD=${SLSKD_SOULSEEK_PASSWORD}
-      - SLSKD_DOWNLOADS_DIR=/downloads/completed/lidarr
+      - SLSKD_DOWNLOADS_DIR=/downloads/complete/lidarr
       - SLSKD_INCOMPLETE_DIR=/downloads/incomplete
       - SLSKD_SHARED_DIR=/music
     volumes:
