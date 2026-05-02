@@ -178,8 +178,11 @@ Host-specific groups (e.g. `render,video` on space-needle) are configured in `ho
     /videos                       Pawpcorn
     /stand-up                     Pawpcorn
   /downloads
-    /transmission                 Transmission downloads
-    /soulseek                     slskd downloads
+    /incomplete                   Shared incomplete dir (Transmission + slskd)
+    /completed
+      /radarr                     Transmission completed — movies
+      /sonarr                     Transmission completed — TV
+      /lidarr                     Transmission completed — music + slskd downloads
   /pawpcorn/transcode             Plex transcoding workspace
 
 /opt

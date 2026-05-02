@@ -42,7 +42,7 @@ services:
       - TZ=${TZ}
     volumes:
       - /opt/transmission:/config
-      - /mammoth/downloads/transmission:/downloads
+      - /mammoth/downloads:/downloads
       - ./transmission/remove-torrents.sh:/scripts/remove-torrents.sh:ro
     restart: unless-stopped
     network_mode: service:vpn
@@ -61,12 +61,12 @@ services:
       - SLSKD_REMOTE_CONFIGURATION=true
       - SLSKD_SOULSEEK_USERNAME=${SLSKD_SOULSEEK_USERNAME}
       - SLSKD_SOULSEEK_PASSWORD=${SLSKD_SOULSEEK_PASSWORD}
-      - SLSKD_DOWNLOADS_DIR=/downloads/complete
-      - SLSKD_INCOMPLETE_DIR=/downloads/downloading
+      - SLSKD_DOWNLOADS_DIR=/downloads/completed/lidarr
+      - SLSKD_INCOMPLETE_DIR=/downloads/incomplete
       - SLSKD_SHARED_DIR=/music
     volumes:
       - /opt/slskd:/app
-      - /mammoth/downloads/soulseek:/downloads
+      - /mammoth/downloads:/downloads
       - /mammoth/library/music:/music:ro
     restart: unless-stopped
     network_mode: service:vpn
@@ -88,7 +88,7 @@ services:
     volumes:
       - /opt/radarr:/config
       - /mammoth/library/movies:/movies
-      - /mammoth/downloads/transmission:/downloads
+      - /mammoth/downloads:/downloads
     restart: unless-stopped
     network_mode: host
 
@@ -107,7 +107,7 @@ services:
     volumes:
       - /opt/sonarr:/config
       - /mammoth/library/tv:/tv
-      - /mammoth/downloads/transmission:/downloads
+      - /mammoth/downloads:/downloads
     restart: unless-stopped
     network_mode: host
 
@@ -126,8 +126,7 @@ services:
     volumes:
       - /opt/lidarr:/config
       - /mammoth/library/music:/music
-      - /mammoth/downloads/transmission:/downloads
-      - /mammoth/downloads/soulseek/complete:/downloads/soulseek
+      - /mammoth/downloads:/downloads
     restart: unless-stopped
     network_mode: host
 
@@ -146,7 +145,6 @@ services:
       - AUTO_UPDATE=true
     volumes:
       - /opt/jackett:/config
-      - /mammoth/downloads/transmission:/downloads
     ports:
       - 9117:9117
     restart: unless-stopped
