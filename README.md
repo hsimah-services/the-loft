@@ -26,6 +26,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Radarr | `linuxserver/radarr` | 7878 (host) | `/opt/radarr` | Movie management |
 | Sonarr | `linuxserver/sonarr` | 8989 (host) | `/opt/sonarr` | TV management |
 | Lidarr | `linuxserver/lidarr:nightly` | 8686 (host) | `/opt/lidarr` | Music management (nightly branch for plugin support) |
+| Bazarr | `linuxserver/bazarr` | 6767 (host) | `/opt/bazarr` | Automated subtitle management for Radarr + Sonarr |
 | Jackett | `linuxserver/jackett` | 9117 | `/opt/jackett` | Indexer proxy |
 | Mushr (proxy) | `caddy:2-alpine` + Cloudflare DNS module (custom build) | 80, 443, 8880 | `Caddyfile`, `Dockerfile.caddy` | Reverse proxy with HTTPS (Let's Encrypt via DNS-01) + LAN HTTP fallback; HTTP/3 disabled (`protocols h1 h2`) to prevent QUIC idle timeout issues |
 | Mushr (tunnel) | `cloudflare/cloudflared` | — (outbound only) | — | Cloudflare Tunnel — exposes Pulsr, hbla.ke, and hsimah.com externally without open ports |
@@ -41,7 +42,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Spinnik (DarkIce) | Custom build (`debian:bookworm-slim` + darkice) | — | `darkice.cfg` | Captures LP5X USB audio and encodes Ogg Vorbis stream to Icecast |
 | Spinnik (UI) | `nginx:alpine` | 8080 | `nginx.conf`, `ui/` | Touch-optimized vinyl controller with audio visualizer; proxies MA API (server-side Bearer auth) and Icecast stream (same-origin for Web Audio API) |
 
-Transmission and slskd route through a shared NordVPN (NordLynx) container (`stellarr-vpn`). Radarr, Sonarr, and Lidarr use host networking. All seven are managed together in `services/stellarr/docker-compose.yml`. Lidarr uses the `nightly` tag to enable the [Lidarr.Plugin.Slskd](https://github.com/allquiet-hub/Lidarr.Plugin.Slskd) plugin, which adds slskd as both an indexer and download client.
+Transmission and slskd route through a shared NordVPN (NordLynx) container (`stellarr-vpn`). Radarr, Sonarr, Lidarr, and Bazarr use host networking. All eight are managed together in `services/stellarr/docker-compose.yml`. Lidarr uses the `nightly` tag to enable the [Lidarr.Plugin.Slskd](https://github.com/allquiet-hub/Lidarr.Plugin.Slskd) plugin, which adds slskd as both an indexer and download client.
 
 Transmission torrents are automatically cleaned up by a cron job that runs nightly at midnight on space-needle. The `remove-torrents.sh` script (bind-mounted into the container) uses `transmission-remote` to find and remove any torrents that have reached a 200% seed ratio, deleting the download data. This is safe because Radarr/Sonarr/Lidarr hardlink files into `/mammoth/library` — the library copies are independent of the download directory. The cron job is installed to `/etc/cron.d/transmission-cleanup` by `setup.sh`. Docker log rotation (20m/3 files) handles Transmission's logging; no separate log rotation is needed.
 
@@ -190,6 +191,7 @@ Host-specific groups (e.g. `render,video` on space-needle) are configured in `ho
   /radarr                         Radarr configuration
   /sonarr                         Sonarr configuration
   /lidarr                         Lidarr configuration
+  /bazarr                         Bazarr configuration
   /jackett                        Jackett configuration
   /transmission                   Transmission configuration
   /slskd                          slskd configuration + state
@@ -244,6 +246,7 @@ Docker log rotation is configured at two levels:
 | cli | 1m | 2 | Only runs occasionally |
 | iditarod | 5m | 3 | CI runner — logs mostly during builds |
 | radarr/sonarr/lidarr | 5m | 3 | Moderate media management logging |
+| bazarr | 5m | 3 | Subtitle management logging |
 | slskd | 5m | 3 | Moderate logging |
 | jackett | 5m | 3 | Moderate logging |
 | mushr (caddy) | 5m | 3 | Reverse proxy access logging |
@@ -512,6 +515,7 @@ Real Let's Encrypt certificates via Cloudflare DNS-01 challenge. No open ports o
 | `https://radarr.loft.hsimah.com` | Radarr |
 | `https://sonarr.loft.hsimah.com` | Sonarr |
 | `https://lidarr.loft.hsimah.com` | Lidarr |
+| `https://bazarr.loft.hsimah.com` | Bazarr (subtitles) |
 | `https://jackett.loft.hsimah.com` | Jackett |
 | `https://pawpcorn.loft.hsimah.com` | Pawpcorn (Plex) |
 | `https://pupyrus.loft.hsimah.com` | WordPress |
@@ -533,6 +537,7 @@ HTTP-only, no TLS. Kept for backward compatibility.
 | `http://radarr.space-needle` | Radarr |
 | `http://sonarr.space-needle` | Sonarr |
 | `http://lidarr.space-needle` | Lidarr |
+| `http://bazarr.space-needle` | Bazarr (subtitles) |
 | `http://jackett.space-needle` | Jackett |
 | `http://pawpcorn.space-needle` | Pawpcorn (Plex) |
 | `http://pupyrus.space-needle` | WordPress |

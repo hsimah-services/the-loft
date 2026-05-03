@@ -131,6 +131,25 @@ services:
     restart: unless-stopped
     network_mode: host
 
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - /opt/bazarr:/config
+      - /mammoth/library/movies:/movies
+      - /mammoth/library/tv:/tv
+    restart: unless-stopped
+    network_mode: host
+
   jackett:
     image: lscr.io/linuxserver/jackett:latest
     container_name: jackett
