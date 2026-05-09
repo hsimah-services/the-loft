@@ -1,0 +1,16 @@
+services:
+  telstr-agent:
+    image: ghcr.io/henrygd/beszel-agent:latest
+    container_name: telstr-agent
+    restart: unless-stopped
+    network_mode: host
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      PORT: "45876"
+      KEY: "${TELSTR_KEY}"

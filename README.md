@@ -8,10 +8,10 @@ Fleet configuration for The Loft — a mono-repo managing all hosts (space-needl
 
 | Host | Role | Services |
 |------|------|----------|
-| `space-needle` | Primary server | mushr, pawpcorn, stellarr, pupyrus, iditarod, howlr (server), pulsr (+ phanpy), pawst |
-| `viking` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
-| `fjord` | Raspberry Pi 3 B+ | iditarod, howlr (client) |
-| `calavera` | Surface Pro 2 (kiosk + turntable) | howlr (client), spinnik |
+| `space-needle` | Primary server | mushr, pawpcorn, stellarr, pupyrus, iditarod, howlr (server), pulsr (+ phanpy), pawst, beacn, telstr (hub), telstr-agent |
+| `viking` | Raspberry Pi 3 B+ | iditarod, howlr (client), telstr-agent |
+| `fjord` | Raspberry Pi 3 B+ | iditarod, howlr (client), telstr-agent |
+| `calavera` | Surface Pro 2 (kiosk + turntable) | howlr (client), spinnik, telstr-agent |
 
 Each host has a config file at `hosts/<hostname>/host.conf` that declares its services, storage, directories, and health check URLs. A single `setup.sh` provisions any host by reading its config. Services that need post-deploy configuration have a `services/<name>/setup.sh` script that is automatically sourced after deployment.
 
@@ -41,6 +41,9 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Spinnik (Icecast) | `libretime/icecast:2.4.4` | 8000 | env vars | Icecast streaming server — serves vinyl audio from the LP5X turntable |
 | Spinnik (DarkIce) | Custom build (`debian:bookworm-slim` + darkice) | — | `darkice.cfg` | Captures LP5X USB audio and encodes Ogg Vorbis stream to Icecast |
 | Spinnik (UI) | `nginx:alpine` | 8080 | `nginx.conf`, `ui/` | Touch-optimized vinyl controller with audio visualizer; proxies MA API (server-side Bearer auth) and Icecast stream (same-origin for Web Audio API) |
+| Telstr | `ghcr.io/henrygd/beszel` | — (via Caddy) | `/opt/telstr/data` | Fleet monitoring hub (Beszel) — web dashboard showing host CPU/RAM/disk/network and per-container Docker stats across all fleet hosts |
+| Telstr Agent | `ghcr.io/henrygd/beszel-agent` | 45876 (host) | — | Beszel agent — runs on every host with `network_mode: host` to expose system and Docker metrics to the Telstr hub |
+| Beacn | `louislam/uptime-kuma:1` | — (via Caddy) | `/opt/beacn/data` | Uptime monitor (Uptime Kuma) — HTTP polls all fleet service endpoints and presents a live status dashboard |
 
 Transmission and slskd route through a shared NordVPN (NordLynx) container (`stellarr-vpn`). Radarr, Sonarr, Lidarr, and Bazarr use host networking. All eight are managed together in `services/stellarr/docker-compose.yml`. Lidarr uses the `nightly` tag to enable the [Lidarr.Plugin.Slskd](https://github.com/allquiet-hub/Lidarr.Plugin.Slskd) plugin, which adds slskd as both an indexer and download client.
 
@@ -119,13 +122,22 @@ the-loft/
 │   ├── pawst/
 │   │   ├── docker-compose.yml
 │   │   └── nginx.conf
-│   └── spinnik/
+│   ├── spinnik/
+│   │   ├── docker-compose.yml
+│   │   ├── Dockerfile.darkice
+│   │   ├── darkice.cfg
+│   │   ├── nginx.conf                       # Nginx config for UI (MA API + Icecast proxy)
+│   │   ├── ui/
+│   │   │   └── index.html                   # Vinyl turntable web controller + visualizer
+│   │   └── .env.example
+│   ├── telstr/
+│   │   ├── docker-compose.yml
+│   │   └── .env.example
+│   ├── telstr-agent/
+│   │   ├── docker-compose.yml
+│   │   └── .env.example
+│   └── beacn/
 │       ├── docker-compose.yml
-│       ├── Dockerfile.darkice
-│       ├── darkice.cfg
-│       ├── nginx.conf                       # Nginx config for UI (MA API + Icecast proxy)
-│       ├── ui/
-│       │   └── index.html                   # Vinyl turntable web controller + visualizer
 │       └── .env.example
 ├── control-plane/
 │   ├── common.sh
@@ -200,6 +212,8 @@ Host-specific groups (e.g. `render,video` on space-needle) are configured in `ho
   /iditarod                       GitHub Actions runner workdir
   /howlr                          Music Assistant data (Snapcast config, plugin state, library DB)
   /pulsr/data                     GoToSocial database + media storage
+  /telstr/data                    Beszel hub database + config
+  /beacn/data                     Uptime Kuma database + monitor config
 ```
 
 All `/opt` config dirs are owned `littledog:pack-member` (755). All `/mammoth` media dirs are owned `littledog:pack-member` (775). Viking/fjord have no storage mount or `/opt` directories.
@@ -260,6 +274,9 @@ Docker log rotation is configured at two levels:
 | spinnik-icecast | 5m | 3 | Icecast streaming server |
 | spinnik-darkice | 5m | 3 | DarkIce audio encoder |
 | spinnik-ui | 5m | 3 | Nginx serving vinyl controller UI |
+| telstr | 10m | 3 | Beszel monitoring hub |
+| telstr-agent | 5m | 3 | Beszel agent (host metrics + Docker stats) |
+| beacn | 10m | 3 | Uptime Kuma status monitor |
 
 ## Security Model
 
@@ -300,6 +317,9 @@ cp services/stellarr/.env.example services/stellarr/.env
 cp services/pupyrus/.env.example services/pupyrus/.env
 cp services/mushr/.env.example services/mushr/.env
 cp services/pulsr/.env.example services/pulsr/.env
+# On all hosts (telstr-agent):
+cp services/telstr-agent/.env.example services/telstr-agent/.env
+# Note: TELSTR_KEY is empty until the Telstr hub is running — fill it in after first launch (see Fleet Monitoring)
 
 # Edit each .env file with real values
 # Then run setup as root:
@@ -402,6 +422,47 @@ After each `rebuild` or `update`, the script verifies:
 4. Copy and fill in `.env` files for the host's services
 5. Run `sudo bash setup.sh`
 
+
+## Fleet Monitoring
+
+The Loft uses two complementary tools for fleet monitoring, both running on space-needle.
+
+### Telstr — Host Metrics & Docker Stats (Beszel)
+
+Telstr is the Beszel hub (`ghcr.io/henrygd/beszel`) — a web dashboard showing real-time and historical CPU, RAM, disk, and network metrics per host, plus per-container Docker stats. A lightweight agent (`telstr-agent`) runs on every host with `network_mode: host` so it can see both system resources and all Docker containers.
+
+**Setup (one-time after first deploy):**
+
+1. Deploy telstr on space-needle: `loft-ctl start telstr`
+2. Open `https://telstr.loft.hsimah.com` and create the admin account
+3. Click **Add System** for each host. Beszel will show a `docker run` command — copy the `KEY=` value
+4. Set `TELSTR_KEY=<value>` in `services/telstr-agent/.env` on **every host** (same key for all)
+5. Start the agents: `loft-ctl start telstr-agent` on each host
+6. Back in the Telstr UI, configure each system's connection:
+   - `space-needle`: host `localhost`, port `45876`
+   - `calavera`: host `calavera`, port `45876`
+   - `fjord` / `viking`: use each host's LAN IP, port `45876`
+
+> Add fjord and viking to `services/mushr/dnsmasq.conf` if they have static IPs, so you can use hostnames instead of IPs in the Telstr UI.
+
+### Beacn — Uptime Monitoring (Uptime Kuma)
+
+Beacn is Uptime Kuma (`louislam/uptime-kuma:1`) — an HTTP polling monitor with a live status dashboard. Configure monitors via the web UI at `https://beacn.loft.hsimah.com` pointing at the fleet's existing health check URLs (defined in each host's `host.conf`).
+
+**Suggested monitors** (from `hosts/space-needle/host.conf` `HEALTH_URLS`):
+
+| Monitor | URL |
+|---------|-----|
+| Pawpcorn | `https://pawpcorn.loft.hsimah.com` |
+| Radarr | `https://radarr.loft.hsimah.com` |
+| Sonarr | `https://sonarr.loft.hsimah.com` |
+| Lidarr | `https://lidarr.loft.hsimah.com` |
+| Bazarr | `https://bazarr.loft.hsimah.com` |
+| Jackett | `https://jackett.loft.hsimah.com` |
+| Howlr | `https://howlr.loft.hsimah.com` |
+| Pupyrus | `https://pupyrus.loft.hsimah.com` |
+| Pawst (hbla.ke) | `https://hbla.ke` |
+| Pawst (hsimah.com) | `https://hsimah.com` |
 
 ## Fleet Status Reporting
 
@@ -524,6 +585,8 @@ Real Let's Encrypt certificates via Cloudflare DNS-01 challenge. No open ports o
 | `https://soulseek.loft.hsimah.com` | slskd |
 | `https://howlr.loft.hsimah.com` | Music Assistant (Howlr) |
 | `https://snapweb.loft.hsimah.com` | Snapweb |
+| `https://telstr.loft.hsimah.com` | Telstr (Beszel fleet monitoring) |
+| `https://beacn.loft.hsimah.com` | Beacn (Uptime Kuma status) |
 | `https://hbla.ke` | Pawst (hbla.ke blog) |
 | `https://hsimah.com` | Pawst (hsimah.com blog) |
 | `https://loft.hsimah.com` | WordPress (default) |
@@ -546,6 +609,8 @@ HTTP-only, no TLS. Kept for backward compatibility.
 | `http://soulseek.space-needle` | slskd |
 | `http://howlr.space-needle` | Music Assistant (Howlr) |
 | `http://snapweb.space-needle` | Snapweb |
+| `http://telstr.space-needle` | Telstr (Beszel fleet monitoring) |
+| `http://beacn.space-needle` | Beacn (Uptime Kuma status) |
 | `http://pawst.space-needle` | Pawst (hbla.ke blog) |
 | `http://hsimah.space-needle` | Pawst (hsimah.com blog) |
 | `http://space-needle` | WordPress (default) |
@@ -599,6 +664,7 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Mushr | `LOFT_DOMAIN`, `CLOUDFLARE_API_TOKEN`, `TUNNEL_TOKEN` (edit `dnsmasq.conf` with LAN IP before deploying) |
 | Pulsr | `GTS_HOST`, `GTS_PROTOCOL`, `GTS_TOKEN` (for `pulsr-ctl post`), `TZ` |
 | Spinnik | `ICECAST_SOURCE_PASSWORD`, `ICECAST_ADMIN_PASSWORD` (source password must match `darkice.cfg`), `MA_HOST`, `MA_API_TOKEN` |
+| Telstr-agent | `TELSTR_KEY` (copy from Telstr hub after first launch — see Fleet Monitoring setup) |
 
 ## CI
 

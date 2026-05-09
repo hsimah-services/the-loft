@@ -97,6 +97,16 @@ howlr.{$LOFT_DOMAIN} {
 	reverse_proxy host.docker.internal:8095
 }
 
+telstr.{$LOFT_DOMAIN} {
+	import cloudflare_tls
+	reverse_proxy telstr:8090
+}
+
+beacn.{$LOFT_DOMAIN} {
+	import cloudflare_tls
+	reverse_proxy beacn:3001
+}
+
 hbla.ke {
 	import cloudflare_tls
 	reverse_proxy pawst:80
@@ -183,6 +193,14 @@ http://pawst.space-needle:80 {
 
 http://hsimah.space-needle:80 {
 	reverse_proxy pawst:80
+}
+
+http://telstr.space-needle:80 {
+	reverse_proxy telstr:8090
+}
+
+http://beacn.space-needle:80 {
+	reverse_proxy beacn:3001
 }
 
 http://space-needle:80 {
