@@ -59,8 +59,6 @@ services:
         define('GRAPHQL_JWT_AUTH_SECRET_KEY', '${GRAPHQL_JWT_AUTH_SECRET_KEY}');
     volumes:
       - /opt/pupyrus/html:/var/www/html
-    ports:
-      - "8081:80"
     restart: unless-stopped
     networks:
       - default
