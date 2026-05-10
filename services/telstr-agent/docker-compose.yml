@@ -10,10 +10,8 @@ services:
         max-size: "5m"
         max-file: "3"
     volumes:
-      - /opt/telstr/socket:/beszel_socket
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-      LISTEN: /beszel_socket/beszel.sock
       PORT: "45876"
       KEY: "${TELSTR_KEY}"
       TOKEN: "${TELSTR_TOKEN}"

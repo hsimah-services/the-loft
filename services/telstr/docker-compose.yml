@@ -10,7 +10,8 @@ services:
         max-file: "3"
     volumes:
       - /opt/telstr/data:/beszel_data
-      - /opt/telstr/socket:/beszel_socket
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - loft-proxy
 
