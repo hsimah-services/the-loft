@@ -1,6 +1,6 @@
 services:
   telstr:
-    image: ghcr.io/henrygd/beszel:latest
+    image: henrygd/beszel
     container_name: telstr
     restart: unless-stopped
     logging:
@@ -9,7 +9,8 @@ services:
         max-size: "10m"
         max-file: "3"
     volumes:
-      - /opt/telstr/data:/beszel/data
+      - /opt/telstr/data:/beszel_data
+      - /opt/telstr/socket:/beszel_socket
     networks:
       - loft-proxy
 
