@@ -8,7 +8,7 @@ Fleet configuration for The Loft — a mono-repo managing all hosts (space-needl
 
 | Host | Role | Services |
 |------|------|----------|
-| `space-needle` | Primary server | mushr, pawpcorn, stellarr, pupyrus, iditarod, howlr (server), pulsr (+ phanpy), pawst, beacn, telstr (hub), telstr-agent |
+| `space-needle` | Primary server | mushr, pawpcorn, stellarr, pupyrus, iditarod, howlr (server), pulsr (+ phanpy), pawst, beacn, telstr (hub), telstr-agent, snoot |
 | `viking` | Raspberry Pi 3 B+ | iditarod, howlr (client), telstr-agent |
 | `fjord` | Raspberry Pi 3 B+ | iditarod, howlr (client), telstr-agent |
 | `calavera` | Surface Pro 2 (kiosk + turntable) | howlr (client), spinnik, telstr-agent |
@@ -44,6 +44,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Telstr | `ghcr.io/henrygd/beszel` | — (via Caddy) | `/opt/telstr/data` | Fleet monitoring hub (Beszel) — web dashboard showing host CPU/RAM/disk/network and per-container Docker stats across all fleet hosts |
 | Telstr Agent | `ghcr.io/henrygd/beszel-agent` | 45876 (host) | — | Beszel agent — runs on every host with `network_mode: host` to expose system and Docker metrics to the Telstr hub |
 | Beacn | `louislam/uptime-kuma:1` | — (via Caddy) | `/opt/beacn/data` | Uptime monitor (Uptime Kuma) — HTTP polls all fleet service endpoints and presents a live status dashboard |
+| Snoot | `ghcr.io/gethomepage/homepage` | — (via Caddy) | `services/snoot/config/` (bind-mounted from repo) | Homepage dashboard — unified fleet overview with live widgets for Plex streams/library counts, *arr stats, download queue, and container status via Docker socket |
 
 Transmission and slskd route through a shared NordVPN (NordLynx) container (`stellarr-vpn`). Radarr, Sonarr, Lidarr, Bazarr, and Jackett run on the shared `loft-proxy` bridge network and are reachable only via Caddy (no host port mappings). Radarr/Sonarr/Lidarr have `host.docker.internal` mapped via `extra_hosts` so they can still reach Transmission and slskd at the VPN container's host-published ports. All eight are managed together in `services/stellarr/docker-compose.yml`. Lidarr uses the `nightly` tag to enable the [Lidarr.Plugin.Slskd](https://github.com/allquiet-hub/Lidarr.Plugin.Slskd) plugin, which adds slskd as both an indexer and download client.
 
@@ -53,7 +54,7 @@ Mushr provides a reverse proxy (Caddy) and wildcard DNS (dnsmasq) so all web ser
 - **`*.loft.hsimah.com`** — HTTPS with real Let's Encrypt certificates (via Cloudflare DNS-01 challenge, no open ports required)
 - **`*.space-needle`** — HTTP-only LAN fallback for backward compatibility
 
-A shared `loft-proxy` Docker bridge network connects Caddy to bridge-networked services (pupyrus, pulsr, pulsr-phanpy, pawst, radarr, sonarr, lidarr, bazarr, jackett, telstr, beacn, cloudflared); host-network services (pawpcorn, howlr, snapweb, transmission/slskd via the VPN container) are reached via `host.docker.internal`. Pulsr uses path-based routing: the Phanpy web client is the default, while GoToSocial API paths (`/api/*`, `/.well-known/*`, `/settings/*`, etc.) are proxied to GoToSocial directly.
+A shared `loft-proxy` Docker bridge network connects Caddy to bridge-networked services (pupyrus, pulsr, pulsr-phanpy, pawst, radarr, sonarr, lidarr, bazarr, jackett, telstr, beacn, snoot, cloudflared); host-network services (pawpcorn, howlr, snapweb, transmission/slskd via the VPN container) are reached via `host.docker.internal`. Pulsr uses path-based routing: the Phanpy web client is the default, while GoToSocial API paths (`/api/*`, `/.well-known/*`, `/settings/*`, etc.) are proxied to GoToSocial directly.
 
 A Cloudflare Tunnel (`mushr-tunnel`) provides external access to Pulsr and Pawst from outside the LAN. The tunnel makes outbound-only connections to Cloudflare's edge — no router ports need to be opened. LAN clients still resolve `pulsr.hsimah.com`, `hbla.ke`, and `hsimah.com` via dnsmasq to the LAN IP, so local traffic bypasses the tunnel entirely. Pulsr uses `pulsr.hsimah.com` (not `*.loft.hsimah.com`) because Cloudflare's free Universal SSL only covers single-level subdomains. Pawst serves two blogs: `hbla.ke` and `hsimah.com`, each with its own domain and Nginx server block.
 
@@ -136,9 +137,18 @@ the-loft/
 │   ├── telstr-agent/
 │   │   ├── docker-compose.yml
 │   │   └── .env.example
-│   └── beacn/
+│   ├── beacn/
+│   │   ├── docker-compose.yml
+│   │   └── .env.example
+│   └── snoot/
 │       ├── docker-compose.yml
-│       └── .env.example
+│       ├── .env.example
+│       └── config/                          # Homepage config (version-controlled, bind-mounted)
+│           ├── settings.yaml
+│           ├── services.yaml
+│           ├── widgets.yaml
+│           ├── bookmarks.yaml
+│           └── docker.yaml
 ├── control-plane/
 │   ├── common.sh
 │   ├── image-collector.sh               # Docker image update checker for fleet status reporting
@@ -216,6 +226,8 @@ Host-specific groups (e.g. `render,video` on space-needle) are configured in `ho
   /beacn/data                     Uptime Kuma database + monitor config
 ```
 
+Snoot (Homepage) has no `/opt` directory — its config YAML files live in `services/snoot/config/` and are bind-mounted directly from the repo into the container.
+
 All `/opt` config dirs are owned `littledog:pack-member` (755). All `/mammoth` media dirs are owned `littledog:pack-member` (775). Viking/fjord have no storage mount or `/opt` directories.
 
 ## Host Configuration
@@ -277,6 +289,7 @@ Docker log rotation is configured at two levels:
 | telstr | 10m | 3 | Beszel monitoring hub |
 | telstr-agent | 5m | 3 | Beszel agent (host metrics + Docker stats) |
 | beacn | 10m | 3 | Uptime Kuma status monitor |
+| snoot | 10m | 3 | Homepage fleet dashboard |
 
 ## Security Model
 
@@ -317,6 +330,9 @@ cp services/stellarr/.env.example services/stellarr/.env
 cp services/pupyrus/.env.example services/pupyrus/.env
 cp services/mushr/.env.example services/mushr/.env
 cp services/pulsr/.env.example services/pulsr/.env
+cp services/telstr/.env.example services/telstr/.env
+cp services/beacn/.env.example services/beacn/.env
+cp services/snoot/.env.example services/snoot/.env
 # On all hosts (telstr-agent):
 cp services/telstr-agent/.env.example services/telstr-agent/.env
 # Note: TELSTR_KEY is empty until the Telstr hub is running — fill it in after first launch (see Fleet Monitoring)

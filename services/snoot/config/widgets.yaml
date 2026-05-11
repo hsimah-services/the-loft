@@ -1,0 +1,16 @@
+---
+- greeting:
+    text_size: xl
+    text: "The Loft"
+- datetime:
+    text_size: l
+    format:
+      dateStyle: long
+      timeStyle: short
+      hour12: true
+- resources:
+    cpu: true
+    memory: true
+    disk: /
+    label: space-needle
+    expanded: true

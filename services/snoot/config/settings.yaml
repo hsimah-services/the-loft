@@ -1,0 +1,26 @@
+---
+title: The Loft
+theme: dark
+color: slate
+headerStyle: boxed
+useEqualHeights: true
+
+layout:
+  Media:
+    style: row
+    columns: 5
+  Downloads:
+    style: row
+    columns: 3
+  Audio:
+    style: row
+    columns: 3
+  Monitoring:
+    style: row
+    columns: 2
+  Infrastructure:
+    style: row
+    columns: 3
+  Web:
+    style: row
+    columns: 3

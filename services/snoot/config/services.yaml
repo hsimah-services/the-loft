@@ -1,0 +1,150 @@
+---
+- Media:
+    - Plex:
+        icon: plex.svg
+        href: https://pawpcorn.loft.hsimah.com
+        description: Media server
+        server: my-docker
+        container: pawpcorn
+        widget:
+          type: plex
+          url: http://host.docker.internal:32400
+          key: "{{HOMEPAGE_VAR_PLEX_TOKEN}}"
+    - Radarr:
+        icon: radarr.svg
+        href: https://radarr.loft.hsimah.com
+        description: Movies
+        server: my-docker
+        container: radarr
+        widget:
+          type: radarr
+          url: http://radarr:7878
+          key: "{{HOMEPAGE_VAR_RADARR_API_KEY}}"
+    - Sonarr:
+        icon: sonarr.svg
+        href: https://sonarr.loft.hsimah.com
+        description: TV shows
+        server: my-docker
+        container: sonarr
+        widget:
+          type: sonarr
+          url: http://sonarr:8989
+          key: "{{HOMEPAGE_VAR_SONARR_API_KEY}}"
+    - Lidarr:
+        icon: lidarr.svg
+        href: https://lidarr.loft.hsimah.com
+        description: Music
+        server: my-docker
+        container: lidarr
+        widget:
+          type: lidarr
+          url: http://lidarr:8686
+          key: "{{HOMEPAGE_VAR_LIDARR_API_KEY}}"
+    - Bazarr:
+        icon: bazarr.svg
+        href: https://bazarr.loft.hsimah.com
+        description: Subtitles
+        server: my-docker
+        container: bazarr
+        widget:
+          type: bazarr
+          url: http://bazarr:6767
+          key: "{{HOMEPAGE_VAR_BAZARR_API_KEY}}"
+
+- Downloads:
+    - Transmission:
+        icon: transmission.svg
+        href: https://transmission.loft.hsimah.com
+        description: BitTorrent
+        container: transmission
+        server: my-docker
+        widget:
+          type: transmission
+          url: http://host.docker.internal:9091
+          username: "{{HOMEPAGE_VAR_TRANSMISSION_USERNAME}}"
+          password: "{{HOMEPAGE_VAR_TRANSMISSION_PASSWORD}}"
+    - Soulseek:
+        icon: slskd.svg
+        href: https://soulseek.loft.hsimah.com
+        description: Music sharing
+        container: slskd
+        server: my-docker
+        widget:
+          type: slskd
+          url: http://host.docker.internal:5030
+          key: "{{HOMEPAGE_VAR_SLSKD_API_KEY}}"
+    - Jackett:
+        icon: jackett.svg
+        href: https://jackett.loft.hsimah.com
+        description: Indexer proxy
+        container: jackett
+        server: my-docker
+
+- Audio:
+    - Music Assistant:
+        icon: music-assistant.png
+        href: https://howlr.loft.hsimah.com
+        description: Streaming hub
+        container: howlr
+        server: my-docker
+    - Snapweb:
+        icon: snapcast.png
+        href: https://snapweb.loft.hsimah.com
+        description: Multi-room sync
+    - Spinnik:
+        href: http://spinnik.calavera
+        description: Vinyl stream
+        container: spinnik-icecast
+        server: my-docker
+
+- Monitoring:
+    - Telstr:
+        icon: beszel.png
+        href: https://telstr.loft.hsimah.com
+        description: Fleet metrics
+        container: telstr
+        server: my-docker
+    - Beacn:
+        icon: uptime-kuma.svg
+        href: https://beacn.loft.hsimah.com
+        description: Uptime monitoring
+        container: beacn
+        server: my-docker
+        widget:
+          type: uptimekuma
+          url: http://beacn:3001
+          slug: "{{HOMEPAGE_VAR_UPTIME_KUMA_SLUG}}"
+
+- Infrastructure:
+    - Iditarod:
+        icon: github.svg
+        href: https://github.com/hsimah-services
+        description: CI runner
+        container: iditarod
+        server: my-docker
+    - Mushr:
+        icon: caddy.svg
+        href: http://localhost:8880/config/
+        description: Reverse proxy
+        container: mushr
+        server: my-docker
+
+- Web:
+    - Pupyrus:
+        icon: wordpress.svg
+        href: https://pupyrus.loft.hsimah.com
+        description: WordPress
+        container: pupyrus
+        server: my-docker
+    - Pulsr:
+        icon: mastodon.svg
+        href: https://pulsr.hsimah.com
+        description: Mastodon
+        container: pulsr
+        server: my-docker
+    - hbla.ke:
+        icon: si-hugo
+        href: https://hbla.ke
+        description: Personal site
+        container: pawst
+        server: my-docker
