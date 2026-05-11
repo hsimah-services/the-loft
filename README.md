@@ -447,7 +447,7 @@ The Beszel hub (`henrygd/beszel`) is a web dashboard showing real-time and histo
 4. Set `BESZEL_KEY=<value>` in `services/snoot/.env` on **every host** (same key for all)
 5. Start the agents: `loft-ctl start snoot` on each host
 6. Back in the Beszel UI, configure each system's connection:
-   - `space-needle`: host `localhost`, port `45876`
+   - `space-needle`: host `host.docker.internal`, port `45876` (the hub container can't reach `localhost`; `host.docker.internal` resolves to the host gateway via the `extra_hosts` entry in the compose)
    - `calavera`: host `calavera`, port `45876`
    - `fjord` / `viking`: use each host's LAN IP, port `45876`
 
@@ -471,6 +471,12 @@ Uptime Kuma (`louislam/uptime-kuma:1`) is an HTTP polling monitor with a live st
 | Pupyrus | `https://pupyrus.loft.hsimah.com` |
 | Pawst (hbla.ke) | `https://hbla.ke` |
 | Pawst (hsimah.com) | `https://hsimah.com` |
+
+### Homepage — Fleet Dashboard
+
+Homepage (`ghcr.io/gethomepage/homepage`) is a unified fleet overview at `https://homepage.loft.hsimah.com`, with live widgets for Plex streams/library counts, *arr stats, download queue, and container status via the Docker socket.
+
+Configuration lives in `services/houstn/homepage-config/` (bind-mounted from the repo, version-controlled): `services.yaml`, `widgets.yaml`, `bookmarks.yaml`, `settings.yaml`, `docker.yaml`. API tokens and other secrets are kept out of the YAML and substituted from `services/houstn/.env` via `HOMEPAGE_VAR_*` placeholders (e.g. `{{HOMEPAGE_VAR_RADARR_API_KEY}}`).
 
 ## Fleet Status Reporting
 
@@ -674,7 +680,8 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Mushr | `LOFT_DOMAIN`, `CLOUDFLARE_API_TOKEN`, `TUNNEL_TOKEN` (edit `dnsmasq.conf` with LAN IP before deploying) |
 | Pulsr | `GTS_HOST`, `GTS_PROTOCOL`, `GTS_TOKEN` (for `pulsr-ctl post`), `TZ` |
 | Spinnik | `ICECAST_SOURCE_PASSWORD`, `ICECAST_ADMIN_PASSWORD` (source password must match `darkice.cfg`), `MA_HOST`, `MA_API_TOKEN` |
-| Telstr-agent | `TELSTR_KEY` (copy from Telstr hub after first launch — see Fleet Monitoring setup) |
+| Houstn | `HOMEPAGE_VAR_*` placeholders for the Homepage dashboard (Plex token, *arr API keys, Transmission/slskd creds, Uptime Kuma slug). Beszel and Uptime Kuma have no required env vars |
+| Snoot | `BESZEL_KEY`, `BESZEL_TOKEN` (copy from the Beszel hub UI after first launch — see Fleet Monitoring setup) |
 
 ## CI
 
