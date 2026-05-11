@@ -97,19 +97,19 @@ howlr.{$LOFT_DOMAIN} {
 	reverse_proxy host.docker.internal:8095
 }
 
-snoot.{$LOFT_DOMAIN} {
+homepage.{$LOFT_DOMAIN} {
 	import cloudflare_tls
-	reverse_proxy snoot:3000
+	reverse_proxy homepage:3000
 }
 
-telstr.{$LOFT_DOMAIN} {
+beszel.{$LOFT_DOMAIN} {
 	import cloudflare_tls
-	reverse_proxy telstr:8090
+	reverse_proxy beszel:8090
 }
 
-beacn.{$LOFT_DOMAIN} {
+uptime.{$LOFT_DOMAIN} {
 	import cloudflare_tls
-	reverse_proxy beacn:3001
+	reverse_proxy uptime:3001
 }
 
 hbla.ke {
@@ -200,16 +200,16 @@ http://hsimah.space-needle:80 {
 	reverse_proxy pawst:80
 }
 
-http://snoot.space-needle:80 {
-	reverse_proxy snoot:3000
+http://homepage.space-needle:80 {
+	reverse_proxy homepage:3000
 }
 
-http://telstr.space-needle:80 {
-	reverse_proxy telstr:8090
+http://beszel.space-needle:80 {
+	reverse_proxy beszel:8090
 }
 
-http://beacn.space-needle:80 {
-	reverse_proxy beacn:3001
+http://uptime.space-needle:80 {
+	reverse_proxy uptime:3001
 }
 
 http://space-needle:80 {

@@ -98,21 +98,21 @@
         server: my-docker
 
 - Monitoring:
-    - Telstr:
+    - Beszel:
         icon: beszel.png
-        href: https://telstr.loft.hsimah.com
+        href: https://beszel.loft.hsimah.com
         description: Fleet metrics
-        container: telstr
+        container: beszel
         server: my-docker
-    - Beacn:
+    - Uptime Kuma:
         icon: uptime-kuma.svg
-        href: https://beacn.loft.hsimah.com
+        href: https://uptime.loft.hsimah.com
         description: Uptime monitoring
-        container: beacn
+        container: uptime
         server: my-docker
         widget:
           type: uptimekuma
-          url: http://beacn:3001
+          url: http://uptime:3001
           slug: "{{HOMEPAGE_VAR_UPTIME_KUMA_SLUG}}"
 
 - Infrastructure:

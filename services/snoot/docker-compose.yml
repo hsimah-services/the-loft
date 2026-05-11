@@ -1,24 +1,17 @@
 services:
   snoot:
-    image: ghcr.io/gethomepage/homepage:latest
+    image: henrygd/beszel-agent
     container_name: snoot
     restart: unless-stopped
+    network_mode: host
     logging:
       driver: json-file
       options:
-        max-size: "10m"
+        max-size: "5m"
         max-file: "3"
-    env_file: .env
-    environment:
-      - HOMEPAGE_ALLOWED_HOSTS=snoot.loft.hsimah.com,snoot.space-needle
     volumes:
-      - ./config:/app/config
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks:
-      - loft-proxy
-
-networks:
-  loft-proxy:
-    external: true
+    environment:
+      PORT: "45876"
+      KEY: "${BESZEL_KEY}"
+      TOKEN: "${BESZEL_TOKEN}"

@@ -1,0 +1,54 @@
+services:
+  beszel:
+    image: henrygd/beszel
+    container_name: beszel
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - /opt/houstn/beszel/data:/beszel_data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - loft-proxy
+
+  uptime:
+    image: louislam/uptime-kuma:1
+    container_name: uptime
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - /opt/houstn/uptime/data:/app/data
+    networks:
+      - loft-proxy
+
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    env_file: .env
+    environment:
+      - HOMEPAGE_ALLOWED_HOSTS=homepage.loft.hsimah.com,homepage.space-needle
+    volumes:
+      - ./homepage-config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - loft-proxy
+
+networks:
+  loft-proxy:
+    external: true
