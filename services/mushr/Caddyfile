@@ -1,5 +1,5 @@
 {
-	admin :8880
+	admin 127.0.0.1:8880
 	servers {
 		protocols h1 h2
 		trusted_proxies static private_ranges
@@ -39,27 +39,27 @@
 
 radarr.{$LOFT_DOMAIN} {
 	import cloudflare_tls
-	reverse_proxy host.docker.internal:7878
+	reverse_proxy radarr:7878
 }
 
 sonarr.{$LOFT_DOMAIN} {
 	import cloudflare_tls
-	reverse_proxy host.docker.internal:8989
+	reverse_proxy sonarr:8989
 }
 
 lidarr.{$LOFT_DOMAIN} {
 	import cloudflare_tls
-	reverse_proxy host.docker.internal:8686
+	reverse_proxy lidarr:8686
 }
 
 bazarr.{$LOFT_DOMAIN} {
 	import cloudflare_tls
-	reverse_proxy host.docker.internal:6767
+	reverse_proxy bazarr:6767
 }
 
 jackett.{$LOFT_DOMAIN} {
 	import cloudflare_tls
-	reverse_proxy host.docker.internal:9117
+	reverse_proxy jackett:9117
 }
 
 pawpcorn.{$LOFT_DOMAIN} {
@@ -135,23 +135,23 @@ http://hsimah.com {
 # ══════════════════════════════════════════════════════════════════════════════
 
 http://radarr.space-needle:80 {
-	reverse_proxy host.docker.internal:7878
+	reverse_proxy radarr:7878
 }
 
 http://sonarr.space-needle:80 {
-	reverse_proxy host.docker.internal:8989
+	reverse_proxy sonarr:8989
 }
 
 http://lidarr.space-needle:80 {
-	reverse_proxy host.docker.internal:8686
+	reverse_proxy lidarr:8686
 }
 
 http://bazarr.space-needle:80 {
-	reverse_proxy host.docker.internal:6767
+	reverse_proxy bazarr:6767
 }
 
 http://jackett.space-needle:80 {
-	reverse_proxy host.docker.internal:9117
+	reverse_proxy jackett:9117
 }
 
 http://pawpcorn.space-needle:80 {

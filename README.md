@@ -23,21 +23,21 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Stellarr VPN | `bubuntux/nordvpn` | 9091, 5030 | — | Shared NordLynx VPN for Transmission + slskd |
 | Transmission | `linuxserver/transmission` | 9091 (via VPN) | `/opt/transmission` | Torrent client |
 | slskd | `slskd/slskd` | 5030 (via VPN) | `/opt/slskd` | Soulseek client (API-driven) — indexer + download client for Lidarr via plugin |
-| Radarr | `linuxserver/radarr` | 7878 (host) | `/opt/radarr` | Movie management |
-| Sonarr | `linuxserver/sonarr` | 8989 (host) | `/opt/sonarr` | TV management |
-| Lidarr | `linuxserver/lidarr:nightly` | 8686 (host) | `/opt/lidarr` | Music management (nightly branch for plugin support) |
-| Bazarr | `linuxserver/bazarr` | 6767 (host) | `/opt/bazarr` | Automated subtitle management for Radarr + Sonarr |
-| Jackett | `linuxserver/jackett` | 9117 | `/opt/jackett` | Indexer proxy |
-| Mushr (proxy) | `caddy:2-alpine` + Cloudflare DNS module (custom build) | 80, 443, 8880 | `Caddyfile`, `Dockerfile.caddy` | Reverse proxy with HTTPS (Let's Encrypt via DNS-01) + LAN HTTP fallback; HTTP/3 disabled (`protocols h1 h2`) to prevent QUIC idle timeout issues |
+| Radarr | `linuxserver/radarr` | — (via Caddy) | `/opt/radarr` | Movie management |
+| Sonarr | `linuxserver/sonarr` | — (via Caddy) | `/opt/sonarr` | TV management |
+| Lidarr | `linuxserver/lidarr:nightly` | — (via Caddy) | `/opt/lidarr` | Music management (nightly branch for plugin support) |
+| Bazarr | `linuxserver/bazarr` | — (via Caddy) | `/opt/bazarr` | Automated subtitle management for Radarr + Sonarr |
+| Jackett | `linuxserver/jackett` | — (via Caddy) | `/opt/jackett` | Indexer proxy |
+| Mushr (proxy) | `caddy:2-alpine` + Cloudflare DNS module (custom build) | 80, 443 | `Caddyfile`, `Dockerfile.caddy` | Reverse proxy with HTTPS (Let's Encrypt via DNS-01) + LAN HTTP fallback; HTTP/3 disabled (`protocols h1 h2`) to prevent QUIC idle timeout issues; Caddy admin API bound to container loopback only |
 | Mushr (tunnel) | `cloudflare/cloudflared` | — (outbound only) | — | Cloudflare Tunnel — exposes Pulsr, hbla.ke, and hsimah.com externally without open ports |
 | Mushr (DNS) | `drpsychick/dnsmasq` | 53/udp, 53/tcp | `dnsmasq.conf` | Wildcard DNS — resolves `*.space-needle` and `*.loft.hsimah.com` to LAN IP |
-| Pupyrus | `wordpress` + `mariadb` + `redis` | 8081 | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
+| Pupyrus | `wordpress` + `mariadb` + `redis` | — (via Caddy) | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
 | Iditarod | `actions/actions-runner` (custom build) | — | `.env` per host, `/etc/loft/iditarod-app.pem` | Self-hosted GitHub Actions runner (org-level, serves all hsimah-services repos). Authenticates via GitHub App (private key → JWT → installation token) — no expiring PATs |
 | Howlr (Music Assistant) | `ghcr.io/music-assistant/server` | 1704, 1705, 1780, 8095 (host) | `/opt/howlr` | Music library manager + multi-room audio server with built-in Snapcast, Spotify Connect, and AirPlay receiver |
 | Howlr snapclient | `ivdata/snapclient` | host network | `.env` per host | Snapcast client (receives stream, outputs to speakers) |
 | Pulsr | `superseriousbusiness/gotosocial` | — (via Caddy) | `/opt/pulsr/data` | Self-hosted fediverse instance (GoToSocial) for status updates, household messaging, and fleet status reporting |
 | Pulsr Phanpy | `ghcr.io/yitsushi/phanpy-docker` | — | — | Web client for GoToSocial (served at `pulsr.space-needle/`) |
-| Pawst | `nginx:alpine` | 8085 (bridge) | `nginx.conf`, `hblake-html` + `hsimah-html` volumes | Static blogs — serves `hbla.ke` and `hsimah.com` via Nginx server_name routing (dist deployed by CI via `docker cp`) |
+| Pawst | `nginx:alpine` | — (via Caddy) | `nginx.conf`, `hblake-html` + `hsimah-html` volumes | Static blogs — serves `hbla.ke` and `hsimah.com` via Nginx server_name routing (dist deployed by CI via `docker cp`) |
 | Spinnik (Icecast) | `libretime/icecast:2.4.4` | 8000 | env vars | Icecast streaming server — serves vinyl audio from the LP5X turntable |
 | Spinnik (DarkIce) | Custom build (`debian:bookworm-slim` + darkice) | — | `darkice.cfg` | Captures LP5X USB audio and encodes Ogg Vorbis stream to Icecast |
 | Spinnik (UI) | `nginx:alpine` | 8080 | `nginx.conf`, `ui/` | Touch-optimized vinyl controller with audio visualizer; proxies MA API (server-side Bearer auth) and Icecast stream (same-origin for Web Audio API) |
@@ -45,7 +45,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Telstr Agent | `ghcr.io/henrygd/beszel-agent` | 45876 (host) | — | Beszel agent — runs on every host with `network_mode: host` to expose system and Docker metrics to the Telstr hub |
 | Beacn | `louislam/uptime-kuma:1` | — (via Caddy) | `/opt/beacn/data` | Uptime monitor (Uptime Kuma) — HTTP polls all fleet service endpoints and presents a live status dashboard |
 
-Transmission and slskd route through a shared NordVPN (NordLynx) container (`stellarr-vpn`). Radarr, Sonarr, Lidarr, and Bazarr use host networking. All eight are managed together in `services/stellarr/docker-compose.yml`. Lidarr uses the `nightly` tag to enable the [Lidarr.Plugin.Slskd](https://github.com/allquiet-hub/Lidarr.Plugin.Slskd) plugin, which adds slskd as both an indexer and download client.
+Transmission and slskd route through a shared NordVPN (NordLynx) container (`stellarr-vpn`). Radarr, Sonarr, Lidarr, Bazarr, and Jackett run on the shared `loft-proxy` bridge network and are reachable only via Caddy (no host port mappings). Radarr/Sonarr/Lidarr have `host.docker.internal` mapped via `extra_hosts` so they can still reach Transmission and slskd at the VPN container's host-published ports. All eight are managed together in `services/stellarr/docker-compose.yml`. Lidarr uses the `nightly` tag to enable the [Lidarr.Plugin.Slskd](https://github.com/allquiet-hub/Lidarr.Plugin.Slskd) plugin, which adds slskd as both an indexer and download client.
 
 Transmission torrents are automatically cleaned up by a cron job that runs nightly at midnight on space-needle. The `remove-torrents.sh` script (bind-mounted into the container) uses `transmission-remote` to find and remove any torrents that have reached a 200% seed ratio, deleting the download data. This is safe because Radarr/Sonarr/Lidarr hardlink files into `/mammoth/library` — the library copies are independent of the download directory. The cron job is installed to `/etc/cron.d/transmission-cleanup` by `setup.sh`. Docker log rotation (20m/3 files) handles Transmission's logging; no separate log rotation is needed.
 
@@ -53,7 +53,7 @@ Mushr provides a reverse proxy (Caddy) and wildcard DNS (dnsmasq) so all web ser
 - **`*.loft.hsimah.com`** — HTTPS with real Let's Encrypt certificates (via Cloudflare DNS-01 challenge, no open ports required)
 - **`*.space-needle`** — HTTP-only LAN fallback for backward compatibility
 
-A shared `loft-proxy` Docker bridge network connects Caddy to bridge-networked services (pupyrus, pulsr, pulsr-phanpy, pawst, cloudflared); host-network services are reached via `host.docker.internal`. Pulsr uses path-based routing: the Phanpy web client is the default, while GoToSocial API paths (`/api/*`, `/.well-known/*`, `/settings/*`, etc.) are proxied to GoToSocial directly.
+A shared `loft-proxy` Docker bridge network connects Caddy to bridge-networked services (pupyrus, pulsr, pulsr-phanpy, pawst, radarr, sonarr, lidarr, bazarr, jackett, telstr, beacn, cloudflared); host-network services (pawpcorn, howlr, snapweb, transmission/slskd via the VPN container) are reached via `host.docker.internal`. Pulsr uses path-based routing: the Phanpy web client is the default, while GoToSocial API paths (`/api/*`, `/.well-known/*`, `/settings/*`, etc.) are proxied to GoToSocial directly.
 
 A Cloudflare Tunnel (`mushr-tunnel`) provides external access to Pulsr and Pawst from outside the LAN. The tunnel makes outbound-only connections to Cloudflare's edge — no router ports need to be opened. LAN clients still resolve `pulsr.hsimah.com`, `hbla.ke`, and `hsimah.com` via dnsmasq to the LAN IP, so local traffic bypasses the tunnel entirely. Pulsr uses `pulsr.hsimah.com` (not `*.loft.hsimah.com`) because Cloudflare's free Universal SSL only covers single-level subdomains. Pawst serves two blogs: `hbla.ke` and `hsimah.com`, each with its own domain and Nginx server block.
 
@@ -615,7 +615,7 @@ HTTP-only, no TLS. Kept for backward compatibility.
 | `http://hsimah.space-needle` | Pawst (hsimah.com blog) |
 | `http://space-needle` | WordPress (default) |
 
-Direct port access (e.g. `space-needle:7878`) continues to work for all services.
+Direct port access continues to work for host-networked services (Plex on 32400, Music Assistant on 8095, Transmission on 9091, slskd on 5030, snapweb on 1780). Bridged services (Radarr/Sonarr/Lidarr/Bazarr/Jackett, Pupyrus, Pawst) no longer publish ports on the host — they are only reachable via Caddy at their `*.space-needle` or `*.loft.hsimah.com` URLs.
 
 ### DNS Setup
 

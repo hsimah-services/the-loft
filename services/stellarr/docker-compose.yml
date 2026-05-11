@@ -91,7 +91,10 @@ services:
       - /mammoth/library/movies:/movies
       - /mammoth/downloads:/downloads
     restart: unless-stopped
-    network_mode: host
+    networks:
+      - loft-proxy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   sonarr:
     image: lscr.io/linuxserver/sonarr:latest
@@ -110,7 +113,10 @@ services:
       - /mammoth/library/tv:/tv
       - /mammoth/downloads:/downloads
     restart: unless-stopped
-    network_mode: host
+    networks:
+      - loft-proxy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   lidarr:
     image: lscr.io/linuxserver/lidarr:nightly
@@ -129,7 +135,10 @@ services:
       - /mammoth/library/music:/music
       - /mammoth/downloads:/downloads
     restart: unless-stopped
-    network_mode: host
+    networks:
+      - loft-proxy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   bazarr:
     image: lscr.io/linuxserver/bazarr:latest
@@ -148,7 +157,8 @@ services:
       - /mammoth/library/movies:/movies
       - /mammoth/library/tv:/tv
     restart: unless-stopped
-    network_mode: host
+    networks:
+      - loft-proxy
 
   jackett:
     image: lscr.io/linuxserver/jackett:latest
@@ -165,6 +175,10 @@ services:
       - AUTO_UPDATE=true
     volumes:
       - /opt/jackett:/config
-    ports:
-      - 9117:9117
     restart: unless-stopped
+    networks:
+      - loft-proxy
+
+networks:
+  loft-proxy:
+    external: true
