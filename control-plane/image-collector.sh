@@ -16,7 +16,7 @@ is_remote_image() {
     return 0
   fi
   # Docker Hub images: either "image:tag" (official) or "org/image:tag"
-  # Local builds typically have no slash and no dot (e.g. "mushr", "iditarod")
+  # Local builds typically have no slash and no dot (e.g. "mushr")
   if [[ "$ref" == *"/"* ]]; then
     return 0
   fi

@@ -10,14 +10,10 @@ services:
         max-file: "3"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - hblake-html:/usr/share/nginx/hblake
-      - hsimah-html:/usr/share/nginx/hsimah
+      - /opt/pawst/hblake-html:/usr/share/nginx/hblake:ro
+      - /opt/pawst/hsimah-html:/usr/share/nginx/hsimah:ro
     networks:
       - loft-proxy
-
-volumes:
-  hblake-html:
-  hsimah-html:
 
 networks:
   loft-proxy:

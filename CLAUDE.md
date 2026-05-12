@@ -36,8 +36,8 @@ Service names are creative, single-word names inspired by two theme pools:
 
 Names should feel like a natural mashup or wordplay connecting the theme to what the service does, not a literal description. Examples of existing names and their reasoning:
 - **howlr** — audio streaming; huskies howl (dog theme)
-- **iditarod** — CI runner; Iditarod is a sled dog race, runners run (dog theme)
 - **pupyrus** — WordPress site; puppy + papyrus, a writing surface (dog theme)
+- **mushr** — reverse proxy; mushers drive sled dog teams, the proxy "drives" requests (dog theme)
 - **laiko** / **belki** — the owner's pomskies, named after Laika and Belka, dogs launched into space (both themes)
 
 When asked for naming suggestions, offer a few options from each theme pool with a brief note on the wordplay.
@@ -50,6 +50,6 @@ Host names are inspired by **something physically visible** from the owner's loc
 When suggesting host names, ask the user what they can see around them and riff on that.
 
 ### Container Names Within Services
-- Single-container services use the service name directly: `pawpcorn`, `iditarod`, `snoot`
+- Single-container services use the service name directly: `pawpcorn`, `snoot`
 - Multi-container services that have one "primary" container use the service name for that one and prefix helpers: `pulsr` + `pulsr-phanpy`; `mushr` + `mushr-tunnel`/`mushr-dns`; `howlr` + `howlr-snapclient`; `pupyrus` + `pupyrus-db`/`pupyrus-redis`/`pupyrus-cli`
 - Bundle services (a single compose grouping several independent products under one umbrella name, like stellarr or houstn) name each product container directly with the product's own name (`radarr`, `sonarr`, `transmission`, `slskd`, `beszel`, `uptime`, `homepage`); only glue/infrastructure containers get the service-name prefix (`stellarr-vpn`)

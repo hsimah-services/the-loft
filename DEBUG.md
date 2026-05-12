@@ -27,7 +27,6 @@ Debugging guide for Docker services on The Loft fleet. All commands assume you'r
 | **pawpcorn** | `pawpcorn` |
 | **stellarr** | `stellarr-vpn`, `transmission`, `slskd`, `radarr`, `sonarr`, `lidarr`, `jackett` |
 | **pupyrus** | `pupyrus-db`, `pupyrus-redis`, `pupyrus`, `pupyrus-cli` (cli profile only) |
-| **iditarod** | `iditarod` |
 | **howlr** | `howlr-snapserver`, `howlr-shairport-sync`, `howlr-librespot`, `howlr-snapclient` |
 | **pulsr** | `pulsr`, `pulsr-phanpy` |
 | **pawst** | `pawst` |
@@ -37,15 +36,15 @@ Debugging guide for Docker services on The Loft fleet. All commands assume you'r
 | Label | URL | Required? |
 |-------|-----|-----------|
 | pawpcorn | `http://localhost:32400/web` | Yes |
-| radarr | `http://localhost:7878` | Yes |
-| sonarr | `http://localhost:8989` | Yes |
-| lidarr | `http://localhost:8686` | Yes |
-| jackett | `http://localhost:9117` | Yes |
-| pupyrus | `http://localhost:8081` | Yes |
-| mushr | `http://localhost:8880/config/` | Yes |
+| radarr | `http://radarr.space-needle` | Yes (via Caddy) |
+| sonarr | `http://sonarr.space-needle` | Yes (via Caddy) |
+| lidarr | `http://lidarr.space-needle` | Yes (via Caddy) |
+| jackett | `http://jackett.space-needle` | Yes (via Caddy) |
+| pupyrus | `http://pupyrus.space-needle` | Yes (via Caddy) |
+| mushr | `http://localhost:8880/config/` | Yes (host-only admin API) |
 | snapweb | `http://localhost:1780` | Yes |
 | pulsr | `https://pulsr.hsimah.com/api/v1/instance` | Yes |
-| pawst | `http://localhost:8085` | Yes |
+| pawst | `http://pawst.space-needle` | Yes (via Caddy) |
 | transmission | `http://localhost:9091` | Warn only (VPN) |
 | slskd | `http://localhost:5030` | Warn only (VPN) |
 
@@ -665,16 +664,20 @@ sudo docker stats --no-stream
 # If on a Pi, reduce services or add memory limits in compose
 ```
 
-### iditarod runner offline (token expired)
+### deploy-pull.sh isn't pulling a new release
 
-**Symptom:** GitHub Actions runner shows as offline in the org settings. Container is running but not picking up jobs.
+**Symptom:** A new tag/release exists in the source repo but `/opt/<target>` still contains the old build.
 
-**Cause:** The `GITHUB_ACCESS_TOKEN` in `services/iditarod/.env` has expired.
+**Checks:**
+1. Inspect the puller log: `sudo tail -n 50 /var/log/loft/deploy.log`
+2. Check the state file: `sudo cat /var/lib/loft/deploy/<name>.version` (should be the previously deployed tag)
+3. Force a run: `sudo /srv/the-loft/control-plane/deploy-pull.sh <name> <owner/repo> <target>`
+4. If the run errors on auth, confirm `/etc/loft/deploy.env` is present (private repo) or absent (public repo) as intended, and that the App private key is readable.
 
-**Fix:**
-1. Generate a new token at GitHub > Settings > Developer settings > Personal access tokens
-2. Update `GITHUB_ACCESS_TOKEN` in `services/iditarod/.env`
-3. `loft-ctl rebuild iditarod`
+**Common causes:**
+- The release has no `.tar.gz` asset attached — `deploy-pull.sh` only pulls `.tar.gz` files
+- The release was published as a draft — `releases/latest` skips drafts
+- GitHub App installation doesn't include the repo with `Contents: Read`
 
 ### dnsmasq port 53 conflict with systemd-resolved
 

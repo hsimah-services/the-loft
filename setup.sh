@@ -219,6 +219,10 @@ info "Directory structure created"
 info "Creating log directory..."
 mkdir -p /var/log/loft
 
+# ─── 9b. Deploy state directory ─────────────────────────────────────────────
+mkdir -p /var/lib/loft/deploy
+chmod 755 /var/lib/loft/deploy
+
 # ─── 10. Docker install ──────────────────────────────────────────────────────
 info "Checking Docker..."
 
@@ -487,6 +491,22 @@ cat > /etc/cron.d/loft-pulsr-report <<EOF
 EOF
 chmod 644 /etc/cron.d/loft-pulsr-report
 info "Installed Pulsr status report cron job"
+
+# Deploy puller cron entries (one per DEPLOY_TARGETS entry)
+# Clear any stale entries from a previous run before installing fresh ones.
+rm -f /etc/cron.d/loft-deploy-*
+if [[ ${#DEPLOY_TARGETS[@]:-0} -gt 0 ]]; then
+  for entry in "${DEPLOY_TARGETS[@]}"; do
+    IFS='|' read -r dt_name dt_repo dt_target dt_hook <<< "$entry"
+    safe_name="${dt_name//[^a-zA-Z0-9-]/-}"
+    cat > "/etc/cron.d/loft-deploy-${safe_name}" <<EOF
+# Release puller for ${dt_repo} → ${dt_target} — installed by setup.sh
+0 * * * * root ${REPO_DIR}/control-plane/deploy-pull.sh '${dt_name}' '${dt_repo}' '${dt_target}' '${dt_hook}' >> /var/log/loft/deploy.log 2>&1
+EOF
+    chmod 644 "/etc/cron.d/loft-deploy-${safe_name}"
+    info "Installed deploy puller cron: ${safe_name} (${dt_repo})"
+  done
+fi
 
 # ─── 12a. Pulsr reporting credentials ────────────────────────────────────────
 # Obtain API token and write /etc/loft/pulsr.env for this host

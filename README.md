@@ -8,9 +8,9 @@ Fleet configuration for The Loft — a mono-repo managing all hosts (space-needl
 
 | Host | Role | Services |
 |------|------|----------|
-| `space-needle` | Primary server | mushr, pawpcorn, stellarr, pupyrus, iditarod, howlr (server), pulsr (+ phanpy), pawst, houstn (beszel hub + uptime + homepage), snoot |
-| `viking` | Raspberry Pi 3 B+ | iditarod, howlr (client), snoot |
-| `fjord` | Raspberry Pi 3 B+ | iditarod, howlr (client), snoot |
+| `space-needle` | Primary server | mushr, pawpcorn, stellarr, pupyrus, howlr (server), pulsr (+ phanpy), pawst, houstn (beszel hub + uptime + homepage), snoot |
+| `viking` | Raspberry Pi 3 B+ | howlr (client), snoot |
+| `fjord` | Raspberry Pi 3 B+ | howlr (client), snoot |
 | `calavera` | Surface Pro 2 (kiosk + turntable) | howlr (client), spinnik, snoot |
 
 Each host has a config file at `hosts/<hostname>/host.conf` that declares its services, storage, directories, and health check URLs. A single `setup.sh` provisions any host by reading its config. Services that need post-deploy configuration have a `services/<name>/setup.sh` script that is automatically sourced after deployment.
@@ -32,12 +32,11 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Mushr (tunnel) | `cloudflare/cloudflared` | — (outbound only) | — | Cloudflare Tunnel — exposes Pulsr, hbla.ke, and hsimah.com externally without open ports |
 | Mushr (DNS) | `drpsychick/dnsmasq` | 53/udp, 53/tcp | `dnsmasq.conf` | Wildcard DNS — resolves `*.space-needle` and `*.loft.hsimah.com` to LAN IP |
 | Pupyrus | `wordpress` + `mariadb` + `redis` | — (via Caddy) | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
-| Iditarod | `actions/actions-runner` (custom build) | — | `.env` per host, `/etc/loft/iditarod-app.pem` | Self-hosted GitHub Actions runner (org-level, serves all hsimah-services repos). Authenticates via GitHub App (private key → JWT → installation token) — no expiring PATs |
 | Howlr (Music Assistant) | `ghcr.io/music-assistant/server` | 1704, 1705, 1780, 8095 (host) | `/opt/howlr` | Music library manager + multi-room audio server with built-in Snapcast, Spotify Connect, and AirPlay receiver |
 | Howlr snapclient | `ivdata/snapclient` | host network | `.env` per host | Snapcast client (receives stream, outputs to speakers) |
 | Pulsr | `superseriousbusiness/gotosocial` | — (via Caddy) | `/opt/pulsr/data` | Self-hosted fediverse instance (GoToSocial) for status updates, household messaging, and fleet status reporting |
 | Pulsr Phanpy | `ghcr.io/yitsushi/phanpy-docker` | — | — | Web client for GoToSocial (served at `pulsr.space-needle/`) |
-| Pawst | `nginx:alpine` | — (via Caddy) | `nginx.conf`, `hblake-html` + `hsimah-html` volumes | Static blogs — serves `hbla.ke` and `hsimah.com` via Nginx server_name routing (dist deployed by CI via `docker cp`) |
+| Pawst | `nginx:alpine` | — (via Caddy) | `nginx.conf`, `/opt/pawst/{hblake,hsimah}-html` bind mounts | Static blogs — serves `hbla.ke` and `hsimah.com` via Nginx server_name routing (dist deployed by hourly release puller — see [Pull-Based Deploys](#pull-based-deploys)) |
 | Spinnik (Icecast) | `libretime/icecast:2.4.4` | 8000 | env vars | Icecast streaming server — serves vinyl audio from the LP5X turntable |
 | Spinnik (DarkIce) | Custom build (`debian:bookworm-slim` + darkice) | — | `darkice.cfg` | Captures LP5X USB audio and encodes Ogg Vorbis stream to Icecast |
 | Spinnik (UI) | `nginx:alpine` | 8080 | `nginx.conf`, `ui/` | Touch-optimized vinyl controller with audio visualizer; proxies MA API (server-side Bearer auth) and Icecast stream (same-origin for Web Audio API) |
@@ -76,10 +75,7 @@ the-loft/
 ├── hosts/
 │   ├── space-needle/
 │   │   ├── host.conf                          # Host manifest
-│   │   ├── profile.jpg                        # Pulsr avatar for fleet account
-│   │   └── overrides/
-│   │       └── iditarod/
-│   │           └── docker-compose.override.yml # Pupyrus mounts for runner
+│   │   └── profile.jpg                        # Pulsr avatar for fleet account
 │   ├── viking/
 │   │   ├── host.conf
 │   │   └── profile.jpg                        # Pulsr avatar for fleet account
@@ -101,11 +97,6 @@ the-loft/
 │   ├── pupyrus/
 │   │   ├── docker-compose.yml
 │   │   ├── setup.sh                       # Per-service setup (WordPress install)
-│   │   └── .env.example
-│   ├── iditarod/
-│   │   ├── docker-compose.yml
-│   │   ├── Dockerfile
-│   │   ├── entrypoint.sh
 │   │   └── .env.example
 │   ├── howlr/
 │   │   ├── docker-compose.yml
@@ -145,6 +136,8 @@ the-loft/
 │       └── .env.example
 ├── control-plane/
 │   ├── common.sh
+│   ├── deploy-pull.sh                   # Hourly puller — pulls GitHub Releases into bind-mounted dirs
+│   ├── github-app-token.sh              # Generates GitHub App installation tokens (optional auth for deploy-pull)
 │   ├── image-collector.sh               # Docker image update checker for fleet status reporting
 │   ├── package-collector.sh              # Package update cache for fleet status reporting
 │   └── pulsr-collector.sh                # CPU sampler for fleet status reporting
@@ -168,8 +161,6 @@ the-loft/
 ### Compose Override Pattern
 
 Services are defined once in `services/<name>/docker-compose.yml`. Per-host customization uses Docker Compose's native merge via override files at `hosts/<hostname>/overrides/<service>/docker-compose.override.yml`.
-
-Example: space-needle's iditarod gets pupyrus volume mounts via override. Viking/fjord get the base compose only (no pupyrus).
 
 ### Users & Groups
 
@@ -213,11 +204,12 @@ Host-specific groups (e.g. `render,video` on space-needle) are configured in `ho
   /slskd                          slskd configuration + state
   /pupyrus/html                   WordPress files
   /pupyrus/db                     MariaDB data
-  /iditarod                       GitHub Actions runner workdir
   /howlr                          Music Assistant data (Snapcast config, plugin state, library DB)
   /pulsr/data                     GoToSocial database + media storage
   /houstn/beszel/data             Beszel hub database + config
   /houstn/uptime/data             Uptime Kuma database + monitor config
+  /pawst/hblake-html              hbla.ke static site (deployed by deploy-pull.sh)
+  /pawst/hsimah-html              hsimah.com static site (deployed by deploy-pull.sh)
 ```
 
 Houstn's Homepage container has no `/opt` directory — its config YAML files live in `services/houstn/homepage-config/` and are bind-mounted directly from the repo into the container.
@@ -242,6 +234,7 @@ Each host is defined by `hosts/<hostname>/host.conf`, a bash-sourceable file dec
 | `SERVICE_ENDPOINTS_WARN` | Associative array mapping service name → space-separated warn-only endpoint labels |
 | `HEALTH_URLS` | Associative array of `label:tier` → URL (tiers: `local`, `lan`, `ssl`) |
 | `HEALTH_URLS_WARN` | Associative array of `label:tier` → URL (warn-only, e.g. VPN-dependent) |
+| `DEPLOY_TARGETS` | Array of `name|owner/repo|target_dir|optional_post_hook` strings for the pull-based deployer (see [Pull-Based Deploys](#pull-based-deploys)) |
 | `KIOSK_ENABLED` | Enable kiosk provisioning — `true`/`false` (default: `false`) |
 | `KIOSK_URL` | URL to display in the kiosk browser (requires `KIOSK_ENABLED=true`) |
 | `KIOSK_SCALE` | Display scale factor, e.g. `1.5` (requires `KIOSK_ENABLED=true`) |
@@ -264,7 +257,6 @@ Docker log rotation is configured at two levels:
 | wordpress | 5m | 3 | Relatively quiet |
 | redis | 5m | 3 | Low-volume object cache |
 | cli | 1m | 2 | Only runs occasionally |
-| iditarod | 5m | 3 | CI runner — logs mostly during builds |
 | radarr/sonarr/lidarr | 5m | 3 | Moderate media management logging |
 | bazarr | 5m | 3 | Subtitle management logging |
 | slskd | 5m | 3 | Moderate logging |
@@ -316,7 +308,6 @@ cd /srv/the-loft
 
 # Copy .env.example files and fill in secrets for this host's services
 # (check hosts/<hostname>/host.conf for the SERVICES list)
-cp services/iditarod/.env.example services/iditarod/.env
 cp services/howlr/.env.example services/howlr/.env
 # On space-needle also:
 cp services/pawpcorn/.env.example services/pawpcorn/.env
@@ -333,27 +324,6 @@ cp services/snoot/.env.example services/snoot/.env
 # Then run setup as root:
 sudo bash setup.sh
 ```
-
-### Iditarod — GitHub App setup (one-time)
-
-The iditarod runner authenticates via a GitHub App instead of a Personal Access Token. The app's private key never expires, so the runner won't crash-loop when credentials rotate.
-
-1. Create a GitHub App at `https://github.com/organizations/hsimah-services/settings/apps/new`
-   - **Webhook**: Uncheck (no events needed)
-   - **Permissions**: Organization > Self-hosted runners: Read and write
-   - **Install scope**: Only on this account
-2. Note the **App ID** from the app settings page
-3. Generate a private key (downloads a `.pem` file)
-4. Install the app on the `hsimah-services` organization — note the **Installation ID** from the URL (`/installations/{id}`)
-5. Copy the `.pem` file to each host running iditarod:
-
-```bash
-sudo mkdir -p /etc/loft
-sudo cp iditarod-app.pem /etc/loft/iditarod-app.pem
-sudo chmod 600 /etc/loft/iditarod-app.pem
-```
-
-6. Set `GITHUB_APP_ID` and `GITHUB_APP_INSTALLATION_ID` in `services/iditarod/.env`
 
 ### Managing services
 
@@ -500,6 +470,7 @@ Each fleet host automatically posts system metrics to Pulsr (GoToSocial) every 6
 | `/etc/cron.d/loft-package-collector` | Every 6 hours (30 min before report) | Cache package update counts to `/var/log/loft/packages.log` |
 | `/etc/cron.d/loft-wifi-watchdog` | Every 5 minutes | Restart dhcpcd if wlan0 loses IPv4 (no-op on hosts without WiFi) |
 | `/etc/cron.d/loft-pulsr-report` | Every 6 hours | Post status report to Pulsr |
+| `/etc/cron.d/loft-deploy-<name>` | Hourly | Pull-based release deployer — one entry per `DEPLOY_TARGETS` member (see [Pull-Based Deploys](#pull-based-deploys)) |
 
 ### Account Provisioning
 
@@ -523,7 +494,7 @@ sudo pulsr-ctl report
 
 ## Raspberry Pi Fleet
 
-Two Raspberry Pi 3 B+ devices (`viking` and `fjord`) in The Loft run Docker with iditarod (GitHub Actions runner) and howlr (Snapcast client), using the same unified `setup.sh` and user/group model as space-needle.
+Two Raspberry Pi 3 B+ devices (`viking` and `fjord`) in The Loft run Docker with howlr (Snapcast client) and snoot (Beszel agent), using the same unified `setup.sh` and user/group model as space-needle.
 
 ### Pi Setup
 
@@ -535,10 +506,9 @@ sudo git clone <repo-url> /srv/the-loft
 cd /srv/the-loft
 
 # Configure services
-sudo cp services/iditarod/.env.example services/iditarod/.env
 sudo cp services/howlr/.env.example services/howlr/.env
+sudo cp services/snoot/.env.example services/snoot/.env
 # Edit .env files — set COMPOSE_PROFILES=client, SNAPSERVER_HOST, SOUND_DEVICE, HOST_ID for howlr
-sudo nano services/iditarod/.env
 sudo nano services/howlr/.env
 
 # Run setup
@@ -665,6 +635,94 @@ To access Pulsr and Pawst from outside the LAN:
 
 Traffic flow: Internet → Cloudflare Edge → `cloudflared` tunnel → `https://mushr:443` → Caddy → target service. LAN clients bypass the tunnel entirely (dnsmasq resolves `pulsr.hsimah.com`, `hbla.ke`, and `hsimah.com` to the LAN IP).
 
+## Pull-Based Deploys
+
+Static-site / file-tree deploys (e.g. pawst's `hbla.ke` and `hsimah.com`) are delivered by an hourly puller on the host instead of being pushed by a self-hosted CI runner. This removes the attack surface of a runner with a docker.sock mount and means CI in the app repos runs on stock GitHub-hosted `ubuntu-latest`.
+
+### How it works
+
+1. The app repo's CI builds the static artifact, packs it as a `.tar.gz`, and attaches it to a tagged GitHub Release.
+2. On space-needle, `/etc/cron.d/loft-deploy-<name>` (installed by `setup.sh` from each `DEPLOY_TARGETS` entry) runs `control-plane/deploy-pull.sh` hourly.
+3. The puller queries `GET /repos/<owner>/<repo>/releases/latest`, compares the tag against `/var/lib/loft/deploy/<name>.version`, and on a new release downloads the asset and atomically swaps it into the bind-mounted target directory.
+4. An optional post-deploy hook runs from the target dir (e.g. wp-cli cache flush).
+
+Hourly is the default schedule. If you push a release and don't want to wait, run the deploy script manually:
+
+```bash
+sudo /srv/the-loft/control-plane/deploy-pull.sh pawst-hblake hsimah-services/hbla.ke /opt/pawst/hblake-html
+```
+
+### Configuring deploys
+
+Add entries to `DEPLOY_TARGETS` in `hosts/<hostname>/host.conf`, one per line, pipe-delimited:
+
+```bash
+DEPLOY_TARGETS=(
+  "pawst-hblake|hsimah-services/hbla.ke|/opt/pawst/hblake-html|"
+  "pawst-hsimah|hsimah-services/hsimah.com|/opt/pawst/hsimah-html|"
+)
+```
+
+Format: `name|owner/repo|target_dir|optional_post_hook`. The `name` is used as the state-file key and cron filename suffix. The optional post-deploy hook is a shell snippet run with `cwd = target_dir`. Re-run `sudo bash setup.sh` (or just `sudo bash` the cron-installing section) to materialize the cron entries.
+
+The target dir must exist and should be in `CONFIG_DIRS` so `setup.sh` creates it with `littledog:pack-member` ownership.
+
+### Authenticating private repos
+
+Public repos work out of the box (unauthenticated GitHub API is sufficient for hourly polling of release metadata).
+
+For private repos, install a GitHub App and drop its credentials at `/etc/loft/deploy.env`:
+
+1. Create a GitHub App at `https://github.com/organizations/hsimah-services/settings/apps/new`
+   - **Webhook**: Uncheck
+   - **Permissions**: Repository > Contents: Read
+   - **Install scope**: Only on this account, repos you want to deploy
+2. Note the **App ID**, generate a **private key** (downloads `.pem`), and install the app to capture the **Installation ID** (from the URL `/installations/{id}`).
+3. On the deploying host:
+
+```bash
+sudo mkdir -p /etc/loft
+sudo cp loft-deploy-app.pem /etc/loft/loft-deploy-app.pem
+sudo chmod 600 /etc/loft/loft-deploy-app.pem
+sudo tee /etc/loft/deploy.env >/dev/null <<'EOF'
+LOFT_DEPLOY_APP_ID=<app id>
+LOFT_DEPLOY_INSTALLATION_ID=<installation id>
+LOFT_DEPLOY_KEY_PATH=/etc/loft/loft-deploy-app.pem
+EOF
+sudo chmod 600 /etc/loft/deploy.env
+```
+
+`deploy-pull.sh` auto-detects the env file via `control-plane/github-app-token.sh`. If credentials are absent it falls back to unauthenticated requests, so leaving the env file unset keeps public-repo deploys working.
+
+### Release workflow contract
+
+Each app repo's CI should produce a tarball asset on every release. A minimal `release.yml` for a static-site repo:
+
+```yaml
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm ci && npm run build
+      - name: Package
+        run: tar -czf site.tar.gz -C dist .
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: site.tar.gz
+```
+
+The tarball can either be flat (files at the root, as above) or have a single top-level wrapper directory; `deploy-pull.sh` handles both.
+
 ## Environment Files
 
 Each service that needs secrets has a `.env.example` template. Copy it to `.env` and fill in real values. The `.env` files are gitignored.
@@ -674,7 +732,6 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Pawpcorn | `PLEX_CLAIM`, `PUID`, `PGID`, `TZ` |
 | Stellarr | `NORDVPN_TOKEN`, `PUID`, `PGID`, `TZ` |
 | Pupyrus | `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `GRAPHQL_JWT_AUTH_SECRET_KEY` |
-| Iditarod | `GITHUB_ORG`, `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_KEY_PATH`, `RUNNER_NAME`, `RUNNER_LABELS`, `DOCKER_GID` |
 | Howlr (server) | `COMPOSE_PROFILES=server` |
 | Howlr (client) | `COMPOSE_PROFILES=client`, `SNAPSERVER_HOST`, `SOUND_DEVICE`, `HOST_ID` |
 | Mushr | `LOFT_DOMAIN`, `CLOUDFLARE_API_TOKEN`, `TUNNEL_TOKEN` (edit `dnsmasq.conf` with LAN IP before deploying) |

@@ -1,6 +1,6 @@
 # Raspberry Pi Provisioning — viking & fjord
 
-Provisioning guide for The Loft's Raspberry Pi 3 B+ fleet. Both devices (`viking` and `fjord`) get identical configuration: same user/group model as space-needle, Docker, iditarod (GitHub Actions runner), and shared shell configs.
+Provisioning guide for The Loft's Raspberry Pi 3 B+ fleet. Both devices (`viking` and `fjord`) get identical configuration: same user/group model as space-needle, Docker, howlr (Snapcast client), snoot (Beszel agent), and shared shell configs.
 
 ---
 
@@ -8,23 +8,18 @@ Provisioning guide for The Loft's Raspberry Pi 3 B+ fleet. Both devices (`viking
 
 | Hostname | Role | Location |
 |----------|------|----------|
-| `viking` | Snapcast client + GitHub Actions runner | TBD room in The Loft |
-| `fjord` | Snapcast client + GitHub Actions runner | TBD room in The Loft |
+| `viking` | Snapcast client + Beszel agent | TBD room in The Loft |
+| `fjord` | Snapcast client + Beszel agent | TBD room in The Loft |
 
-Both Pis serve dual purposes:
-1. **Howlr audio clients** — run `snapclient` via Docker Compose (`client` profile) to play synchronized audio from space-needle's `snapserver` (deployed later when server side is ready)
-2. **CI runners** — run iditarod (self-hosted GitHub Actions runner) for arm64 builds and repo automation
+Pis run:
+1. **Howlr audio clients** — `snapclient` via Docker Compose (`client` profile) to play synchronized audio from space-needle's `snapserver`
+2. **Snoot** — Beszel agent reporting host metrics back to the houstn hub
 
 ---
 
 ## 2. Prerequisites (on your laptop)
 
-1. **Create a GitHub PAT** (for iditarod)
-   - Go to GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
-   - Create a token with `repo` scope for `hsimah/the-loft`
-   - Save the token — you'll need it for the `.env` file
-
-2. **Generate an SSH deploy key** — done later on the Pi itself (Phase C)
+**Generate an SSH deploy key** — done later on the Pi itself (Phase C)
 
 ---
 
@@ -108,30 +103,18 @@ uname -m    # should print aarch64
 
 ## 6. Configure .env Files
 
-### iditarod
+### howlr (skip until server is ready)
+
+Don't create `services/howlr/.env`. `setup.sh` will warn and skip howlr, which is correct until the server side on space-needle is ready.
+
+### snoot
 
 ```bash
 cd /srv/the-loft
-cp services/iditarod/.env.example services/iditarod/.env
-nano services/iditarod/.env
+cp services/snoot/.env.example services/snoot/.env
 ```
 
-Fill in:
-
-```bash
-GITHUB_OWNER=hsimah
-GITHUB_REPO=the-loft
-GITHUB_ACCESS_TOKEN=<your-PAT>
-RUNNER_NAME=viking          # or fjord
-RUNNER_LABELS=viking,self-hosted,linux,arm64   # or fjord,...
-DOCKER_GID=999
-```
-
-> Note: `DOCKER_GID` defaults to 999 which is typical for Debian. If Docker uses a different GID after install, you can update it — `setup.sh` will detect the correct value during build.
-
-### howlr (skip for now)
-
-Don't create `services/howlr/.env`. `setup.sh` will warn and skip howlr, which is correct until the server side on space-needle is ready.
+`BESZEL_KEY` and `BESZEL_TOKEN` are populated from the Beszel hub UI after first launch — see the Fleet Monitoring section in the main README.
 
 ---
 
@@ -152,7 +135,7 @@ The script will:
 - Set up shared bashrc.d sourcing
 - Install Docker CE
 - Configure Docker log rotation
-- Build and start iditarod (with correct Docker GID)
+- Start snoot (Beszel agent)
 - Warn and skip howlr (no `.env`)
 
 The script is idempotent — safe to re-run at any time.
@@ -196,18 +179,6 @@ sudo sshd -T | grep -E 'allowusers|passwordauthentication'
 ```bash
 sudo docker run --rm hello-world
 ```
-
-### Verify iditarod
-
-```bash
-# Check container is running
-sudo docker ps --filter name=iditarod
-
-# Check logs for successful registration
-sudo docker logs iditarod
-```
-
-Then on GitHub: Settings → Actions → Runners — should show `viking` (or `fjord`) as "Idle".
 
 ### Verify shared bashrc.d
 
@@ -263,18 +234,15 @@ Pis use a simpler layout than space-needle (no `/mammoth` volume, no `/opt` serv
   setup.sh                          Unified host provisioner
   hosts/viking/host.conf            Host configuration (services, users, storage)
   services/
-    iditarod/
-      docker-compose.yml            Compose file
-      Dockerfile                    Pi-compatible Dockerfile (parameterized GID)
-      entrypoint.sh                 Runner entrypoint
-      .env                          Secrets (gitignored)
-      .env.example                  Template
     howlr/
       docker-compose.yml            Compose file (client profile for Pis)
       .env                          Secrets (gitignored, created later)
+    snoot/
+      docker-compose.yml            Beszel agent compose
+      .env                          Secrets (gitignored, populated from hub UI)
 ```
 
-No additional directories are created. All iditarod state lives in the Docker volume (`runner-work`).
+No additional directories are created.
 
 ---
 
@@ -339,16 +307,14 @@ The howlr compose file uses profiles — Pis use the `client` profile (snapclien
 
 Per-Pi provisioning checklist:
 
-- [ ] Create GitHub PAT with `repo` scope
 - [ ] Flash Raspberry Pi OS Lite 64-bit with hostname, SSH key, WiFi
 - [ ] Boot and verify SSH access via `<hostname>.local`
 - [ ] Generate deploy key on Pi and add to GitHub repo
 - [ ] Clone repo to `/srv/the-loft`
-- [ ] Copy `services/iditarod/.env.example` to `services/iditarod/.env` and fill in secrets
+- [ ] Copy `services/snoot/.env.example` to `services/snoot/.env` (fill `BESZEL_KEY`/`BESZEL_TOKEN` after the hub is reachable)
 - [ ] Skip howlr `.env` (deploy later)
 - [ ] Run `sudo bash setup.sh` from `/srv/the-loft`
 - [ ] Set adminhabl password: `sudo passwd adminhabl`
 - [ ] Verify SSH hardening: `sudo sshd -T | grep -E 'allowusers|passwordauthentication'`
 - [ ] Verify Docker: `sudo docker run --rm hello-world`
-- [ ] Verify iditarod: `sudo docker ps --filter name=iditarod` + check GitHub Runners
 - [ ] Verify shared bashrc.d: log out and back in, check prompt
