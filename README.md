@@ -8,7 +8,7 @@ Fleet configuration for The Loft — a mono-repo managing all hosts (space-needl
 
 | Host | Role | Services |
 |------|------|----------|
-| `space-needle` | Primary server | mushr, pawpcorn, stellarr, pupyrus, howlr (server), pulsr (+ phanpy), pawst, houstn (beszel hub + uptime + homepage), snoot |
+| `space-needle` | Primary server | mushr, pawpcorn, stellarr, pupyrus, howlr (server), pawst, houstn (beszel hub + uptime + homepage), snoot |
 | `viking` | Raspberry Pi 3 B+ | howlr (client), snoot |
 | `fjord` | Raspberry Pi 3 B+ | howlr (client), snoot |
 | `calavera` | Surface Pro 2 (kiosk + turntable) | howlr (client), spinnik, snoot |
@@ -29,13 +29,11 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Bazarr | `linuxserver/bazarr` | — (via Caddy) | `/opt/bazarr` | Automated subtitle management for Radarr + Sonarr |
 | Jackett | `linuxserver/jackett` | — (via Caddy) | `/opt/jackett` | Indexer proxy |
 | Mushr (proxy) | `caddy:2-alpine` + Cloudflare DNS module (custom build) | 80, 443 | `Caddyfile`, `Dockerfile.caddy` | Reverse proxy with HTTPS (Let's Encrypt via DNS-01) + LAN HTTP fallback; HTTP/3 disabled (`protocols h1 h2`) to prevent QUIC idle timeout issues; Caddy admin API bound to container loopback only |
-| Mushr (tunnel) | `cloudflare/cloudflared` | — (outbound only) | — | Cloudflare Tunnel — exposes Pulsr, hbla.ke, and hsimah.com externally without open ports |
+| Mushr (tunnel) | `cloudflare/cloudflared` | — (outbound only) | — | Cloudflare Tunnel — exposes hbla.ke and hsimah.com externally without open ports |
 | Mushr (DNS) | `drpsychick/dnsmasq` | 53/udp, 53/tcp | `dnsmasq.conf` | Wildcard DNS — resolves `*.space-needle` and `*.loft.hsimah.com` to LAN IP |
 | Pupyrus | `wordpress` + `mariadb` + `redis` | — (via Caddy) | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
 | Howlr (Music Assistant) | `ghcr.io/music-assistant/server` | 1704, 1705, 1780, 8095 (host) | `/opt/howlr` | Music library manager + multi-room audio server with built-in Snapcast, Spotify Connect, and AirPlay receiver |
 | Howlr snapclient | `ivdata/snapclient` | host network | `.env` per host | Snapcast client (receives stream, outputs to speakers) |
-| Pulsr | `superseriousbusiness/gotosocial` | — (via Caddy) | `/opt/pulsr/data` | Self-hosted fediverse instance (GoToSocial) for status updates, household messaging, and fleet status reporting |
-| Pulsr Phanpy | `ghcr.io/yitsushi/phanpy-docker` | — | — | Web client for GoToSocial (served at `pulsr.space-needle/`) |
 | Pawst | `nginx:alpine` | — (via Caddy) | `nginx.conf`, `/opt/pawst/{hblake,hsimah}-html` bind mounts | Static blogs — serves `hbla.ke` and `hsimah.com` via Nginx server_name routing (dist deployed by hourly release puller — see [Pull-Based Deploys](#pull-based-deploys)) |
 | Spinnik (Icecast) | `libretime/icecast:2.4.4` | 8000 | env vars | Icecast streaming server — serves vinyl audio from the LP5X turntable |
 | Spinnik (DarkIce) | Custom build (`debian:bookworm-slim` + darkice) | — | `darkice.cfg` | Captures LP5X USB audio and encodes Ogg Vorbis stream to Icecast |
@@ -53,9 +51,9 @@ Mushr provides a reverse proxy (Caddy) and wildcard DNS (dnsmasq) so all web ser
 - **`*.loft.hsimah.com`** — HTTPS with real Let's Encrypt certificates (via Cloudflare DNS-01 challenge, no open ports required)
 - **`*.space-needle`** — HTTP-only LAN fallback for backward compatibility
 
-A shared `loft-proxy` Docker bridge network connects Caddy to bridge-networked services (pupyrus, pulsr, pulsr-phanpy, pawst, radarr, sonarr, lidarr, bazarr, jackett, beszel, uptime, homepage, cloudflared); host-network services (pawpcorn, howlr, snapweb, transmission/slskd via the VPN container, snoot) are reached via `host.docker.internal`. Pulsr uses path-based routing: the Phanpy web client is the default, while GoToSocial API paths (`/api/*`, `/.well-known/*`, `/settings/*`, etc.) are proxied to GoToSocial directly.
+A shared `loft-proxy` Docker bridge network connects Caddy to bridge-networked services (pupyrus, pawst, radarr, sonarr, lidarr, bazarr, jackett, beszel, uptime, homepage, cloudflared); host-network services (pawpcorn, howlr, snapweb, transmission/slskd via the VPN container, snoot) are reached via `host.docker.internal`.
 
-A Cloudflare Tunnel (`mushr-tunnel`) provides external access to Pulsr and Pawst from outside the LAN. The tunnel makes outbound-only connections to Cloudflare's edge — no router ports need to be opened. LAN clients still resolve `pulsr.hsimah.com`, `hbla.ke`, and `hsimah.com` via dnsmasq to the LAN IP, so local traffic bypasses the tunnel entirely. Pulsr uses `pulsr.hsimah.com` (not `*.loft.hsimah.com`) because Cloudflare's free Universal SSL only covers single-level subdomains. Pawst serves two blogs: `hbla.ke` and `hsimah.com`, each with its own domain and Nginx server block.
+A Cloudflare Tunnel (`mushr-tunnel`) provides external access to Pawst from outside the LAN. The tunnel makes outbound-only connections to Cloudflare's edge — no router ports need to be opened. LAN clients still resolve `hbla.ke` and `hsimah.com` via dnsmasq to the LAN IP, so local traffic bypasses the tunnel entirely. Pawst serves two blogs: `hbla.ke` and `hsimah.com`, each with its own domain and Nginx server block.
 
 Howlr uses Docker Compose profiles: `COMPOSE_PROFILES=server` on space-needle runs **Music Assistant** — a unified music control server with a built-in Snapcast server, Spotify Connect plugin, and AirPlay Receiver plugin. `COMPOSE_PROFILES=client` on Pis runs snapclient. The `.env` file controls which profile is active.
 
@@ -74,14 +72,11 @@ Spinnik (spin + Sputnik) runs on calavera and streams vinyl audio from an Audio-
 the-loft/
 ├── hosts/
 │   ├── space-needle/
-│   │   ├── host.conf                          # Host manifest
-│   │   └── profile.jpg                        # Pulsr avatar for fleet account
+│   │   └── host.conf                          # Host manifest
 │   ├── viking/
-│   │   ├── host.conf
-│   │   └── profile.jpg                        # Pulsr avatar for fleet account
+│   │   └── host.conf
 │   ├── fjord/
-│   │   ├── host.conf
-│   │   └── profile.jpg                        # Pulsr avatar for fleet account
+│   │   └── host.conf
 │   └── calavera/
 │       └── host.conf                          # Kiosk host (Surface Pro 2)
 ├── services/
@@ -106,10 +101,6 @@ the-loft/
 │   │   ├── Dockerfile.caddy
 │   │   ├── Caddyfile
 │   │   ├── dnsmasq.conf
-│   │   └── .env.example
-│   ├── pulsr/
-│   │   ├── docker-compose.yml
-│   │   ├── setup.sh                       # Per-service setup (fleet account provisioning)
 │   │   └── .env.example
 │   ├── pawst/
 │   │   ├── docker-compose.yml
@@ -137,16 +128,12 @@ the-loft/
 ├── control-plane/
 │   ├── common.sh
 │   ├── deploy-pull.sh                   # Hourly puller — pulls GitHub Releases into bind-mounted dirs
-│   ├── github-app-token.sh              # Generates GitHub App installation tokens (optional auth for deploy-pull)
-│   ├── image-collector.sh               # Docker image update checker for fleet status reporting
-│   ├── package-collector.sh              # Package update cache for fleet status reporting
-│   └── pulsr-collector.sh                # CPU sampler for fleet status reporting
+│   └── github-app-token.sh              # Generates GitHub App installation tokens (optional auth for deploy-pull)
 ├── plans/
 │   ├── howlr.md
 │   └── raspberry-pi.md
 ├── setup.sh
 ├── loft-ctl
-├── pulsr-ctl
 ├── bashrc.d                               # Shared shell config (prompt, terminal title, aliases)
 ├── inputrc.d
 ├── nanorc.d
@@ -205,7 +192,6 @@ Host-specific groups (e.g. `render,video` on space-needle) are configured in `ho
   /pupyrus/html                   WordPress files
   /pupyrus/db                     MariaDB data
   /howlr                          Music Assistant data (Snapcast config, plugin state, library DB)
-  /pulsr/data                     GoToSocial database + media storage
   /houstn/beszel/data             Beszel hub database + config
   /houstn/uptime/data             Uptime Kuma database + monitor config
   /pawst/hblake-html              hbla.ke static site (deployed by deploy-pull.sh)
@@ -229,7 +215,6 @@ Each host is defined by `hosts/<hostname>/host.conf`, a bash-sourceable file dec
 | `MEDIA_DIRS` | Array of media directories to create (775) |
 | `LITTLEDOG_EXTRA_GROUPS` | Additional groups for littledog (e.g. `render,video`) |
 | `SSH_DISABLE_PASSWORD` | Whether to disable SSH password auth (`true`/`false`) |
-| `REPORT_DISKS` | Array of mount points to include in fleet status reports |
 | `SERVICE_ENDPOINTS` | Associative array mapping service name → space-separated endpoint labels |
 | `SERVICE_ENDPOINTS_WARN` | Associative array mapping service name → space-separated warn-only endpoint labels |
 | `HEALTH_URLS` | Associative array of `label:tier` → URL (tiers: `local`, `lan`, `ssl`) |
@@ -266,8 +251,6 @@ Docker log rotation is configured at two levels:
 | mushr-tunnel | 5m | 3 | Cloudflare Tunnel connection logging |
 | howlr (Music Assistant) | 10m | 3 | Music server + built-in Snapcast + receiver plugins |
 | snapclient | 5m | 3 | Audio client logging |
-| pulsr | 10m | 3 | Fediverse instance (GoToSocial) |
-| pulsr-phanpy | 5m | 3 | Phanpy web client (static files) |
 | pawst | 5m | 3 | Static blogs — hbla.ke + hsimah.com (nginx) |
 | spinnik-icecast | 5m | 3 | Icecast streaming server |
 | spinnik-darkice | 5m | 3 | DarkIce audio encoder |
@@ -284,7 +267,7 @@ Docker log rotation is configured at two levels:
 - **Admin escalation**: `loft-ctl` auto-elevates to `adminhabl` via `su` for docker commands; `adminhabl` alias also available for manual escalation
 - **Sudo**: `adminhabl` has full sudo via `/etc/sudoers.d/adminhabl`
 - **Containers**: All run as `littledog` (UID/GID 1003), a nologin service account
-- **External access**: Pulsr and Pawst (hbla.ke + hsimah.com) are exposed externally via Cloudflare Tunnel (outbound-only, no open ports). All other services remain LAN-only
+- **External access**: Pawst (hbla.ke + hsimah.com) is exposed externally via Cloudflare Tunnel (outbound-only, no open ports). All other services remain LAN-only
 - **Kiosk lockdown** (calavera): Chromium managed policies restrict URL navigation to the allowlist; Cage compositor prevents app switching or escape; kiosk user has no sudo or docker access
 
 ## Debugging
@@ -314,7 +297,6 @@ cp services/pawpcorn/.env.example services/pawpcorn/.env
 cp services/stellarr/.env.example services/stellarr/.env
 cp services/pupyrus/.env.example services/pupyrus/.env
 cp services/mushr/.env.example services/mushr/.env
-cp services/pulsr/.env.example services/pulsr/.env
 cp services/houstn/.env.example services/houstn/.env
 # On all hosts (snoot — Beszel agent):
 cp services/snoot/.env.example services/snoot/.env
@@ -356,34 +338,6 @@ loft-ctl update --branch feature/ssl --all
 # Rebuild without pulling git changes
 loft-ctl update --no-pull pawpcorn
 ```
-
-### Managing Pulsr accounts
-
-`pulsr-ctl` wraps GoToSocial admin commands for managing accounts on the Pulsr instance. Like `loft-ctl`, it auto-elevates to `adminhabl` for docker access.
-
-```bash
-# Show usage
-pulsr-ctl
-
-# Create a regular account
-pulsr-ctl user-add --username alice --email alice@example.com --password 'MyP@ss123'
-
-# Create an admin account
-pulsr-ctl user-add --username bob --email bob@example.com --password 'MyP@ss123' --admin
-
-# Get an API token for automated posting
-pulsr-ctl user-token --email alice@example.com --password 'MyP@ss123'
-
-# Set a profile picture
-pulsr-ctl set-avatar --image hosts/space-needle/profile.jpg
-
-# Post a status update
-pulsr-ctl post --message "Server is alive at $(date)"
-```
-
-Accounts are automatically confirmed (no email verification on self-hosted instances).
-
-API tokens are obtained via the full OAuth flow (app creation → sign-in → authorize → token exchange) and do not expire unless revoked. Store the token as `GTS_TOKEN` in `services/pulsr/.env`.
 
 After each `rebuild` or `update`, the script verifies:
 1. **Container check** — all containers in the compose file are "running" (retries for up to 30s)
@@ -448,49 +402,12 @@ Homepage (`ghcr.io/gethomepage/homepage`) is a unified fleet overview at `https:
 
 Configuration lives in `services/houstn/homepage-config/` (bind-mounted from the repo, version-controlled): `services.yaml`, `widgets.yaml`, `bookmarks.yaml`, `settings.yaml`, `docker.yaml`. API tokens and other secrets are kept out of the YAML and substituted from `services/houstn/.env` via `HOMEPAGE_VAR_*` placeholders (e.g. `{{HOMEPAGE_VAR_RADARR_API_KEY}}`).
 
-## Fleet Status Reporting
-
-Each fleet host automatically posts system metrics to Pulsr (GoToSocial) every 6 hours. This provides visibility into fleet health through the Fediverse timeline.
-
-### Architecture
-
-- Each host gets its own GoToSocial account (e.g. `space_needle`, `viking`, `fjord`)
-- A CPU sampler (`control-plane/pulsr-collector.sh`) runs every minute via cron, appending CPU usage % to `/var/log/loft/cpu.log`
-- A package collector (`control-plane/package-collector.sh`) runs every 6 hours via cron, caching security/total update counts and reboot-required status to `/var/log/loft/packages.log`
-- An image collector (`control-plane/image-collector.sh`) runs daily via cron, checking running Docker containers for available image updates via `skopeo` and caching results to `/var/log/loft/images.log`
-- Every 6 hours, `pulsr-ctl report` reads the CPU log, package cache, and image cache, collects memory/disk/git metrics, and posts a status update
-- Reports include hashtags `#LoftServiceUpdate` and `#<HostName>Update` for filtering
-
 ### Cron Jobs
 
 | Cron File | Schedule | Purpose |
 |-----------|----------|---------|
-| `/etc/cron.d/loft-cpu-collector` | Every minute | Sample CPU usage to `/var/log/loft/cpu.log` |
-| `/etc/cron.d/loft-image-collector` | Daily at 5:25 AM | Check Docker images for updates to `/var/log/loft/images.log` |
-| `/etc/cron.d/loft-package-collector` | Every 6 hours (30 min before report) | Cache package update counts to `/var/log/loft/packages.log` |
 | `/etc/cron.d/loft-wifi-watchdog` | Every 5 minutes | Restart dhcpcd if wlan0 loses IPv4 (no-op on hosts without WiFi) |
-| `/etc/cron.d/loft-pulsr-report` | Every 6 hours | Post status report to Pulsr |
 | `/etc/cron.d/loft-deploy-<name>` | Hourly | Pull-based release deployer — one entry per `DEPLOY_TARGETS` member (see [Pull-Based Deploys](#pull-based-deploys)) |
-
-### Account Provisioning
-
-Fleet accounts are created automatically by `setup.sh` on space-needle (which hosts Pulsr). Each host's profile picture (`hosts/<hostname>/profile.jpg`) is set as the account avatar during setup. Each host's credentials:
-
-| Host | Username | Email |
-|------|----------|-------|
-| space-needle | `space_needle` | `space-needle@loft.hsimah.com` |
-| viking | `viking` | `viking@loft.hsimah.com` |
-| fjord | `fjord` | `fjord@loft.hsimah.com` |
-| calavera | `calavera` | `calavera@loft.hsimah.com` |
-
-API tokens are stored at `/etc/loft/pulsr.env` on each host (created by `setup.sh`). The `REPORT_DISKS` variable in each host's `host.conf` controls which mount points are included in disk metrics.
-
-### Manual Reporting
-
-```bash
-# Post a status report manually
-sudo pulsr-ctl report
-```
 
 ## Raspberry Pi Fleet
 
@@ -531,7 +448,7 @@ greetd (auto-login as kiosk user)
 ```
 
 - **Cage**: Minimal Wayland compositor (~5MB) that displays exactly one fullscreen app with no window management, panels, or escape vectors
-- **Chromium managed policies**: `URLBlocklist` blocks all URLs by default; `URLAllowlist` permits only `*.loft.hsimah.com`, `*.space-needle`, `pulsr.hsimah.com`, `hbla.ke`, `hsimah.com`, `calavera`, and `localhost`
+- **Chromium managed policies**: `URLBlocklist` blocks all URLs by default; `URLAllowlist` permits only `*.loft.hsimah.com`, `*.space-needle`, `hbla.ke`, `hsimah.com`, `calavera`, and `localhost`
 - **Display**: 10.6" 1080p touchscreen at 150% scaling (`--force-device-scale-factor=1.5`)
 - **Power**: Suspend, sleep, and hibernate are masked; lid switch is ignored (always-on display)
 
@@ -564,7 +481,6 @@ Real Let's Encrypt certificates via Cloudflare DNS-01 challenge. No open ports o
 | `https://jackett.loft.hsimah.com` | Jackett |
 | `https://pawpcorn.loft.hsimah.com` | Pawpcorn (Plex) |
 | `https://pupyrus.loft.hsimah.com` | WordPress |
-| `https://pulsr.hsimah.com` | Phanpy web client (default) / GoToSocial API |
 | `https://transmission.loft.hsimah.com` | Transmission |
 | `https://soulseek.loft.hsimah.com` | slskd |
 | `https://howlr.loft.hsimah.com` | Music Assistant (Howlr) |
@@ -589,7 +505,6 @@ HTTP-only, no TLS. Kept for backward compatibility.
 | `http://jackett.space-needle` | Jackett |
 | `http://pawpcorn.space-needle` | Pawpcorn (Plex) |
 | `http://pupyrus.space-needle` | WordPress |
-| `https://pulsr.space-needle` | Pulsr (self-signed TLS via `tls internal`) |
 | `http://transmission.space-needle` | Transmission |
 | `http://soulseek.space-needle` | slskd |
 | `http://howlr.space-needle` | Music Assistant (Howlr) |
@@ -608,7 +523,7 @@ Direct port access continues to work for host-networked services (Plex on 32400,
 Before deploying, edit `services/mushr/dnsmasq.conf` and replace the `listen-address` and `address` entries with space-needle's actual LAN IP.
 
 To use the subdomain URLs, point LAN clients' DNS at space-needle's IP:
-- **Router DHCP** (recommended): Set the primary DNS server to space-needle's LAN IP in your router's DHCP settings. All devices on the network will automatically resolve `*.space-needle`, `*.loft.hsimah.com`, `pulsr.hsimah.com`, `hbla.ke`, and `hsimah.com`.
+- **Router DHCP** (recommended): Set the primary DNS server to space-needle's LAN IP in your router's DHCP settings. All devices on the network will automatically resolve `*.space-needle`, `*.loft.hsimah.com`, `hbla.ke`, and `hsimah.com`.
 - **Per-device**: Manually set DNS to space-needle's LAN IP in each device's network settings.
 
 ### Cloudflare Setup (one-time)
@@ -622,18 +537,17 @@ To enable HTTPS with real certificates:
 
 ### Cloudflare Tunnel (external access)
 
-To access Pulsr and Pawst from outside the LAN:
+To access Pawst (hbla.ke + hsimah.com) from outside the LAN:
 
 1. Go to [Cloudflare Zero Trust](https://one.dash.cloudflare.com/) → Networks → Tunnels → Create
-2. Name: `loft-pulsr`, connector: **Cloudflared**
+2. Name the tunnel (e.g. `loft-pawst`), connector: **Cloudflared**
 3. Copy the tunnel token
-4. Add public hostname: `pulsr.hsimah.com` → HTTPS → `mushr:443`, set **Origin Server Name** to `pulsr.hsimah.com`
-5. Add public hostname: `hbla.ke` → HTTPS → `mushr:443`, set **Origin Server Name** to `hbla.ke`
-6. Add public hostname: `hsimah.com` → HTTPS → `mushr:443`, set **Origin Server Name** to `hsimah.com`
-7. Add `TUNNEL_TOKEN=<token>` to `services/mushr/.env`
-8. `loft-ctl rebuild mushr`
+4. Add public hostname: `hbla.ke` → HTTPS → `mushr:443`, set **Origin Server Name** to `hbla.ke`
+5. Add public hostname: `hsimah.com` → HTTPS → `mushr:443`, set **Origin Server Name** to `hsimah.com`
+6. Add `TUNNEL_TOKEN=<token>` to `services/mushr/.env`
+7. `loft-ctl rebuild mushr`
 
-Traffic flow: Internet → Cloudflare Edge → `cloudflared` tunnel → `https://mushr:443` → Caddy → target service. LAN clients bypass the tunnel entirely (dnsmasq resolves `pulsr.hsimah.com`, `hbla.ke`, and `hsimah.com` to the LAN IP).
+Traffic flow: Internet → Cloudflare Edge → `cloudflared` tunnel → `https://mushr:443` → Caddy → target service. LAN clients bypass the tunnel entirely (dnsmasq resolves `hbla.ke` and `hsimah.com` to the LAN IP).
 
 ## Pull-Based Deploys
 
@@ -735,7 +649,6 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Howlr (server) | `COMPOSE_PROFILES=server` |
 | Howlr (client) | `COMPOSE_PROFILES=client`, `SNAPSERVER_HOST`, `SOUND_DEVICE`, `HOST_ID` |
 | Mushr | `LOFT_DOMAIN`, `CLOUDFLARE_API_TOKEN`, `TUNNEL_TOKEN` (edit `dnsmasq.conf` with LAN IP before deploying) |
-| Pulsr | `GTS_HOST`, `GTS_PROTOCOL`, `GTS_TOKEN` (for `pulsr-ctl post`), `TZ` |
 | Spinnik | `ICECAST_SOURCE_PASSWORD`, `ICECAST_ADMIN_PASSWORD` (source password must match `darkice.cfg`), `MA_HOST`, `MA_API_TOKEN` |
 | Houstn | `HOMEPAGE_VAR_*` placeholders for the Homepage dashboard (Plex token, *arr API keys, Transmission/slskd creds, Uptime Kuma slug). Beszel and Uptime Kuma have no required env vars |
 | Snoot | `BESZEL_KEY`, `BESZEL_TOKEN` (copy from the Beszel hub UI after first launch — see Fleet Monitoring setup) |
@@ -747,5 +660,5 @@ A GitHub Actions workflow validates on every push:
 - All base `docker-compose.yml` files pass `docker compose config --quiet`
 - Howlr compose validated with both `COMPOSE_PROFILES=server` and `COMPOSE_PROFILES=client`
 - All compose + override combinations validate
-- All shell scripts (`setup.sh`, `loft-ctl`, `pulsr-ctl`, `control-plane/*.sh`, `services/*/setup.sh`) pass `bash -n` syntax check
+- All shell scripts (`setup.sh`, `loft-ctl`, `control-plane/*.sh`, `services/*/setup.sh`) pass `bash -n` syntax check
 - All `host.conf` files pass `bash -n` syntax check

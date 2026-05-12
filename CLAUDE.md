@@ -51,5 +51,5 @@ When suggesting host names, ask the user what they can see around them and riff 
 
 ### Container Names Within Services
 - Single-container services use the service name directly: `pawpcorn`, `snoot`
-- Multi-container services that have one "primary" container use the service name for that one and prefix helpers: `pulsr` + `pulsr-phanpy`; `mushr` + `mushr-tunnel`/`mushr-dns`; `howlr` + `howlr-snapclient`; `pupyrus` + `pupyrus-db`/`pupyrus-redis`/`pupyrus-cli`
+- Multi-container services that have one "primary" container use the service name for that one and prefix helpers: `mushr` + `mushr-tunnel`/`mushr-dns`; `howlr` + `howlr-snapclient`; `pupyrus` + `pupyrus-db`/`pupyrus-redis`/`pupyrus-cli`
 - Bundle services (a single compose grouping several independent products under one umbrella name, like stellarr or houstn) name each product container directly with the product's own name (`radarr`, `sonarr`, `transmission`, `slskd`, `beszel`, `uptime`, `homepage`); only glue/infrastructure containers get the service-name prefix (`stellarr-vpn`)

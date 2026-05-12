@@ -130,12 +130,6 @@
         description: WordPress
         container: pupyrus
         server: my-docker
-    - Pulsr:
-        icon: mastodon.svg
-        href: https://pulsr.hsimah.com
-        description: Mastodon
-        container: pulsr
-        server: my-docker
     - hbla.ke:
         icon: si-hugo
         href: https://hbla.ke

@@ -13,26 +13,6 @@
 	}
 }
 
-# ─── Pulsr snippet (shared between HTTPS and LAN routes) ─────────────────────
-(pulsr_routes) {
-	@gts path /api/* /.well-known/* /nodeinfo/* /oauth/* /users/* /@* /fileserver/* /settings /settings/* /auth/* /media/*
-	handle @gts {
-		reverse_proxy pulsr:8080 {
-			header_up X-Real-IP {remote_host}
-		}
-	}
-	handle {
-		reverse_proxy pulsr-phanpy:80 {
-			@notfound status 404
-			handle_response @notfound {
-				reverse_proxy pulsr:8080 {
-					header_up X-Real-IP {remote_host}
-				}
-			}
-		}
-	}
-}
-
 # ══════════════════════════════════════════════════════════════════════════════
 # HTTPS routes — *.loft.hsimah.com (Let's Encrypt via Cloudflare DNS-01)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -70,11 +50,6 @@ pawpcorn.{$LOFT_DOMAIN} {
 pupyrus.{$LOFT_DOMAIN} {
 	import cloudflare_tls
 	reverse_proxy pupyrus:80
-}
-
-pulsr.hsimah.com {
-	import cloudflare_tls
-	import pulsr_routes
 }
 
 transmission.{$LOFT_DOMAIN} {
@@ -165,15 +140,6 @@ http://pawpcorn.space-needle:80 {
 
 http://pupyrus.space-needle:80 {
 	reverse_proxy pupyrus:80
-}
-
-http://pulsr.space-needle:80 {
-	redir https://pulsr.space-needle{uri} permanent
-}
-
-https://pulsr.space-needle {
-	tls internal
-	import pulsr_routes
 }
 
 http://transmission.space-needle:80 {

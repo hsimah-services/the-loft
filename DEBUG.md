@@ -28,7 +28,6 @@ Debugging guide for Docker services on The Loft fleet. All commands assume you'r
 | **stellarr** | `stellarr-vpn`, `transmission`, `slskd`, `radarr`, `sonarr`, `lidarr`, `jackett` |
 | **pupyrus** | `pupyrus-db`, `pupyrus-redis`, `pupyrus`, `pupyrus-cli` (cli profile only) |
 | **howlr** | `howlr-snapserver`, `howlr-shairport-sync`, `howlr-librespot`, `howlr-snapclient` |
-| **pulsr** | `pulsr`, `pulsr-phanpy` |
 | **pawst** | `pawst` |
 
 ### Health Check URLs (space-needle)
@@ -43,7 +42,6 @@ Debugging guide for Docker services on The Loft fleet. All commands assume you'r
 | pupyrus | `http://pupyrus.space-needle` | Yes (via Caddy) |
 | mushr | `http://localhost:8880/config/` | Yes (host-only admin API) |
 | snapweb | `http://localhost:1780` | Yes |
-| pulsr | `https://pulsr.hsimah.com/api/v1/instance` | Yes |
 | pawst | `http://pawst.space-needle` | Yes (via Caddy) |
 | transmission | `http://localhost:9091` | Warn only (VPN) |
 | slskd | `http://localhost:5030` | Warn only (VPN) |
@@ -133,17 +131,11 @@ sudo cat $(sudo docker inspect <container> --format '{{.LogPath}}')
 ### System logs
 
 ```bash
-# Cron jobs (CPU collector, image collector, package collector, transmission cleanup, pulsr reports)
+# Cron jobs (transmission cleanup, deploy pullers)
 sudo grep -i loft /var/log/syslog | tail -20
 
-# CPU metrics (sampled every minute by pulsr-collector.sh)
-sudo cat /var/log/loft/cpu.log
-
-# Package update cache (refreshed every 6 hours by package-collector.sh)
-sudo cat /var/log/loft/packages.log
-
-# Docker image update cache (refreshed daily by image-collector.sh)
-sudo cat /var/log/loft/images.log
+# Deploy puller logs
+sudo cat /var/log/loft/deploy.log
 
 # Docker daemon logs
 sudo journalctl -u docker --since "1h"
@@ -176,7 +168,6 @@ curl -sk -o /dev/null -w '%{http_code}' --max-time 5 <url>
 curl -sk -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8081      # pupyrus
 curl -sk -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:32400/web # pawpcorn
 curl -sk -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8880/config/ # mushr (Caddy)
-curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://pulsr.hsimah.com/api/v1/instance # pulsr
 
 # VPN-dependent (may return 000 if VPN is down — that's expected)
 curl -sk -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:9091  # transmission
@@ -301,16 +292,13 @@ sudo docker network inspect loft-proxy --format '{{range .Containers}}{{.Name}} 
 sudo docker network inspect loft-proxy
 ```
 
-Expected members of `loft-proxy`: `mushr`, `mushr-tunnel`, `pupyrus`, `pulsr`, `pulsr-phanpy`, `pawst`
+Expected members of `loft-proxy`: `mushr`, `mushr-tunnel`, `pupyrus`, `pawst`
 
 ### Container-to-container connectivity
 
 ```bash
 # Test from mushr (Caddy) to pupyrus
 sudo docker exec mushr wget -q -O /dev/null http://pupyrus:80 && echo "OK" || echo "FAIL"
-
-# Test from mushr to pulsr
-sudo docker exec mushr wget -q -O /dev/null http://pulsr:8080 && echo "OK" || echo "FAIL"
 
 # Test from mushr to pawst
 sudo docker exec mushr wget -q -O /dev/null http://pawst:80 && echo "OK" || echo "FAIL"
@@ -322,7 +310,6 @@ sudo docker exec mushr wget -q -O /dev/null http://pawst:80 && echo "OK" || echo
 # Test wildcard DNS resolution (from the host)
 dig @localhost radarr.space-needle +short
 dig @localhost sonarr.loft.hsimah.com +short
-dig @localhost pulsr.hsimah.com +short
 dig @localhost hbla.ke +short
 dig @localhost hsimah.com +short
 
@@ -380,7 +367,6 @@ sudo docker logs mushr-tunnel --tail 30
 sudo docker logs mushr-tunnel 2>&1 | grep -i "registered\|error\|failed"
 
 # Test external access
-curl -sk -o /dev/null -w '%{http_code}' https://pulsr.hsimah.com/api/v1/instance
 curl -sk -o /dev/null -w '%{http_code}' https://hbla.ke
 curl -sk -o /dev/null -w '%{http_code}' https://hsimah.com
 ```
@@ -544,7 +530,6 @@ loft-ctl start mushr
 |---------|-----|
 | **pupyrus** | Deletes MariaDB database (`/opt/pupyrus/db`) — all WordPress content lost |
 | **pawpcorn** | Deletes Plex config (`/opt/pawpcorn/config`) — library metadata, watch history, all settings |
-| **pulsr** | Deletes GoToSocial data (`/opt/pulsr/data`) — all posts, accounts, media |
 | **mushr** | Deletes TLS certificates (`caddy-data`) — triggers re-issuance (rate limits apply) |
 | **howlr** | Deletes snapserver speaker group config (`snapserver-data` volume) |
 
@@ -621,14 +606,6 @@ sudo docker volume rm mushr_caddy-data mushr_caddy-config
 loft-ctl start mushr
 # Caddy will re-obtain certs via Cloudflare DNS-01 (takes ~30s)
 ```
-
-### Phanpy OAuth cache after GoToSocial rebuild
-
-**Symptom:** After rebuilding pulsr, Phanpy shows login errors or can't connect to GoToSocial.
-
-**Cause:** Phanpy caches the OAuth `client_id` in browser **local storage** (not cookies).
-
-**Fix:** Clear browser local storage for the Phanpy domain, not just cookies. In Chrome: DevTools > Application > Local Storage > delete all entries for the pulsr domain.
 
 ### Snapweb crashes on AirPlay stream
 
@@ -722,41 +699,6 @@ sudo systemctl restart systemd-resolved
 sudo docker restart mushr-dns
 ```
 
-### pulsr-ctl report silently fails
-
-**Symptom:** `sudo pulsr-ctl report` produces no output at all. No error, no post.
-
-**Cause:** A CPU sample of `0` in `/var/log/loft/cpu.log` triggers a bash arithmetic gotcha. Expressions like `(( 0 ))` return exit code 1, and `set -e` kills the script silently. This was fixed in commit `76c5437` by adding `|| true` to arithmetic lines that can evaluate to zero.
-
-**Fix:** Pull the latest code:
-```bash
-cd /srv/the-loft && git pull
-sudo pulsr-ctl report
-```
-
-**Debug tip:** If `pulsr-ctl` ever fails silently, run with `bash -x` to find where it dies:
-```bash
-sudo bash -x /srv/the-loft/pulsr-ctl report 2>&1 | tail -40
-```
-
-### Fleet report shows "Updates: no data"
-
-**Symptom:** `sudo pulsr-ctl report` posts with `Updates: no data` instead of package counts.
-
-**Cause:** The package collector cron hasn't run yet, or `/var/log/loft/packages.log` doesn't exist.
-
-**Fix:**
-```bash
-# Run the collector manually
-sudo /srv/the-loft/control-plane/package-collector.sh
-
-# Verify the cache file
-sudo cat /var/log/loft/packages.log
-
-# Check cron is installed
-cat /etc/cron.d/loft-package-collector
-```
-
 ### MariaDB won't start (pupyrus-db)
 
 **Symptom:** `pupyrus-db` exits immediately or enters a restart loop. WordPress and Redis are unaffected.
@@ -803,9 +745,9 @@ loft-ctl rebuild pupyrus
 sudo docker exec pupyrus-db mariadb-upgrade -u root -p
 ```
 
-### Pulsr SSL errors after idle (HTTP/3 QUIC timeout)
+### Caddy SSL errors after idle (HTTP/3 QUIC timeout)
 
-**Symptom:** After leaving Phanpy idle for a few minutes, API calls fail with SSL/protocol errors in the browser console. The Phanpy UI still loads (from service worker cache), but all GoToSocial API requests (`/api/*`) fail. Recovery requires logging out, clearing browser cache, and waiting 30-60 seconds.
+**Symptom:** After leaving an HTTPS service idle for a few minutes, API calls fail with SSL/protocol errors in the browser console. Recovery requires logging out, clearing browser cache, and waiting 30-60 seconds.
 
 **Cause:** Caddy enables HTTP/3 (QUIC over UDP) by default for all HTTPS listeners. After idle, the QUIC connection's server-side idle timeout expires. When the user returns, the browser tries to reuse the stale QUIC connection, causing SSL errors. The browser eventually falls back to HTTP/2 over TCP, but this takes 30-60 seconds.
 
@@ -816,7 +758,7 @@ sudo docker exec pupyrus-db mariadb-upgrade -u root -p
 sudo docker exec mushr caddy validate --config /etc/caddy/Caddyfile
 
 # Check that HTTP/3 is not advertised
-curl -sI https://pulsr.hsimah.com | grep -i alt-svc
+curl -sI https://pupyrus.loft.hsimah.com | grep -i alt-svc
 # Should return nothing (no h3 advertisement)
 
 # If the setting was removed, rebuild mushr
