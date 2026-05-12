@@ -116,12 +116,6 @@
           slug: "{{HOMEPAGE_VAR_UPTIME_KUMA_SLUG}}"
 
 - Infrastructure:
-    - Iditarod:
-        icon: github.svg
-        href: https://github.com/hsimah-services
-        description: CI runner
-        container: iditarod
-        server: my-docker
     - Mushr:
         icon: caddy.svg
         href: http://localhost:8880/config/
@@ -145,6 +139,12 @@
     - hbla.ke:
         icon: si-hugo
         href: https://hbla.ke
-        description: Personal site
+        description: Technical blog
+        container: pawst
+        server: my-docker
+    - hsimah.com:
+        icon: si-hugo
+        href: https://hsimah.com
+        description: Personal blog
         container: pawst
         server: my-docker

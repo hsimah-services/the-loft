@@ -495,7 +495,7 @@ info "Installed Pulsr status report cron job"
 # Deploy puller cron entries (one per DEPLOY_TARGETS entry)
 # Clear any stale entries from a previous run before installing fresh ones.
 rm -f /etc/cron.d/loft-deploy-*
-if [[ ${#DEPLOY_TARGETS[@]:-0} -gt 0 ]]; then
+if [[ -v DEPLOY_TARGETS && ${#DEPLOY_TARGETS[@]} -gt 0 ]]; then
   for entry in "${DEPLOY_TARGETS[@]}"; do
     IFS='|' read -r dt_name dt_repo dt_target dt_hook <<< "$entry"
     safe_name="${dt_name//[^a-zA-Z0-9-]/-}"

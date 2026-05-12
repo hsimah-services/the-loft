@@ -552,6 +552,30 @@ loft-ctl start mushr
 
 ## 10. Common Problems
 
+### pupyrus-db restart-loops with "Bad magic header in tc log"
+
+**Symptom:** `sudo docker ps -a --filter name=pupyrus-db` shows `Restarting (1)`. Logs show:
+
+```
+[ERROR] Bad magic header in tc log
+[ERROR] Crash recovery failed. Either correct the problem ... or delete tc log and start server with --tc-heuristic-recover={commit|rollback}
+[ERROR] Can't init tc log
+[ERROR] Aborting
+```
+
+**Cause:** MariaDB's two-phase-commit log (`tc.log`) got corrupted, usually because the container was hard-killed mid-startup. This happens intermittently after running `setup.sh` on space-needle, when `docker compose up -d` recreates pupyrus-db while it's in InnoDB recovery.
+
+**Fix:** WordPress doesn't use XA transactions, so `tc.log` carries no in-flight state worth preserving. Delete it and restart:
+
+```bash
+sudo docker stop pupyrus-db
+sudo rm /opt/pupyrus/db/tc.log
+sudo docker start pupyrus-db
+sudo docker logs -f pupyrus-db   # watch for "ready for connections"
+```
+
+No `--tc-heuristic-recover` flag is needed for this workload.
+
 ### VPN-dependent health checks failing
 
 **Symptom:** `loft-ctl health` shows WARNING for transmission/slskd but everything else is OK.
