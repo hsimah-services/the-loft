@@ -8,10 +8,10 @@ Fleet configuration for The Loft — a mono-repo managing all hosts (space-needl
 
 | Host | Role | Services |
 |------|------|----------|
-| `space-needle` | Primary server | mushr, pawpcorn, stellarr, pupyrus, howlr (server), pawst, houstn (beszel hub + uptime + homepage), snoot |
-| `viking` | Raspberry Pi 3 B+ | howlr (client), snoot |
-| `fjord` | Raspberry Pi 3 B+ | howlr (client), snoot |
-| `calavera` | Surface Pro 2 (kiosk + turntable) | howlr (client), spinnik, snoot |
+| `space-needle` | Primary server | mushr, pawpcorn, stellarr, pupyrus, howlr (server), pawst, houstn (hub + metrics), snoot |
+| `viking` | Raspberry Pi 3 B+ | howlr (client), snoot, houstn (metrics) |
+| `fjord` | Raspberry Pi 3 B+ | howlr (client), snoot, houstn (metrics) |
+| `calavera` | Surface Pro 2 (kiosk + turntable) | howlr (client), spinnik, snoot, houstn (metrics) |
 
 Each host has a config file at `hosts/<hostname>/host.conf` that declares its services, storage, directories, and health check URLs. A single `setup.sh` provisions any host by reading its config. Services that need post-deploy configuration have a `services/<name>/setup.sh` script that is automatically sourced after deployment.
 
@@ -30,7 +30,7 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Jackett | `linuxserver/jackett` | — (via Caddy) | `/opt/jackett` | Indexer proxy |
 | Mushr (proxy) | `caddy:2-alpine` + Cloudflare DNS module (custom build) | 80, 443 | `Caddyfile`, `Dockerfile.caddy` | Reverse proxy with HTTPS (Let's Encrypt via DNS-01) + LAN HTTP fallback; HTTP/3 disabled (`protocols h1 h2`) to prevent QUIC idle timeout issues; Caddy admin API bound to container loopback only |
 | Mushr (tunnel) | `cloudflare/cloudflared` | — (outbound only) | — | Cloudflare Tunnel — exposes hbla.ke and hsimah.com externally without open ports |
-| Mushr (DNS) | `drpsychick/dnsmasq` | 53/udp, 53/tcp | `dnsmasq.conf` | Wildcard DNS — resolves `*.space-needle` and `*.loft.hsimah.com` to LAN IP |
+| Mushr (DNS) | `drpsychick/dnsmasq` | 53/udp, 53/tcp | `dnsmasq.conf` | Wildcard DNS — resolves `*.space-needle` and `*.loft.hsimah.com` to LAN IP, plus per-host A records for `fjord`, `viking`, `calavera` |
 | Pupyrus | `wordpress` + `mariadb` + `redis` | — (via Caddy) | `/opt/pupyrus/html`, `/opt/pupyrus/db` | WordPress site (WPGraphQL + Redis object cache) |
 | Howlr (Music Assistant) | `ghcr.io/music-assistant/server` | 1704, 1705, 1780, 8095 (host) | `/opt/howlr` | Music library manager + multi-room audio server with built-in Snapcast, Spotify Connect, and AirPlay receiver |
 | Howlr snapclient | `ivdata/snapclient` | host network | `.env` per host | Snapcast client (receives stream, outputs to speakers) |
@@ -38,9 +38,10 @@ Each host has a config file at `hosts/<hostname>/host.conf` that declares its se
 | Spinnik (Icecast) | `libretime/icecast:2.4.4` | 8000 | env vars | Icecast streaming server — serves vinyl audio from the LP5X turntable |
 | Spinnik (DarkIce) | Custom build (`debian:bookworm-slim` + darkice) | — | `darkice.cfg` | Captures LP5X USB audio and encodes Ogg Vorbis stream to Icecast |
 | Spinnik (UI) | `nginx:alpine` | 8080 | `nginx.conf`, `ui/` | Touch-optimized vinyl controller with audio visualizer; proxies MA API (server-side Bearer auth) and Icecast stream (same-origin for Web Audio API) |
-| Houstn — Beszel | `henrygd/beszel` | — (via Caddy) | `/opt/houstn/beszel/data` | Fleet monitoring hub (Beszel) — web dashboard showing host CPU/RAM/disk/network and per-container Docker stats across all fleet hosts |
-| Houstn — Uptime | `louislam/uptime-kuma:1` | — (via Caddy) | `/opt/houstn/uptime/data` | Uptime monitor (Uptime Kuma) — HTTP polls all fleet service endpoints and presents a live status dashboard |
-| Houstn — Homepage | `ghcr.io/gethomepage/homepage` | — (via Caddy) | `services/houstn/homepage-config/` (bind-mounted from repo) | Homepage dashboard — unified fleet overview with live widgets for Plex streams/library counts, *arr stats, download queue, and container status via Docker socket |
+| Houstn — Beszel | `henrygd/beszel` | — (via Caddy) | `/opt/houstn/beszel/data` | Fleet monitoring hub (Beszel) — web dashboard showing host CPU/RAM/disk/network and per-container Docker stats across all fleet hosts (`hub` profile) |
+| Houstn — Uptime | `louislam/uptime-kuma:1` | — (via Caddy) | `/opt/houstn/uptime/data` | Uptime monitor (Uptime Kuma) — HTTP polls all fleet service endpoints and presents a live status dashboard (`hub` profile) |
+| Houstn — Homepage | `ghcr.io/gethomepage/homepage` | — (via Caddy) | `services/houstn/homepage-config/` (bind-mounted from repo) | Homepage dashboard — unified fleet overview with live widgets for Plex streams/library counts, *arr stats, download queue, and container status via Docker socket (`hub` profile) |
+| Houstn — Glances | `nicolargo/glances:latest-full` | 61208 (host) | — | Per-host metrics API — exposes CPU/RAM/disk/network via the Glances v4 REST API for Homepage's glances widgets (`metrics` profile, runs on all hosts) |
 | Snoot | `henrygd/beszel-agent` | 45876 (host) | — | Beszel agent — runs on every host with `network_mode: host` to expose system and Docker metrics to the Houstn/Beszel hub |
 
 Transmission and slskd route through a shared NordVPN (NordLynx) container (`stellarr-vpn`). Radarr, Sonarr, Lidarr, Bazarr, and Jackett run on the shared `loft-proxy` bridge network and are reachable only via Caddy (no host port mappings). Radarr/Sonarr/Lidarr have `host.docker.internal` mapped via `extra_hosts` so they can still reach Transmission and slskd at the VPN container's host-published ports. All eight are managed together in `services/stellarr/docker-compose.yml`. Lidarr uses the `nightly` tag to enable the [Lidarr.Plugin.Slskd](https://github.com/allquiet-hub/Lidarr.Plugin.Slskd) plugin, which adds slskd as both an indexer and download client.
@@ -114,7 +115,7 @@ the-loft/
 │   │   │   └── index.html                   # Vinyl turntable web controller + visualizer
 │   │   └── .env.example
 │   ├── houstn/
-│   │   ├── docker-compose.yml              # Beszel hub + Uptime Kuma + Homepage dashboard
+│   │   ├── docker-compose.yml              # hub: beszel + uptime + homepage / metrics: glances
 │   │   ├── .env.example
 │   │   └── homepage-config/                # Homepage YAML (version-controlled, bind-mounted)
 │   │       ├── settings.yaml
@@ -259,6 +260,7 @@ Docker log rotation is configured at two levels:
 | uptime | 10m | 3 | Uptime Kuma status monitor (houstn) |
 | homepage | 10m | 3 | Homepage fleet dashboard (houstn) |
 | snoot | 5m | 3 | Beszel agent (host metrics + Docker stats) |
+| glances (houstn) | 5m | 3 | Glances metrics API (host CPU/RAM/disk for Homepage) |
 
 ## Security Model
 
@@ -298,8 +300,10 @@ cp services/stellarr/.env.example services/stellarr/.env
 cp services/pupyrus/.env.example services/pupyrus/.env
 cp services/mushr/.env.example services/mushr/.env
 cp services/houstn/.env.example services/houstn/.env
-# On all hosts (snoot — Beszel agent):
+# On all hosts (snoot — Beszel agent; houstn — Glances metrics profile):
 cp services/snoot/.env.example services/snoot/.env
+cp services/houstn/.env.example services/houstn/.env
+# On fjord/viking/calavera, change COMPOSE_PROFILES=metrics in services/houstn/.env
 # Note: BESZEL_KEY is empty until the Beszel hub is running — fill it in after first launch (see Fleet Monitoring)
 
 # Edit each .env file with real values
@@ -357,7 +361,14 @@ After each `rebuild` or `update`, the script verifies:
 
 ## Fleet Monitoring
 
-Houstn is the central observability stack on space-needle, bundling three containers (`beszel`, `uptime`, `homepage`) into one compose file at `services/houstn/`. Snoot is the Beszel agent that runs on every host and reports back to the hub.
+Houstn is the central observability stack, bundling four containers into one compose file at `services/houstn/` using Compose profiles — similar to how howlr uses `server`/`client`:
+
+| Profile | Containers | Hosts |
+|---------|-----------|-------|
+| `hub` | beszel, uptime, homepage | space-needle only |
+| `metrics` | glances | all hosts (space-needle + fjord + viking + calavera) |
+
+space-needle runs `COMPOSE_PROFILES=hub,metrics`; remote hosts run `COMPOSE_PROFILES=metrics`. Snoot is the Beszel agent that runs on every host and reports back to the hub.
 
 ### Beszel — Host Metrics & Docker Stats
 
@@ -373,9 +384,7 @@ The Beszel hub (`henrygd/beszel`) is a web dashboard showing real-time and histo
 6. Back in the Beszel UI, configure each system's connection:
    - `space-needle`: host `host.docker.internal`, port `45876` (the hub container can't reach `localhost`; `host.docker.internal` resolves to the host gateway via the `extra_hosts` entry in the compose)
    - `calavera`: host `calavera`, port `45876`
-   - `fjord` / `viking`: use each host's LAN IP, port `45876`
-
-> Add fjord and viking to `services/mushr/dnsmasq.conf` if they have static IPs, so you can use hostnames instead of IPs in the Beszel UI.
+   - `fjord` / `viking`: host `fjord` / `viking`, port `45876` (resolved via dnsmasq)
 
 ### Uptime Kuma — Endpoint Monitoring
 
@@ -400,7 +409,17 @@ Uptime Kuma (`louislam/uptime-kuma:1`) is an HTTP polling monitor with a live st
 
 Homepage (`ghcr.io/gethomepage/homepage`) is a unified fleet overview at `https://homepage.loft.hsimah.com`, with live widgets for Plex streams/library counts, *arr stats, download queue, and container status via the Docker socket.
 
+Per-host CPU/RAM/disk usage comes from the [Glances](#glances--per-host-resource-widgets) service running on every fleet host. Homepage's `glances` widgets in `widgets.yaml` query each host's API at port 61208 — `host.docker.internal` for space-needle (local), and the bare hostnames `fjord`/`viking`/`calavera` for the remotes (resolved via `extra_hosts` in the homepage compose).
+
 Configuration lives in `services/houstn/homepage-config/` (bind-mounted from the repo, version-controlled): `services.yaml`, `widgets.yaml`, `bookmarks.yaml`, `settings.yaml`, `docker.yaml`. API tokens and other secrets are kept out of the YAML and substituted from `services/houstn/.env` via `HOMEPAGE_VAR_*` placeholders (e.g. `{{HOMEPAGE_VAR_RADARR_API_KEY}}`).
+
+### Glances — Per-host Resource Widgets
+
+Glances (`nicolargo/glances:latest-full`) is the `metrics` profile of houstn. It runs on every host with `network_mode: host` and `pid: host`, exposing the Glances v4 REST API on port 61208. Homepage consumes this API to render CPU/RAM/disk widgets on the dashboard.
+
+The container bind-mounts `/` as `/rootfs:ro` so disk usage reflects the host root filesystem rather than the container overlay. On space-needle, an override at `hosts/space-needle/overrides/houstn/docker-compose.override.yml` additionally mounts `/mammoth:/mammoth:ro` so the media volume is reported alongside the root disk.
+
+No extra env vars are required. The service has no UI — it's a metrics source for Homepage. Direct access (e.g. for debugging) is available at `http://<host>:61208` on the LAN.
 
 ### Cron Jobs
 
@@ -411,7 +430,7 @@ Configuration lives in `services/houstn/homepage-config/` (bind-mounted from the
 
 ## Raspberry Pi Fleet
 
-Two Raspberry Pi 3 B+ devices (`viking` and `fjord`) in The Loft run Docker with howlr (Snapcast client) and snoot (Beszel agent), using the same unified `setup.sh` and user/group model as space-needle.
+Two Raspberry Pi 3 B+ devices (`viking` and `fjord`) in The Loft run Docker with howlr (Snapcast client), snoot (Beszel agent), and houstn (`metrics` profile — Glances per-host metrics API for Homepage), using the same unified `setup.sh` and user/group model as space-needle.
 
 ### Pi Setup
 
@@ -523,7 +542,7 @@ Direct port access continues to work for host-networked services (Plex on 32400,
 Before deploying, edit `services/mushr/dnsmasq.conf` and replace the `listen-address` and `address` entries with space-needle's actual LAN IP.
 
 To use the subdomain URLs, point LAN clients' DNS at space-needle's IP:
-- **Router DHCP** (recommended): Set the primary DNS server to space-needle's LAN IP in your router's DHCP settings. All devices on the network will automatically resolve `*.space-needle`, `*.loft.hsimah.com`, `hbla.ke`, and `hsimah.com`.
+- **Router DHCP** (recommended): Set the primary DNS server to space-needle's LAN IP in your router's DHCP settings. All devices on the network will automatically resolve `*.space-needle`, `*.loft.hsimah.com`, `hbla.ke`, `hsimah.com`, and the bare hostnames `fjord`/`viking`/`calavera`.
 - **Per-device**: Manually set DNS to space-needle's LAN IP in each device's network settings.
 
 ### Cloudflare Setup (one-time)
@@ -650,7 +669,7 @@ Each service that needs secrets has a `.env.example` template. Copy it to `.env`
 | Howlr (client) | `COMPOSE_PROFILES=client`, `SNAPSERVER_HOST`, `SOUND_DEVICE`, `HOST_ID` |
 | Mushr | `LOFT_DOMAIN`, `CLOUDFLARE_API_TOKEN`, `TUNNEL_TOKEN` (edit `dnsmasq.conf` with LAN IP before deploying) |
 | Spinnik | `ICECAST_SOURCE_PASSWORD`, `ICECAST_ADMIN_PASSWORD` (source password must match `darkice.cfg`), `MA_HOST`, `MA_API_TOKEN` |
-| Houstn | `HOMEPAGE_VAR_*` placeholders for the Homepage dashboard (Plex token, *arr API keys, Transmission/slskd creds, Uptime Kuma slug). Beszel and Uptime Kuma have no required env vars |
+| Houstn | `COMPOSE_PROFILES` (`hub,metrics` on space-needle; `metrics` on other hosts). `HOMEPAGE_VAR_*` placeholders for the Homepage dashboard (hub profile only — Plex token, *arr API keys, Transmission/slskd creds, Uptime Kuma slug). Beszel and Uptime Kuma have no required env vars. Glances has no required env vars. |
 | Snoot | `BESZEL_KEY`, `BESZEL_TOKEN` (copy from the Beszel hub UI after first launch — see Fleet Monitoring setup) |
 
 ## CI

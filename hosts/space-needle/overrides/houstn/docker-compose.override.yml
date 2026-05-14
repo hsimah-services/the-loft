@@ -1,0 +1,4 @@
+services:
+  glances:
+    volumes:
+      - /mammoth:/mammoth:ro

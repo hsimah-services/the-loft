@@ -1,8 +1,11 @@
 services:
+  # ── Hub profile ─────────────────────────────────────────────────────────────
   beszel:
     image: henrygd/beszel
     container_name: beszel
     restart: unless-stopped
+    profiles:
+      - hub
     logging:
       driver: json-file
       options:
@@ -19,6 +22,8 @@ services:
     image: louislam/uptime-kuma:1
     container_name: uptime
     restart: unless-stopped
+    profiles:
+      - hub
     logging:
       driver: json-file
       options:
@@ -33,6 +38,8 @@ services:
     image: ghcr.io/gethomepage/homepage:latest
     container_name: homepage
     restart: unless-stopped
+    profiles:
+      - hub
     logging:
       driver: json-file
       options:
@@ -46,8 +53,32 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "fjord:192.168.86.30"
+      - "viking:192.168.86.26"
+      - "calavera:192.168.86.35"
     networks:
       - loft-proxy
+
+  # ── Metrics profile ──────────────────────────────────────────────────────────
+  glances:
+    image: nicolargo/glances:latest-full
+    container_name: glances
+    restart: unless-stopped
+    profiles:
+      - metrics
+    network_mode: host
+    pid: host
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/rootfs:ro
+      - /etc/os-release:/etc/os-release:ro
+    environment:
+      - GLANCES_OPT=-w
 
 networks:
   loft-proxy:

@@ -24,6 +24,16 @@ After making any changes to the repository (docker-compose files, env files, set
 - Quick start instructions and deploy commands
 - Host configuration format
 
+## Compose Profiles
+
+Prefer Docker Compose profiles over standalone services when a new container is functionally part of an existing service group. Before creating `services/<new>/`, ask: does this belong inside an existing service's compose file behind a profile?
+
+Current profile conventions:
+- **houstn** — `hub` (beszel + uptime + homepage, space-needle only) / `metrics` (glances, all hosts)
+- **howlr** — `server` (Music Assistant, space-needle only) / `client` (snapclient, Pi hosts)
+
+When adding infrastructure that runs fleet-wide (agents, exporters, sidecars), default to adding it as a new profile inside the most closely related existing service rather than creating a new top-level service. For example: a new per-host metrics exporter belongs in houstn under a new or existing profile, not as `services/new-exporter/`.
+
 ## Naming Conventions
 
 When suggesting names for new services or hosts, follow these conventions.
