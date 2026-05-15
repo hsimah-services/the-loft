@@ -15,7 +15,17 @@ Every page follows [`_template.md`](_template.md): Overview · Architecture · C
 
 ## Services
 
-Service pages will land under `services/` as the rest of #66 lands.
+| Service | Purpose |
+|---------|---------|
+| [houstn](services/houstn.md) | Fleet observability — Beszel hub, Uptime Kuma, Homepage, per-host Glances |
+| [howlr](services/howlr.md) | Music Assistant + Snapcast — whole-home audio |
+| [mushr](services/mushr.md) | Caddy reverse proxy + Cloudflare Tunnel + LAN DNS |
+| [pawpcorn](services/pawpcorn.md) | Plex Media Server |
+| [pawst](services/pawst.md) | Static blogs `hbla.ke` and `hsimah.com` |
+| [pupyrus](services/pupyrus.md) | WordPress (+ MariaDB + Redis) |
+| [snoot](services/snoot.md) | Beszel agent on every host |
+| [spinnik](services/spinnik.md) | Vinyl turntable streamer — DarkIce + Icecast + UI on calavera |
+| [stellarr](services/stellarr.md) | *arr stack + Transmission + slskd, all behind NordVPN |
 
 ## Scripts
 
