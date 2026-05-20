@@ -31,6 +31,8 @@ services:
         max-file: "3"
     volumes:
       - /opt/houstn/uptime/data:/app/data
+    dns:
+      - 192.168.86.28
     networks:
       - loft-proxy
 
