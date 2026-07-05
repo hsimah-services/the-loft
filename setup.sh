@@ -324,8 +324,11 @@ if [[ "${I3_ENABLED:-false}" == "true" ]]; then
   info "Provisioning i3 desktop..."
 
   # ── Packages ──────────────────────────────────────────────────────────────
+  # Preseed the display-manager debconf question so the install never blocks on
+  # the interactive "default display manager" prompt (lightdm vs gdm3).
   info "Installing i3 + Xorg packages..."
-  apt-get install -y -qq xorg i3 xterm lightdm > /dev/null
+  echo "lightdm shared/default-x-display-manager select lightdm" | debconf-set-selections
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xorg i3 xterm lightdm > /dev/null
 
   # ── lightdm auto-login (rodnik → i3) ──────────────────────────────────────
   info "Configuring lightdm auto-login (rodnik → i3)..."
