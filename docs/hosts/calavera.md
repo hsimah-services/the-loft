@@ -1,13 +1,12 @@
 # `calavera`
 
-> Surface Pro 2 (x86_64, touchscreen) in The Loft fleet — locked-down vinyl kiosk plus the [Spinnik](../services/spinnik.md) audio capture stack.
+> Surface Pro 2 (x86_64, touchscreen) in The Loft fleet — always-on Downstairs Snapcast client with an i3 desktop. Previously the vinyl kiosk; that role (Spinnik) has been retired.
 
 ## Overview
 
-`calavera` is an old Surface Pro 2 (Ubuntu, 4GB RAM, Intel 3rd-gen, 10.6" 1080p touchscreen) that sits in a dock next to the Audio-Technica LP5X turntable. It runs two distinct workloads on the same machine:
+`calavera` is an old Surface Pro 2 (Ubuntu, 4GB RAM, Intel 3rd-gen, 10.6" 1080p touchscreen) sitting in a dock. It took over the **Downstairs Snapcast client** role from [fjord](fjord.md), so it's now an always-on audio sink: [Music Assistant on space-needle](space-needle.md) streams to it and it plays out through a USB DAC into the Downstairs speakers.
 
-1. **Audio capture + streaming** — the [Spinnik](../services/spinnik.md) stack (DarkIce + Icecast + nginx UI) ingests USB audio from the LP5X, encodes it to Ogg Vorbis, and serves it at `http://calavera:8000/vinyl` for [Music Assistant on space-needle](space-needle.md) to pick up as a radio station.
-2. **Touchscreen kiosk** — a single-app Wayland kiosk (cage + chromium) displays the Spinnik web UI fullscreen at `http://localhost:8080` so anyone in the room can start/stop vinyl playback and pick which Snapcast group hears it.
+The display runs a minimal **i3** desktop (lightdm autologs the `rodnik` service account into i3). This replaced the old single-app chromium kiosk. The vinyl-casting stack (Spinnik — DarkIce + Icecast + touch UI capturing the Audio-Technica LP5X) has been **retired entirely** and removed from the repo.
 
 It also runs the [Houstn](../services/houstn.md) `metrics` profile and the [Snoot](../services/snoot.md) Beszel agent like the rest of the fleet.
 
@@ -17,52 +16,42 @@ Naming aside: calavera is **not** a Raspberry Pi. It's an x86_64 Surface Pro 2 �
 
 ### Services running here
 
-`hosts/calavera/host.conf` declares `SERVICES=(howlr spinnik snoot houstn)` and `KIOSK_ENABLED=true`. With `COMPOSE_PROFILES=client` for howlr and `COMPOSE_PROFILES=metrics` for houstn this resolves to:
+`hosts/calavera/host.conf` declares `SERVICES=(howlr snoot houstn)` and `I3_ENABLED=true`. With `COMPOSE_PROFILES=client` for howlr and `COMPOSE_PROFILES=metrics` for houstn this resolves to:
 
 | Service | Container | Profile | Purpose |
 |---------|-----------|---------|---------|
-| [spinnik](../services/spinnik.md) | `spinnik-icecast`, `spinnik-darkice`, `spinnik-ui` | — | Vinyl capture + Icecast stream + touch UI |
-| [howlr](../services/howlr.md) | `howlr-snapclient` | `client` | Snapcast client (kiosk audio output) |
+| [howlr](../services/howlr.md) | `howlr-snapclient` | `client` | Snapcast client — plays the Downstairs zone through the USB DAC |
 | [snoot](../services/snoot.md) | `snoot` | — | Beszel agent |
 | [houstn](../services/houstn.md) | `glances` | `metrics` | Per-host metrics for Homepage |
 
-### Kiosk stack
+### i3 desktop stack
 
 ```
-greetd (auto-login as kiosk user, VT 7)
-  └── cage -s (Wayland kiosk compositor, single fullscreen app, no WM)
-       └── chromium-browser --kiosk --ozone-platform=wayland \
-                            --force-device-scale-factor=${KIOSK_SCALE} \
-                            ${KIOSK_URL}
+lightdm (auto-login as rodnik)
+  └── i3 session (minimal tiling WM, config seeded from /etc/i3/config)
 ```
 
-Chromium runs under managed policies (`/etc/chromium/policies/managed/kiosk.json`) that block all URLs by default and allowlist only:
+`rodnik` is a locked-down display service account (created by `setup.sh` only when `I3_ENABLED=true`): home dir + login shell, member of `video`/`input`/`audio`, no sudo and no docker. lightdm autologin is configured via `/etc/lightdm/lightdm.conf.d/50-rodnik-autologin.conf`.
 
-```
-loft.hsimah.com   .loft.hsimah.com
-space-needle      .space-needle
-hbla.ke           hsimah.com
-calavera          localhost
-```
-
-DevTools, incognito, password manager, sync, translate, and bookmark editing are all disabled. The kiosk user has no sudo or docker access.
-
-Power-state hardening (also in `setup.sh`):
+Always-on hardening (also in `setup.sh`, because this is now a 24/7 audio sink):
 
 - `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target` are masked
-- `HandleLidSwitch*=ignore` in `/etc/systemd/logind.conf.d/kiosk.conf` (always-on display)
-- `consoleblank=0` added to the kernel cmdline + a udev rule that forces DPMS On for every DRM connector — screen never blanks
+- `HandleLidSwitch*=ignore` in `/etc/systemd/logind.conf.d/i3.conf` (runs docked, lid closed)
 - `iio-sensor-proxy` removed (no auto-rotation)
 
-### LP5X audio device pinning
+Unlike the old kiosk, the screen is allowed to blank normally — there's no `consoleblank=0` / DPMS-off forcing here anymore.
 
-USB audio devices don't get stable Linux names. After a reboot the LP5X might be `hw:1,0` or `hw:3,0` depending on USB enumeration order, but DarkIce needs a deterministic device. `setup.sh` installs `/etc/udev/rules.d/99-lp5x.rules`:
+### Audio output — USB DAC on the dock
+
+The Downstairs speakers connect to calavera via a **USB DAC** (reports as `CONEXANT CNXT Audio`, ALSA card name `Audio`) plugged into a dock USB port. howlr's snapclient targets it with:
 
 ```
-SUBSYSTEM=="sound", ATTRS{idVendor}=="08bb", ATTRS{idProduct}=="29c0", ATTR{id}="LP5X"
+SOUND_DEVICE=plughw:Audio,0
 ```
 
-That matches the TI PCM2900C audio chip inside the LP5X by USB vendor/product ID and pins it to ALSA name `LP5X`, so DarkIce can always reference `plughw:LP5X,0` regardless of enumeration order. The rule is reapplied on every `setup.sh` run.
+Pinned by card **name** (`Audio`), not number, so it survives reboots / re-enumeration. `littledog` (the container user) is in the `audio` group via `LITTLEDOG_EXTRA_GROUPS=audio`, so `howlr-snapclient` can open `/dev/snd`.
+
+**Why a USB DAC and not the 3.5mm jack** — the Surface's internal codec (Realtek ALC280, ALSA card `PCH`) only exposes two analog output pins: the internal speaker (node 0x14) and the tablet body's own headphone jack (node 0x15). The Surface Pro 2 **dock's** 3.5mm out is *not* wired through the codec — plugging into it produces no jack event and no audio, so it's dead under Linux. The tablet's own headphone jack works, but the USB DAC is tidier (one cable to the dock) and more reliable than the flaky internal codec.
 
 ### Surface Pro 2 WiFi quirks
 
@@ -83,127 +72,99 @@ That disables autosuspend for the Marvell USB WiFi adapter. The fleet-wide `/etc
 
 ### `host.conf`
 
-See [`hosts/calavera/host.conf`](../../hosts/calavera/host.conf). The kiosk-specific variables:
+See [`hosts/calavera/host.conf`](../../hosts/calavera/host.conf). The notable variables:
 
 | Variable | Value | Purpose |
 |----------|-------|---------|
-| `SERVICES` | `(howlr spinnik snoot houstn)` | Spinnik is calavera-only |
-| `KIOSK_ENABLED` | `true` | Triggers the kiosk provisioning block in `setup.sh` |
-| `KIOSK_URL` | `http://localhost:8080` | What chromium loads on startup (the spinnik-ui nginx container) |
-| `KIOSK_SCALE` | `1` | `--force-device-scale-factor` value |
-| `LITTLEDOG_EXTRA_GROUPS` | `audio` | DarkIce / snapclient need ALSA |
+| `SERVICES` | `(howlr snoot houstn)` | Always-on snapclient + fleet metrics |
+| `I3_ENABLED` | `true` | Triggers the i3 provisioning block in `setup.sh` (rodnik + lightdm + Surface hardening) |
+| `LITTLEDOG_EXTRA_GROUPS` | `audio` | snapclient needs ALSA access |
 | `SSH_DISABLE_PASSWORD` | `true` | Key-only SSH |
 | `SERVICE_ENDPOINTS` / `HEALTH_URLS` | empty | No web endpoints health-checked from this host |
 
 ### `.env` files
 
 ```bash
-cp services/howlr/.env.example   services/howlr/.env       # client profile
-cp services/spinnik/.env.example services/spinnik/.env     # ICECAST_*, MA_HOST, MA_API_TOKEN
-cp services/snoot/.env.example   services/snoot/.env       # BESZEL_*
-cp services/houstn/.env.example  services/houstn/.env      # COMPOSE_PROFILES=metrics
+cp services/howlr/.env.example  services/howlr/.env       # client profile
+cp services/snoot/.env.example  services/snoot/.env       # BESZEL_*
+cp services/houstn/.env.example services/houstn/.env      # COMPOSE_PROFILES=metrics
 ```
 
-Spinnik notes:
+howlr `.env` (the per-host values that matter here):
 
-| Var | Purpose |
-|-----|---------|
-| `ICECAST_SOURCE_PASSWORD` | Must match the `password = ...` line in `services/spinnik/darkice.cfg` (DarkIce uses this to push to Icecast) |
-| `ICECAST_ADMIN_PASSWORD` | Icecast admin UI |
-| `MA_HOST`, `MA_API_TOKEN` | The nginx UI server-side-injects this Bearer token when proxying calls to Music Assistant on space-needle, so the browser never holds the token |
+| Var | Value |
+|-----|-------|
+| `COMPOSE_PROFILES` | `client` |
+| `SNAPSERVER_HOST` | `192.168.86.28` (space-needle) |
+| `SOUND_DEVICE` | `plughw:Audio,0` (USB DAC) |
+| `HOST_ID` | `calavera` |
 
 ## Operations
 
 ### First-time provisioning
 
-Same shape as the Pis — clone the repo, copy `.env` files, run `setup.sh`. The script auto-detects `KIOSK_ENABLED=true` and runs the kiosk block (installs `cage`, `chromium-browser`, `greetd`, deploys the managed policy, masks sleep targets, installs the LP5X + Surface WiFi udev rules).
+Same shape as the Pis — clone the repo, copy `.env` files, run `setup.sh`. The script auto-detects `I3_ENABLED=true` and runs the i3 block (installs `xorg`, `i3`, `xterm`, `lightdm`; creates `rodnik`; configures lightdm autologin; masks sleep targets; installs the Surface WiFi udev rule; removes `iio-sensor-proxy`). It also cleans up legacy kiosk artifacts (greetd config, chromium managed policy, DPMS-off rule) and removes the `cage`/`chromium-browser`/`greetd` packages.
 
 ```bash
 cd /srv/the-loft
 sudo bash setup.sh
-sudo udevadm control --reload-rules
-sudo reboot   # so the kernel cmdline change (consoleblank=0) takes effect
+sudo reboot   # boot into the i3 session
 ```
 
-After reboot, greetd auto-logs in the `kiosk` user on VT 7, cage starts chromium fullscreen at `KIOSK_URL`.
+> Migration note: `setup.sh` does **not** delete the old `kiosk` user. Once you've confirmed i3 works, remove it manually: `sudo userdel -r kiosk`.
 
 ### Day-to-day
 
 ```bash
 loft-ctl health
-loft-ctl rebuild spinnik
 loft-ctl rebuild howlr
 loft-ctl update --all
 ```
 
-### Adding a URL to the kiosk allowlist
-
-Edit `URLAllowlist` in `setup.sh` (the `# ── Chromium managed policies ──` block) and re-run `sudo bash setup.sh` — the file at `/etc/chromium/policies/managed/kiosk.json` is overwritten on every run, so any manual edits to that file get clobbered. After re-running, restart chromium (kill cage and let greetd respawn it, or reboot).
-
-### Verify the LP5X is pinned
+### Verify the snapclient is connected
 
 ```bash
-arecord -l                                   # should show 'LP5X' as a card name
-ls /proc/asound/LP5X 2>/dev/null              # directory exists when the rule applied
-sudo docker exec spinnik-darkice darkice -v   # darkice version + config check
+sudo docker logs howlr-snapclient --tail 30    # steady connection to 192.168.86.28
 ```
 
-If `LP5X` isn't there, the udev rule didn't match — check `lsusb | grep -i 08bb` to confirm the LP5X is actually plugged in and enumerating, then `sudo udevadm control --reload-rules && sudo udevadm trigger`.
+In Music Assistant on space-needle, calavera plays as `ma_calavera`, a member of the `Downstairs` (and `All`) sync groups — it inherited that membership from the retired `ma_fjord`.
+
+### Check / set the audio output device
+
+```bash
+cat /proc/asound/cards          # 'Audio' = the USB DAC (CONEXANT)
+sudo aplay -l                   # card 'Audio', device 0
+sudo speaker-test -D plughw:Audio,0 -c 2 -t wav -l 2
+```
 
 ## Related
 
-- [spinnik service page](../services/spinnik.md) — Icecast/DarkIce/UI details and `darkice.cfg`
-- [howlr](../services/howlr.md) — how the Icecast stream becomes a fleet-wide MA radio station
+- [fjord](fjord.md) — previously held the Downstairs Snapcast role
+- [howlr](../services/howlr.md) — Music Assistant + Snapcast architecture
+- [viking](viking.md) — the other Snapcast client (Upstairs)
 - [`hsimah/posts/my-home-lab.md`](../../../hsimah/posts/my-home-lab.md) — fleet overview
-- [`hblake/posts/spinnik.md`](../../../hblake/posts/spinnik.md) — the technical writeup of the Spinnik build
-- [`hblake/posts/gnome-chromium-pwa.md`](../../../hblake/posts/gnome-chromium-pwa.md) — chromium PWA war stories (background reading; not specific to this kiosk)
 
 ## Debug & Troubleshooting
 
-### LP5X audio not captured by DarkIce
+### No sound from the speakers
 
-**Symptom:** `spinnik-darkice` runs but the Icecast stream is silent or the container exits with an ALSA error like `cannot open audio device plughw:LP5X,0`.
-
-**Causes / checks:**
-
-1. **udev rule didn't apply.** `arecord -l` should list `LP5X` as a card name. If it doesn't:
-   ```bash
-   lsusb | grep -i 08bb                                # is the LP5X enumerating?
-   cat /etc/udev/rules.d/99-lp5x.rules                 # rule present?
-   sudo udevadm control --reload-rules
-   sudo udevadm trigger
-   ```
-2. **USB enumeration changed and the rule was removed.** Re-run `sudo bash setup.sh` to reinstall it.
-3. **Another process holds the device.** `sudo fuser -v /dev/snd/*` — kill anything that grabbed the LP5X.
-
-### Kiosk shows a black screen / chromium doesn't appear
+**Symptom:** MA plays to Downstairs but nothing comes out.
 
 **Checks:**
 
-```bash
-systemctl status greetd
-journalctl -u greetd --since '5 min ago' | tail -50
-sudo journalctl -b -t cage | tail -30
-```
+1. **USB DAC present?** `cat /proc/asound/cards` should list card `Audio`. If missing, the DAC isn't enumerating — confirm the **dock is powered** (a common trap: the Surface's own battery keeps it running while the dock, and therefore its USB ports, are dead) and the cable is a data cable, then re-check.
+2. **Right device?** `SOUND_DEVICE=plughw:Audio,0` in `services/howlr/.env`. Test directly with `sudo speaker-test -D plughw:Audio,0 -c 2 -t wav -l 2`.
+3. **Container can't open ALSA?** `sudo docker logs howlr-snapclient` for `cannot open` errors. If the card-name form fails inside the container, fall back to the numeric (`plughw:N,0` from `aplay -l`) and `loft-ctl rebuild howlr`.
+4. **Volume:** final loudness is the DAC's own level × the MA group volume. The USB DAC has its own mixer — `sudo amixer -c Audio` to unmute / raise.
 
-Common causes: chromium policy JSON has a syntax error (chromium refuses to start with malformed managed policies — re-run `setup.sh` to regenerate the file); `${KIOSK_URL}` isn't reachable yet (e.g. spinnik-ui container hasn't started); display rotation got re-enabled (confirm `iio-sensor-proxy` is still removed).
-
-### Display blanks after a few minutes
-
-**Cause:** Either the kernel console blanker or DPMS came back on. The fixes from `setup.sh` (`consoleblank=0` kernel arg + DPMS-off udev rule) require a reboot to take full effect.
-
-**Fix:**
+### Snapclient won't connect to the snapserver
 
 ```bash
-# Confirm the kernel cmdline took effect
-cat /proc/cmdline | grep consoleblank
-
-# Force DPMS On now
-for f in /sys/class/drm/card*-*/dpms; do echo On | sudo tee "$f"; done
-
-# If consoleblank=0 isn't in /proc/cmdline, re-run setup and reboot
-sudo bash setup.sh && sudo reboot
+sudo docker logs howlr-snapclient --tail 50
+ping 192.168.86.28
 ```
+
+Confirm `SNAPSERVER_HOST=192.168.86.28` in `services/howlr/.env` and that MA/Snapserver is up on space-needle.
 
 ### Surface Pro WiFi drops out
 
@@ -216,19 +177,11 @@ sudo bash setup.sh && sudo reboot
 journalctl -t loft-wifi-watchdog --since '1 day ago'
 ```
 
-### Chromium navigates to a URL outside the allowlist
+### i3 doesn't start / drops to a login prompt
 
-**Symptom:** A page that used to work shows "This site can't be reached" or chromium shows the policy-blocked page.
+```bash
+systemctl status lightdm
+journalctl -u lightdm --since '5 min ago' | tail -50
+```
 
-**Cause:** The kiosk allowlist in `setup.sh` doesn't include that URL.
-
-**Fix:** Add the host to the `URLAllowlist` block in `setup.sh`, re-run `sudo bash setup.sh`, then restart chromium (`sudo systemctl restart greetd`).
-
-### Spinnik UI can't reach Music Assistant
-
-**Symptom:** Buttons in the touch UI don't trigger MA playback; the browser console shows 401/502 from `/api/spinnik`.
-
-**Causes:**
-
-- `MA_API_TOKEN` in `services/spinnik/.env` is wrong or stale (regenerate in MA, restart `spinnik-ui`)
-- DNS — the `spinnik-ui` nginx container needs to resolve `space-needle` (or whatever `MA_HOST` is). If it can't, add `dns: [192.168.86.28]` to the `spinnik-ui` service in compose, same pattern as the [container DNS quirk on space-needle](space-needle.md#containers-cant-resolve-loft-hsimah-com-while-the-host-can)
+Common causes: lightdm not enabled (`sudo systemctl enable --now lightdm`); the `rodnik` account or its `~/.config/i3/config` missing (re-run `setup.sh`); a leftover greetd still grabbing the VT (`sudo systemctl disable --now greetd`).

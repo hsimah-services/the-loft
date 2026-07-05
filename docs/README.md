@@ -10,8 +10,8 @@ Every page follows [`_template.md`](_template.md): Overview · Architecture · C
 |------|----------|------|
 | [space-needle](hosts/space-needle.md) | Minisforum MS-01 (i9, x86_64) | Primary server — runs everything |
 | [viking](hosts/viking.md) | Raspberry Pi 3 B+ (arm64) | Snapcast client + per-host metrics |
-| [fjord](hosts/fjord.md) | Raspberry Pi 3 B+ (arm64) | Snapcast client + per-host metrics |
-| [calavera](hosts/calavera.md) | Surface Pro 2 (x86_64, touchscreen) | Vinyl kiosk + audio capture |
+| [fjord](hosts/fjord.md) | Raspberry Pi 3 B+ (arm64) | Per-host metrics (awaiting cyberdeck repurpose) |
+| [calavera](hosts/calavera.md) | Surface Pro 2 (x86_64, touchscreen) | Always-on Snapcast client + i3 desktop |
 
 ## Services
 
@@ -24,7 +24,6 @@ Every page follows [`_template.md`](_template.md): Overview · Architecture · C
 | [pawst](services/pawst.md) | Static blogs `hbla.ke` and `hsimah.com` |
 | [pupyrus](services/pupyrus.md) | WordPress (+ MariaDB + Redis) |
 | [snoot](services/snoot.md) | Beszel agent on every host |
-| [spinnik](services/spinnik.md) | Vinyl turntable streamer — DarkIce + Icecast + UI on calavera |
 | [stellarr](services/stellarr.md) | *arr stack + Transmission + slskd, all behind NordVPN |
 
 ## Scripts

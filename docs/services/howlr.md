@@ -1,10 +1,10 @@
 # `howlr`
 
-> Music Assistant on space-needle plus Snapcast clients on every Pi/kiosk — whole-home audio with phone, Spotify, AirPlay, and vinyl as sources.
+> Music Assistant on space-needle plus Snapcast clients on the fleet — whole-home audio with phone, Spotify, and AirPlay as sources.
 
 ## Overview
 
-`howlr` (howl + er — huskies howl) is multi-room audio for The Loft. A single [Music Assistant](https://music-assistant.io) container on [space-needle](../hosts/space-needle.md) acts as the music brain, the source plugin host, *and* the Snapcast server. Snapclients on [viking](../hosts/viking.md), [fjord](../hosts/fjord.md), and [calavera](../hosts/calavera.md) receive the synchronized stream and play it through whatever's wired into each Pi/Surface. Vinyl audio from [spinnik](spinnik.md) joins the same Snapcast pipeline as a radio-station source inside MA.
+`howlr` (howl + er — huskies howl) is multi-room audio for The Loft. A single [Music Assistant](https://music-assistant.io) container on [space-needle](../hosts/space-needle.md) acts as the music brain, the source plugin host, *and* the Snapcast server. Snapclients on [viking](../hosts/viking.md) (Upstairs) and [calavera](../hosts/calavera.md) (Downstairs) receive the synchronized stream and play it through whatever's wired into each host.
 
 ## Architecture
 
@@ -15,7 +15,7 @@ Two services, picked per-host via `COMPOSE_PROFILES`:
 | Profile | Container | Image | Where it runs |
 |---------|-----------|-------|---------------|
 | `server` | `howlr` | `ghcr.io/music-assistant/server:latest` | space-needle only |
-| `client` | `howlr-snapclient` | `ivdata/snapclient:latest` | viking, fjord, calavera |
+| `client` | `howlr-snapclient` | `ivdata/snapclient:latest` | viking, calavera |
 
 Both run with `network_mode: host` so mDNS / Bonjour / Snapcast multicast work without bridge translation.
 
@@ -35,15 +35,14 @@ State persists in `/opt/howlr` (bind-mounted as `/data`).
 | MA player | Host | Available | Snapcast group |
 |-----------|------|-----------|----------------|
 | `ma_viking` | viking | yes | Upstairs |
-| `ma_fjord` | fjord | yes | Downstairs |
-| `ma_calavera` | calavera | varies (kiosk) | — |
+| `ma_calavera` | calavera | yes (always-on) | Downstairs |
 
-The `All` group spans fjord + viking for whole-home playback. Groups are managed in the MA UI or directly via Snapweb.
+The `All` group spans calavera + viking for whole-home playback. `ma_calavera` inherited the Downstairs role from the retired `ma_fjord` (see [calavera](../hosts/calavera.md)). Groups are managed in the MA UI or directly via Snapweb.
 
 ### Audio flow
 
 ```
-iPhone / Spotify / Plex / Tidal / spinnik (vinyl Icecast)
+iPhone / Spotify / Plex / Tidal
         │
         ▼
    Music Assistant (howlr container, space-needle)
@@ -113,16 +112,11 @@ sudo docker logs howlr-snapclient --tail 30 | grep -i 'connected\|ready'
 3. `loft-ctl start howlr` — the client connects, then the player shows up in MA as `ma_<hostname>`.
 4. In the MA UI, drop it into a Snapcast group (or create a new one).
 
-### Adding spinnik as a source
-
-In MA: **Settings → Music providers → Add provider → Radio Stations**, then add `http://calavera:8000/vinyl` as a custom stream URL. The provider name (e.g. "Vinyl") will appear in the MA UI as a play target.
-
 ## Related
 
-- [spinnik](spinnik.md) — vinyl Icecast stream that MA pulls as a radio source
 - [mushr](mushr.md) — Caddy reverse proxy for `howlr.loft.hsimah.com` and `snapweb.loft.hsimah.com`
 - [snoot](snoot.md) / [houstn](houstn.md) — health and container metrics
-- [viking](../hosts/viking.md), [fjord](../hosts/fjord.md), [calavera](../hosts/calavera.md) — client hosts
+- [viking](../hosts/viking.md), [calavera](../hosts/calavera.md) — client hosts
 - Blog: [Multi-room audio with Music Assistant and Snapcast](../../../hblake/posts/howlr.md)
 - Design notes: [`plans/howlr.md`](../../plans/howlr.md) — original multi-container plan, now superseded by MA's all-in-one image
 
