@@ -355,7 +355,11 @@ Restart=on-failure
 RestartSec=2
 RESTART
 
-  systemctl enable lightdm
+  # lightdm.service is static (no [Install] section), so `systemctl enable`
+  # no-ops on it. Select it as THE display manager the Debian/Ubuntu way:
+  # the display-manager.service symlink (disabling gdm3 removes the old one).
+  ln -sf /usr/lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service
+  echo "/usr/sbin/lightdm" > /etc/X11/default-display-manager
   info "lightdm auto-login configured (rodnik → i3)"
 
   # ── Seed rodnik's i3 config (avoids the first-run wizard under autologin) ──
