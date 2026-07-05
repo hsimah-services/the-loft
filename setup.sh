@@ -341,6 +341,20 @@ autologin-user-timeout=0
 autologin-session=i3
 user-session=i3
 LIGHTDM
+
+  # Survive the boot-time VT/X race: lightdm can fail its first few starts
+  # before the console/DRM handoff completes, exhaust systemd's default start
+  # rate limit, and give up. Remove the limit and retry until X is ready.
+  mkdir -p /etc/systemd/system/lightdm.service.d
+  cat > /etc/systemd/system/lightdm.service.d/restart.conf <<'RESTART'
+[Unit]
+StartLimitIntervalSec=0
+
+[Service]
+Restart=on-failure
+RestartSec=2
+RESTART
+
   systemctl enable lightdm
   info "lightdm auto-login configured (rodnik → i3)"
 
