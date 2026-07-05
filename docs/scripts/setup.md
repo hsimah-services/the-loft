@@ -19,10 +19,10 @@ The script auto-detects the host by hostname and sources its [`host.conf`](../..
 | 2 | `apt install` base packages (`git curl jq skopeo`, plus `xfsprogs` if `STORAGE_FS=xfs`) | `STORAGE_FS` |
 | 3 | Storage mount — add fstab entry, mount `STORAGE_MOUNT` | `STORAGE_DEVICE` / `STORAGE_MOUNT` / `STORAGE_FS` |
 | 4 | Groups — create `pack-member` (GID 1003) | — |
-| 5 | Users — `littledog` (UID 1003, nologin service account), `adminhabl` (sudo admin), `hsimah` (SSH), `kiosk` (kiosk hosts) | `LITTLEDOG_EXTRA_GROUPS`, `KIOSK_ENABLED` |
-| 6 | SSH lockdown — `AllowUsers hsimah`, optional `PasswordAuthentication no` | `SSH_DISABLE_PASSWORD` |
+| 5 | Users — `littledog` (UID 1003, nologin service account), `adminhabl` (SSH login + sudo admin), `kiosk` (kiosk hosts) | `LITTLEDOG_EXTRA_GROUPS`, `KIOSK_ENABLED` |
+| 6 | SSH lockdown — `AllowUsers adminhabl`, optional `PasswordAuthentication no` | `SSH_DISABLE_PASSWORD` |
 | 7 | Sudoers entry for `adminhabl` (`/etc/sudoers.d/adminhabl`, validated with `visudo -c`) | — |
-| 8 | Shell config — `.bashrc` sources [`bashrc.d`](../../bashrc.d), `.inputrc` includes [`inputrc.d`](../../inputrc.d) for `hsimah` and `adminhabl` | — |
+| 8 | Shell config — `.bashrc` sources [`bashrc.d`](../../bashrc.d), `.inputrc` includes [`inputrc.d`](../../inputrc.d) for `adminhabl` | — |
 | 9 | Directory structure — `CONFIG_DIRS` (755) and `MEDIA_DIRS` (775), both owned `littledog:pack-member` | `CONFIG_DIRS`, `MEDIA_DIRS` |
 | 9a | `/var/log/loft` for log output | — |
 | 9b | `/var/lib/loft/deploy` for [deploy-pull.sh](deploy-pull.md) state | — |
@@ -52,10 +52,10 @@ Phase 11 short-circuits a service if its `.env.example` exists but `.env` doesn'
 |------|-------|---------|
 | `/etc/fstab` (one line) | root | Adds `STORAGE_DEVICE STORAGE_MOUNT STORAGE_FS defaults 0 0` |
 | `STORAGE_MOUNT` (e.g. `/mammoth`) | — | Mountpoint for the data volume |
-| `/etc/ssh/sshd_config` | root | `AllowUsers hsimah` + optional `PasswordAuthentication no` |
+| `/etc/ssh/sshd_config` | root | `AllowUsers adminhabl` + optional `PasswordAuthentication no` |
 | `/etc/sudoers.d/adminhabl` | root (0440) | `adminhabl ALL=(ALL:ALL) ALL` |
-| `/home/{hsimah,adminhabl}/.bashrc` | user | Sources `bashrc.d` from the repo |
-| `/home/{hsimah,adminhabl}/.inputrc` | user | Includes `inputrc.d` from the repo |
+| `/home/adminhabl/.bashrc` | user | Sources `bashrc.d` from the repo |
+| `/home/adminhabl/.inputrc` | user | Includes `inputrc.d` from the repo |
 | `CONFIG_DIRS[*]` | `littledog:pack-member` 755 | Per-service config dirs (typically under `/opt`) |
 | `MEDIA_DIRS[*]` | `littledog:pack-member` 775 | Media dirs (e.g. `/mammoth/library/movies`) |
 | `/var/log/loft` | root | Log directory, target for `deploy-pull.sh` output |

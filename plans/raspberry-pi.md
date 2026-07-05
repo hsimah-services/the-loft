@@ -34,7 +34,7 @@ Use **Raspberry Pi Imager** to flash **Raspberry Pi OS Lite (64-bit, Bookworm)**
 | Hostname | `viking` or `fjord` |
 | Enable SSH | Yes, public-key only |
 | SSH public key | `~/.ssh/id_ed25519.pub` (your key) |
-| Username | `hsimah` |
+| Username | `adminhabl` |
 | Password | Set a temporary password (SSH key is primary) |
 | WiFi SSID | Your network SSID |
 | WiFi password | Your network password |
@@ -57,9 +57,9 @@ Use **Raspberry Pi Imager** to flash **Raspberry Pi OS Lite (64-bit, Bookworm)**
 After first boot (~60 seconds), the Pi should be reachable via mDNS:
 
 ```bash
-ssh hsimah@viking.local
+ssh adminhabl@viking.local
 # or
-ssh hsimah@fjord.local
+ssh adminhabl@fjord.local
 ```
 
 If mDNS doesn't resolve, find the Pi's IP from your router's DHCP lease table.
@@ -95,7 +95,7 @@ uname -m    # should print aarch64
 4. Clone the repo:
    ```bash
    sudo mkdir /srv/the-loft
-   sudo chown hsimah:hsimah /srv/the-loft
+   sudo chown adminhabl:adminhabl /srv/the-loft
    git clone git@github.com:hsimah/the-loft.git /srv/the-loft
    ```
 
@@ -129,8 +129,8 @@ The script will:
 - Install system packages (git, curl, jq)
 - Skip storage mount (none configured in `hosts/viking/host.conf`)
 - Create groups (`pack-member`)
-- Create users (`littledog` with `audio` group, `adminhabl`, configure `hsimah`)
-- Harden SSH (`AllowUsers hsimah`, disable password auth)
+- Create users (`littledog` with `audio` group, `adminhabl`)
+- Harden SSH (`AllowUsers adminhabl`, disable password auth)
 - Configure sudo for `adminhabl`
 - Set up shared bashrc.d sourcing
 - Install Docker CE
@@ -150,28 +150,26 @@ The script is idempotent — safe to re-run at any time.
 sudo passwd adminhabl
 ```
 
-### Remove hsimah from sudoers
+### Require a password for adminhabl sudo
 
-Raspberry Pi OS grants the initial user passwordless sudo via drop-in files. Remove them so only `adminhabl` has sudo:
+`adminhabl` is the initial (imager) user, so Raspberry Pi OS grants it passwordless sudo via drop-in files. Remove them so sudo requires the password you just set (matching `setup.sh`'s `/etc/sudoers.d/adminhabl`):
 
 ```bash
-su - adminhabl
 sudo rm -f /etc/sudoers.d/010_pi-nopasswd /etc/sudoers.d/90-cloud-init-users
-exit
 ```
 
-Verify hsimah no longer has sudo:
+Verify sudo now prompts:
 
 ```bash
-sudo echo test
-# Expected: permission denied
+sudo -k; sudo echo test
+# Expected: prompts for adminhabl's password
 ```
 
 ### Verify SSH hardening
 
 ```bash
 sudo sshd -T | grep -E 'allowusers|passwordauthentication'
-# Expected: allowusers hsimah / passwordauthentication no
+# Expected: allowusers adminhabl / passwordauthentication no
 ```
 
 ### Verify Docker
@@ -184,7 +182,7 @@ sudo docker run --rm hello-world
 
 ```bash
 exit
-ssh hsimah@viking.local
+ssh adminhabl@viking.local
 # Prompt should show the shared format
 ```
 
@@ -197,8 +195,7 @@ Identical to space-needle:
 | User | UID | Primary Group | Shell | Additional Groups | Role |
 |------|-----|---------------|-------|-------------------|------|
 | `littledog` | 1003 | `pack-member` (1003) | `/usr/sbin/nologin` | `docker`, `audio` | Service account for containers |
-| `adminhabl` | auto | `adminhabl` | `/bin/bash` | `sudo`, `docker`, `pack-member` | Admin (passworded, no SSH) |
-| `hsimah` | auto | `hsimah` | `/bin/bash` | `pack-member` | SSH user, manages repo |
+| `adminhabl` | auto | `adminhabl` | `/bin/bash` | `sudo`, `docker`, `pack-member` | SSH login + admin; manages repo, sudo for privileged actions |
 
 **Differences from space-needle:**
 - `littledog` gets `audio` group (for howlr sound output) but **not** `render` or `video` (no GPU workloads)
@@ -212,7 +209,7 @@ The setup script applies:
 
 | Setting | Value | Reason |
 |---------|-------|--------|
-| `AllowUsers hsimah` | Only hsimah can SSH in | Same as space-needle |
+| `AllowUsers adminhabl` | Only adminhabl can SSH in | Same as space-needle |
 | `PasswordAuthentication no` | Disabled | Key-only access; Pis are on WiFi and more exposed |
 
 ---
@@ -248,7 +245,7 @@ No additional directories are created.
 
 ## 13. Shared Shell Config (bashrc.d)
 
-The setup script adds a `source` line to both `hsimah` and `adminhabl`'s `~/.bashrc`:
+The setup script adds a `source` line to `adminhabl`'s `~/.bashrc`:
 
 ```bash
 source /srv/the-loft/bashrc.d

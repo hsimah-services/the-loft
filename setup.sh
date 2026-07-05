@@ -109,15 +109,6 @@ else
 fi
 usermod -aG sudo,docker,pack-member adminhabl 2>/dev/null || true
 
-# hsimah — SSH user
-if ! id hsimah &>/dev/null; then
-  useradd -m -s /bin/bash hsimah
-  info "Created user hsimah"
-else
-  info "User hsimah already exists"
-fi
-usermod -aG pack-member hsimah 2>/dev/null || true
-
 # kiosk — locked-down display account (kiosk hosts only)
 if [[ "${KIOSK_ENABLED:-false}" == "true" ]]; then
   if ! id kiosk &>/dev/null; then
@@ -136,12 +127,17 @@ SSHD_CONFIG="/etc/ssh/sshd_config"
 if [[ -f "$SSHD_CONFIG" ]]; then
   SSHD_CHANGED=false
 
-  if ! grep -q "^AllowUsers hsimah" "$SSHD_CONFIG"; then
-    echo "AllowUsers hsimah" >> "$SSHD_CONFIG"
-    info "Added AllowUsers hsimah to sshd_config"
+  if grep -q "^AllowUsers adminhabl$" "$SSHD_CONFIG"; then
+    info "SSH AllowUsers already configured"
+  elif grep -q "^AllowUsers" "$SSHD_CONFIG"; then
+    # Replace any existing AllowUsers line (e.g. the legacy hsimah entry)
+    sed -i 's/^AllowUsers.*/AllowUsers adminhabl/' "$SSHD_CONFIG"
+    info "Updated AllowUsers to adminhabl in sshd_config"
     SSHD_CHANGED=true
   else
-    info "SSH AllowUsers already configured"
+    echo "AllowUsers adminhabl" >> "$SSHD_CONFIG"
+    info "Added AllowUsers adminhabl to sshd_config"
+    SSHD_CHANGED=true
   fi
 
   if [[ "$SSH_DISABLE_PASSWORD" == "true" ]]; then
@@ -186,7 +182,7 @@ info "Configuring shared shell config..."
 BASHRC_SOURCE="source ${REPO_DIR}/bashrc.d"
 INPUTRC_INCLUDE="\$include ${REPO_DIR}/inputrc.d"
 
-for user in hsimah adminhabl; do
+for user in adminhabl; do
   home_dir="/home/${user}"
 
   echo "$BASHRC_SOURCE" > "${home_dir}/.bashrc"
@@ -472,7 +468,7 @@ echo "============================================"
 echo ""
 
 info "Users:"
-VERIFY_USERS=(littledog adminhabl hsimah)
+VERIFY_USERS=(littledog adminhabl)
 [[ "${KIOSK_ENABLED:-false}" == "true" ]] && VERIFY_USERS+=(kiosk)
 for user in "${VERIFY_USERS[@]}"; do
   if id "$user" &>/dev/null; then
@@ -498,8 +494,8 @@ fi
 
 echo ""
 info "SSH config:"
-if grep -q "^AllowUsers hsimah" /etc/ssh/sshd_config 2>/dev/null; then
-  echo "  AllowUsers: hsimah"
+if grep -q "^AllowUsers adminhabl" /etc/ssh/sshd_config 2>/dev/null; then
+  echo "  AllowUsers: adminhabl"
 else
   warn "  AllowUsers not configured"
 fi
