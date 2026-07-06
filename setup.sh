@@ -362,6 +362,16 @@ RESTART
   echo "/usr/sbin/lightdm" > /etc/X11/default-display-manager
   info "lightdm auto-login configured (rodnik → i3)"
 
+  # Stop plymouth grabbing VT7: its graphical splash claims the console via
+  # vt.handoff and races lightdm's X server for it, which can deadlock the
+  # boot (splash spins forever, lightdm retries and never wins the VT). Drop
+  # `splash` from the kernel cmdline so plymouth never seizes the VT.
+  if [[ -f /etc/default/grub ]] && grep -qE '\bsplash\b' /etc/default/grub; then
+    sed -i 's/\bsplash\b//' /etc/default/grub
+    update-grub 2>/dev/null || true
+    info "Removed 'splash' from kernel cmdline (plymouth VT7 race)"
+  fi
+
   # ── Seed rodnik's i3 config (avoids the first-run wizard under autologin) ──
   if [[ -f /etc/i3/config && ! -f /home/rodnik/.config/i3/config ]]; then
     install -d -o rodnik -g rodnik /home/rodnik/.config/i3
