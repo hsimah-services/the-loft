@@ -12,7 +12,7 @@
 
 ### Invocation flow
 
-1. `loft-ctl` is invoked as the calling user (`hsimah` or anyone in the `docker` group).
+1. `loft-ctl` is invoked as the calling user (normally `adminhabl`, or anyone in the `docker` group).
 2. The script sources `hosts/$(hostname)/host.conf` to learn `SERVICES`, `HEALTH_URLS`, etc.
 3. For commands that touch Docker (`start`, `stop`, `rebuild`, `health`, `update`), it auto-elevates to `adminhabl` via `su -` — so only `adminhabl` actually runs `docker`.
 4. For `update`, the **`git fetch` / `checkout` / `pull --ff-only`** runs **as the calling user** (who has the SSH keys for the repo), then `loft-ctl` re-execs as `adminhabl` with `--no-pull` appended so the elevated session skips git entirely. This keeps SSH agent forwarding sane and avoids needing `adminhabl` to own a deploy key.
@@ -104,7 +104,7 @@ loft-ctl update --no-pull mushr       # rebuild without touching git
 
 ### Wait, what happened to my password?
 
-Running `loft-ctl <cmd>` as `hsimah` prints `Elevating to adminhabl...` and prompts for the **adminhabl** password (set during `setup.sh` finalization via `passwd adminhabl`). After that, the script re-execs and proceeds.
+You normally log in as `adminhabl`, so `loft-ctl` runs docker directly with no prompt. If you run it as some *other* non-adminhabl user, it prints `Elevating to adminhabl...` and prompts for the **adminhabl** password (set during `setup.sh` finalization via `passwd adminhabl`), then re-execs and proceeds.
 
 ### Picking up new compose / config
 
@@ -153,7 +153,7 @@ sudo hostnamectl set-hostname <expected>
 sudo passwd adminhabl                 # as a sudo-capable user
 ```
 
-If `hsimah` has no sudo (intentional on the Pis), recover via `adminhabl` directly (`su - adminhabl` if you know the password, else single-user mode).
+You log in as `adminhabl`, which has sudo. If sudo is somehow broken, recover via single-user mode / physical console.
 
 ### Health check reports `WARNING` for transmission/slskd while everything else is green
 

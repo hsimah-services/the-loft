@@ -69,9 +69,9 @@ For a fresh host, see the host-specific docs page and [`docs/scripts/setup.md`](
 
 ## Security model
 
-- **SSH**: Only `hsimah` can SSH in. Password auth disabled on Pis.
+- **SSH**: Only `adminhabl` can SSH in. Password auth disabled on Pis.
 - **Containers**: All run as `littledog` (UID/GID 1003), a `nologin` service account.
-- **Admin escalation**: `loft-ctl` auto-elevates to `adminhabl` via `su` for docker commands.
+- **Admin escalation**: You log in as `adminhabl` and use `sudo` for privileged actions; `loft-ctl` still auto-elevates to `adminhabl` via `su` if invoked by another user.
 - **External access**: Only Pawst (`hbla.ke` + `hsimah.com`) is exposed externally, via Cloudflare Tunnel — no open ports. Everything else is LAN-only.
 - **i3 desktop** (calavera): lightdm autologs the `rodnik` service account into a minimal i3 session; `rodnik` has no sudo or docker.
 
