@@ -103,6 +103,10 @@ howlr `.env` (the per-host values that matter here):
 
 ### First-time provisioning
 
+> Reimaging from the old Ubuntu install to **Debian 13 + i3**? Follow the full runbook:
+> [`plans/calavera-debian.md`](../../plans/calavera-debian.md). The notes below cover an
+> in-place re-provision on an already-set-up host.
+
 Same shape as the Pis — clone the repo, copy `.env` files, run `setup.sh`. The script auto-detects `I3_ENABLED=true` and runs the i3 block (installs `xorg`, `i3`, `xterm`, `lightdm`; creates `rodnik`; configures lightdm autologin; masks sleep targets; installs the Surface WiFi udev rule; removes `iio-sensor-proxy`). It also cleans up legacy kiosk artifacts (greetd config, chromium managed policy, DPMS-off rule) and removes the `cage`/`chromium-browser`/`greetd` packages.
 
 ```bash
