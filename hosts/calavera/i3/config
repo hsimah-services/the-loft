@@ -1,0 +1,85 @@
+# i3 config for calavera — Music Assistant touch dashboard.
+#
+# Deployed to /home/rodnik/.config/i3/config by setup.sh §11b. rodnik autologs
+# into this i3 session, which launches chromium fullscreen as a Music Assistant
+# dashboard on the Surface Pro 2 touchscreen. It is also a usable admin desktop:
+# mod+Return drops to a kitty terminal, mod+d is a launcher.
+#
+# HiDPI is handled outside this file: setup.sh writes ~/.Xresources (Xft.dpi,
+# from I3_DPI) which scales all pango/Xft fonts here, and /usr/local/bin/
+# loft-dashboard passes --force-device-scale-factor to chromium.
+
+# Super as the modifier (Alt stays free for the browser).
+set $mod Mod4
+
+# Font for window titles / mode indicators. Point size stays small; Xft.dpi
+# (192 = 200% on calavera) scales it up to a readable size.
+font pango:DejaVu Sans Mono 8
+
+# ── Autostart ───────────────────────────────────────────────────────────────
+# Load HiDPI resources before anything paints.
+exec_always --no-startup-id xrdb -merge ~/.Xresources
+
+# Always-on display: never blank, never DPMS-off (this is a wall dashboard).
+exec --no-startup-id xset s off -dpms
+exec --no-startup-id xset s noblank
+
+# Hide the mouse cursor after 3s idle — clean touch dashboard.
+exec --no-startup-id unclutter --timeout 3
+
+# The Music Assistant dashboard itself (chromium --app, URL from host.conf).
+exec --no-startup-id loft-dashboard
+
+# Let i3 own fullscreen for the chromium dashboard window.
+for_window [class="(?i)chromium"] fullscreen enable
+
+# ── Keybindings (admin) ─────────────────────────────────────────────────────
+bindsym $mod+Return exec kitty
+bindsym $mod+d exec --no-startup-id dmenu_run
+bindsym $mod+Shift+q kill
+
+# Focus / move
+bindsym $mod+Left  focus left
+bindsym $mod+Down  focus down
+bindsym $mod+Up    focus up
+bindsym $mod+Right focus right
+
+bindsym $mod+Shift+Left  move left
+bindsym $mod+Shift+Down  move down
+bindsym $mod+Shift+Up    move up
+bindsym $mod+Shift+Right move right
+
+# Layout
+bindsym $mod+h split h
+bindsym $mod+v split v
+bindsym $mod+f fullscreen toggle
+bindsym $mod+s layout stacking
+bindsym $mod+w layout tabbed
+bindsym $mod+e layout toggle split
+bindsym $mod+Shift+space floating toggle
+
+# Workspaces
+bindsym $mod+1 workspace number 1
+bindsym $mod+2 workspace number 2
+bindsym $mod+3 workspace number 3
+bindsym $mod+Shift+1 move container to workspace number 1
+bindsym $mod+Shift+2 move container to workspace number 2
+bindsym $mod+Shift+3 move container to workspace number 3
+
+# Session
+bindsym $mod+Shift+c reload
+bindsym $mod+Shift+r restart
+bindsym $mod+Shift+e exec "i3-nagbar -t warning -m 'Exit i3?' -B 'Yes' 'i3-msg exit'"
+
+# Resize mode
+mode "resize" {
+    bindsym Left  resize shrink width 10 px or 10 ppt
+    bindsym Down  resize grow height 10 px or 10 ppt
+    bindsym Up    resize shrink height 10 px or 10 ppt
+    bindsym Right resize grow width 10 px or 10 ppt
+    bindsym Return mode "default"
+    bindsym Escape mode "default"
+}
+bindsym $mod+r mode "resize"
+
+# No status bar — this is a fullscreen dashboard, not a workstation.
