@@ -45,7 +45,7 @@ info "Services: ${SERVICES[*]}"
 
 # ─── 2. System packages ──────────────────────────────────────────────────────
 info "Installing system packages..."
-PACKAGES=(git curl jq skopeo)
+PACKAGES=(git curl jq skopeo kitty-terminfo)
 [[ "$STORAGE_FS" == "xfs" ]] && PACKAGES+=(xfsprogs)
 apt-get update -qq
 apt-get install -y -qq "${PACKAGES[@]}" > /dev/null
@@ -109,15 +109,15 @@ else
 fi
 usermod -aG sudo,docker,pack-member adminhabl 2>/dev/null || true
 
-# kiosk — locked-down display account (kiosk hosts only)
-if [[ "${KIOSK_ENABLED:-false}" == "true" ]]; then
-  if ! id kiosk &>/dev/null; then
-    useradd -m -s /bin/bash kiosk
-    info "Created user kiosk"
+# rodnik — i3 display service account (i3 hosts only)
+if [[ "${I3_ENABLED:-false}" == "true" ]]; then
+  if ! id rodnik &>/dev/null; then
+    useradd -m -s /bin/bash rodnik
+    info "Created user rodnik"
   else
-    info "User kiosk already exists"
+    info "User rodnik already exists"
   fi
-  usermod -aG video kiosk 2>/dev/null || true
+  usermod -aG video,input,audio rodnik 2>/dev/null || true
 fi
 
 # ─── 6. SSH lockdown ─────────────────────────────────────────────────────────
@@ -315,100 +315,155 @@ for service in "${SERVICES[@]}"; do
   fi
 done
 
-# ─── 11b. Kiosk provisioning (kiosk hosts only) ─────────────────────────────
-if [[ "${KIOSK_ENABLED:-false}" == "true" ]]; then
-  info "Provisioning kiosk mode..."
+# ─── 11b. i3 desktop provisioning (i3 hosts only) ───────────────────────────
+if [[ "${I3_ENABLED:-false}" == "true" ]]; then
+  info "Provisioning i3 desktop..."
 
   # ── Packages ──────────────────────────────────────────────────────────────
-  info "Installing kiosk packages..."
-  apt-get install -y -qq cage chromium-browser greetd > /dev/null
+  # Preseed the display-manager debconf question so the install never blocks on
+  # the interactive "default display manager" prompt (lightdm vs gdm3).
+  info "Installing i3 + Xorg + dashboard packages..."
+  echo "lightdm shared/default-x-display-manager select lightdm" | debconf-set-selections
+  # kitty = terminal (mod+Return); firefox-esr = MA dashboard (--kiosk); unclutter
+  # hides the idle cursor; x11-xserver-utils gives xset/xrdb for the always-on
+  # display + HiDPI resources; dmenu is the launcher. (Chromium was tried first
+  # but trixie's build SIGTRAPs on startup — a broken crashpad helper — so the
+  # dashboard runs on Firefox instead.)
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+    xorg i3 lightdm kitty firefox-esr unclutter x11-xserver-utils dmenu > /dev/null
 
-  # ── greetd auto-login ─────────────────────────────────────────────────────
-  info "Configuring greetd auto-login..."
-  mkdir -p /etc/greetd
-  cat > /etc/greetd/config.toml <<EOF
-[terminal]
-vt = 7
-
-[default_session]
-command = "cage -s -- chromium-browser --kiosk --noerrdialogs --disable-infobars --no-first-run --disable-translate --ozone-platform=wayland --force-device-scale-factor=${KIOSK_SCALE} ${KIOSK_URL}"
-user = "kiosk"
-EOF
-
+  # ── lightdm auto-login (rodnik → i3) ──────────────────────────────────────
+  info "Configuring lightdm auto-login (rodnik → i3)..."
   systemctl disable gdm3 2>/dev/null || true
-  systemctl enable greetd
-  info "greetd configured (VT 7, user kiosk)"
+  mkdir -p /etc/lightdm/lightdm.conf.d
+  cat > /etc/lightdm/lightdm.conf.d/50-rodnik-autologin.conf <<'LIGHTDM'
+[Seat:*]
+autologin-user=rodnik
+autologin-user-timeout=0
+autologin-session=i3
+user-session=i3
+LIGHTDM
 
-  # ── Chromium managed policies ─────────────────────────────────────────────
-  info "Deploying Chromium managed policies..."
-  mkdir -p /etc/chromium/policies/managed
-  cat > /etc/chromium/policies/managed/kiosk.json <<POLICY
-{
-  "URLBlocklist": ["*"],
-  "URLAllowlist": [
-    "loft.hsimah.com",
-    ".loft.hsimah.com",
-    ".space-needle",
-    "space-needle",
-    "hbla.ke",
-    "hsimah.com",
-    "calavera",
-    "localhost"
-  ],
-  "HomepageLocation": "${KIOSK_URL}",
-  "HomepageIsNewTabPage": false,
-  "RestoreOnStartup": 4,
-  "RestoreOnStartupURLs": ["${KIOSK_URL}"],
-  "BookmarkBarEnabled": false,
-  "DeveloperToolsAvailability": 2,
-  "IncognitoModeAvailability": 1,
-  "BrowserSignin": 0,
-  "SyncDisabled": true,
-  "PasswordManagerEnabled": false,
-  "TranslateEnabled": false,
-  "EditBookmarksEnabled": false,
-  "DefaultBrowserSettingEnabled": false
-}
-POLICY
-  info "Chromium URL allowlist deployed"
+  # Survive the boot-time VT/X race: lightdm can fail its first few starts
+  # before the console/DRM handoff completes, exhaust systemd's default start
+  # rate limit, and give up. Remove the limit and retry until X is ready.
+  mkdir -p /etc/systemd/system/lightdm.service.d
+  cat > /etc/systemd/system/lightdm.service.d/restart.conf <<'RESTART'
+[Unit]
+StartLimitIntervalSec=0
 
-  # ── Disable suspend/sleep/screen blank ────────────────────────────────────
+[Service]
+Restart=on-failure
+RestartSec=2
+RESTART
+
+  # lightdm.service is static (no [Install] section), so `systemctl enable`
+  # no-ops on it. Select it as THE display manager the Debian/Ubuntu way:
+  # the display-manager.service symlink (disabling gdm3 removes the old one).
+  ln -sf /usr/lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service
+  echo "/usr/sbin/lightdm" > /etc/X11/default-display-manager
+  info "lightdm auto-login configured (rodnik → i3)"
+
+  # Stop plymouth grabbing VT7: its graphical splash claims the console via
+  # vt.handoff and races lightdm's X server for it, which can deadlock the
+  # boot (splash spins forever, lightdm retries and never wins the VT). Drop
+  # `splash` from the kernel cmdline so plymouth never seizes the VT.
+  if [[ -f /etc/default/grub ]] && grep -qE '\bsplash\b' /etc/default/grub; then
+    sed -i 's/\bsplash\b//' /etc/default/grub
+    update-grub 2>/dev/null || true
+    info "Removed 'splash' from kernel cmdline (plymouth VT7 race)"
+  fi
+
+  # ── Deploy rodnik's i3 config + dashboard ─────────────────────────────────
+  # Prefer this host's repo-managed i3 config over the stock /etc/i3/config
+  # (which would trigger the first-run wizard under autologin). Falls back to
+  # the shipped default if a host enables i3 without providing its own config.
+  I3_SRC="${REPO_DIR}/hosts/${HOST_NAME}/i3"
+  install -d -o rodnik -g rodnik /home/rodnik/.config/i3
+  if [[ -f "${I3_SRC}/config" ]]; then
+    install -o rodnik -g rodnik -m 644 "${I3_SRC}/config" /home/rodnik/.config/i3/config
+    info "Deployed rodnik i3 config from ${I3_SRC}/config"
+  elif [[ -f /etc/i3/config && ! -f /home/rodnik/.config/i3/config ]]; then
+    install -o rodnik -g rodnik -m 644 /etc/i3/config /home/rodnik/.config/i3/config
+    info "Seeded /home/rodnik/.config/i3/config from i3 defaults"
+  fi
+
+  # kitty config (admin terminal font size), if this host ships one.
+  if [[ -f "${I3_SRC}/kitty.conf" ]]; then
+    install -d -o rodnik -g rodnik /home/rodnik/.config/kitty
+    install -o rodnik -g rodnik -m 644 "${I3_SRC}/kitty.conf" /home/rodnik/.config/kitty/kitty.conf
+    info "Deployed rodnik kitty config"
+  fi
+
+  # ── HiDPI scaling (Xft.dpi drives all pango/Xft fonts in the session) ─────
+  I3_DPI="${I3_DPI:-96}"
+  cat > /home/rodnik/.Xresources <<XRES
+Xft.dpi: ${I3_DPI}
+XRES
+  chown rodnik:rodnik /home/rodnik/.Xresources
+  info "Set rodnik Xft.dpi=${I3_DPI} ($((I3_DPI * 100 / 96))%)"
+
+  # ── loft-dashboard launcher (firefox kiosk → MA dashboard) ────────────────
+  # The i3 config execs this; keeping the URL/scale here (from host.conf) keeps
+  # the i3 config generic. Loops so a firefox crash self-recovers.
+  DASH_URL="${I3_DASHBOARD_URL:-about:blank}"
+  # firefox layout.css.devPixelsPerPx = I3_DPI / 96 (2.0 at 192 DPI); awk keeps
+  # fractional DPI working. This is absolute (not a multiplier on the session
+  # DPI), so it doesn't compound with Xft.dpi.
+  DASH_SCALE="$(awk "BEGIN{printf \"%.4g\", ${I3_DPI}/96}")"
+
+  # Dedicated firefox kiosk profile: HiDPI scale + no first-run/telemetry/
+  # crash-restore nags. user.js is re-read on every start, so re-running
+  # setup.sh with a new I3_DPI re-scales the dashboard.
+  FF_PROFILE="/home/rodnik/.local/share/loft-dashboard-firefox"
+  install -d -o rodnik -g rodnik "$FF_PROFILE"
+  cat > "${FF_PROFILE}/user.js" <<FFPREFS
+// Auto-generated by setup.sh (§11b). Music Assistant kiosk profile.
+user_pref("layout.css.devPixelsPerPx", "${DASH_SCALE}");
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("browser.startup.homepage_override.mstone", "ignore");
+user_pref("browser.sessionstore.resume_from_crash", false);
+user_pref("datareporting.policy.dataSubmissionEnabled", false);
+user_pref("toolkit.telemetry.enabled", false);
+user_pref("app.update.auto", false);
+FFPREFS
+  chown rodnik:rodnik "${FF_PROFILE}/user.js"
+
+  cat > /usr/local/bin/loft-dashboard <<DASH
+#!/usr/bin/env bash
+# Auto-generated by setup.sh (§11b) from hosts/${HOST_NAME}/host.conf.
+# Fullscreen firefox kiosk pointed at the Music Assistant dashboard.
+set -u
+URL="${DASH_URL}"
+PROFILE="\${HOME}/.local/share/loft-dashboard-firefox"
+while true; do
+  firefox-esr --kiosk --profile "\${PROFILE}" "\${URL}"
+  sleep 2
+done
+DASH
+  chmod 755 /usr/local/bin/loft-dashboard
+  info "Wrote /usr/local/bin/loft-dashboard → ${DASH_URL} (firefox kiosk, ${DASH_SCALE}x)"
+
+  # ── Clean up legacy kiosk artifacts (calavera migrated kiosk → i3) ────────
+  systemctl disable greetd 2>/dev/null || true
+  rm -f /etc/greetd/config.toml \
+        /etc/chromium/policies/managed/kiosk.json \
+        /etc/systemd/logind.conf.d/kiosk.conf \
+        /etc/udev/rules.d/99-dpms-off.rules
+  apt-get remove -y -qq cage chromium-browser greetd 2>/dev/null || true
+
+  # ── Disable suspend/sleep (always-on audio sink) ──────────────────────────
   info "Disabling suspend/sleep/hibernate..."
   systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
 
   mkdir -p /etc/systemd/logind.conf.d
-  cat > /etc/systemd/logind.conf.d/kiosk.conf <<'LOGIND'
+  cat > /etc/systemd/logind.conf.d/i3.conf <<'LOGIND'
 [Login]
 HandleLidSwitch=ignore
 HandleLidSwitchExternalPower=ignore
 HandleLidSwitchDocked=ignore
 LOGIND
   info "Lid switch and sleep targets disabled"
-
-  # ── Disable screen blanking (keep display on 24/7) ───────────────────────
-  info "Disabling screen blanking..."
-
-  # Kernel console blanker — disable at boot via kernel cmdline
-  GRUB_FILE="/etc/default/grub"
-  if [[ -f "$GRUB_FILE" ]]; then
-    if ! grep -q "consoleblank=0" "$GRUB_FILE"; then
-      sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 consoleblank=0"/' "$GRUB_FILE"
-      update-grub 2>/dev/null || true
-      info "Added consoleblank=0 to kernel cmdline (takes effect after reboot)"
-    else
-      info "consoleblank=0 already in kernel cmdline"
-    fi
-  fi
-
-  # Also set at runtime for current boot
-  echo 0 > /sys/module/kernel/parameters/consoleblank 2>/dev/null || true
-
-  # Disable DPMS (display power management) via udev rule for DRM devices
-  cat > /etc/udev/rules.d/99-dpms-off.rules <<'DPMS'
-# Disable DPMS on all DRM connectors — keep screen on 24/7
-ACTION=="add", SUBSYSTEM=="drm", RUN+="/bin/sh -c 'for f in /sys/class/drm/card*-*/dpms; do echo On > $f 2>/dev/null; done'"
-DPMS
-  info "DPMS disabled via udev rule (screen stays on 24/7)"
 
   # ── Surface Pro 2 WiFi stability ──────────────────────────────────────────
   info "Installing Surface Pro 2 WiFi udev rule..."
@@ -420,29 +475,24 @@ DPMS
   apt-get remove -y iio-sensor-proxy 2>/dev/null || true
   info "Removed iio-sensor-proxy (screen rotation disabled)"
 
-  info "Kiosk provisioning complete"
-fi
-
-# ─── 11c. Audio device pinning (spinnik hosts only) ────────────────────────
-if printf '%s\n' "${SERVICES[@]}" | grep -qx spinnik; then
-  info "Installing LP5X ALSA device pinning udev rule..."
-  echo 'SUBSYSTEM=="sound", ATTRS{idVendor}=="08bb", ATTRS{idProduct}=="29c0", ATTR{id}="LP5X"' \
-    > /etc/udev/rules.d/99-lp5x.rules
-  udevadm control --reload-rules 2>/dev/null || true
-  info "LP5X udev rule installed (plughw:LP5X,0)"
+  info "i3 provisioning complete"
 fi
 
 # ─── 12. Cron jobs ───────────────────────────────────────────────────────────
 info "Configuring cron jobs..."
 
-# WiFi watchdog (every 5 minutes) — restarts dhcpcd if wlan0 loses its IPv4 address
-# Harmless on hosts without wlan0 (short-circuits on first check)
+# WiFi watchdog (every 5 minutes) — restart the DHCP unit if the WiFi interface loses its
+# IPv4 address. Both the interface and the unit are host-configurable (defaults suit the Pis:
+# wlan0 + dhcpcd); e.g. calavera uses a USB adapter (wlx…) managed by NetworkManager.
+# Harmless on hosts without the interface (short-circuits on the first check).
+WIFI_IFACE="${WIFI_IFACE:-wlan0}"
+WIFI_DHCP_UNIT="${WIFI_DHCP_UNIT:-dhcpcd}"
 cat > /etc/cron.d/loft-wifi-watchdog <<EOF
-# WiFi DHCP watchdog — restart dhcpcd if wlan0 loses IPv4 — installed by setup.sh
-*/5 * * * * root ip link show wlan0 &>/dev/null && ! ip -4 addr show wlan0 2>/dev/null | grep -q inet && logger -t loft-wifi-watchdog "wlan0 lost IPv4, restarting dhcpcd" && systemctl restart dhcpcd 2>/dev/null
+# WiFi DHCP watchdog — restart ${WIFI_DHCP_UNIT} if ${WIFI_IFACE} loses IPv4 — installed by setup.sh
+*/5 * * * * root ip link show ${WIFI_IFACE} &>/dev/null && ! ip -4 addr show ${WIFI_IFACE} 2>/dev/null | grep -q inet && logger -t loft-wifi-watchdog "${WIFI_IFACE} lost IPv4, restarting ${WIFI_DHCP_UNIT}" && systemctl restart ${WIFI_DHCP_UNIT} 2>/dev/null
 EOF
 chmod 644 /etc/cron.d/loft-wifi-watchdog
-info "Installed WiFi watchdog cron job"
+info "Installed WiFi watchdog cron job (${WIFI_IFACE} → ${WIFI_DHCP_UNIT})"
 
 # Deploy puller cron entries (one per DEPLOY_TARGETS entry)
 # Clear any stale entries from a previous run before installing fresh ones.
@@ -469,7 +519,7 @@ echo ""
 
 info "Users:"
 VERIFY_USERS=(littledog adminhabl)
-[[ "${KIOSK_ENABLED:-false}" == "true" ]] && VERIFY_USERS+=(kiosk)
+[[ "${I3_ENABLED:-false}" == "true" ]] && VERIFY_USERS+=(rodnik)
 for user in "${VERIFY_USERS[@]}"; do
   if id "$user" &>/dev/null; then
     echo "  $(id "$user")"
@@ -511,15 +561,15 @@ echo ""
 info "Docker containers:"
 docker ps --format "  {{.Names}}: {{.Status}}" 2>/dev/null || warn "  Could not list containers"
 
-if [[ "${KIOSK_ENABLED:-false}" == "true" ]]; then
+if [[ "${I3_ENABLED:-false}" == "true" ]]; then
   echo ""
-  info "Kiosk config:"
-  echo "  URL: ${KIOSK_URL}"
-  echo "  Scale: ${KIOSK_SCALE}"
-  if systemctl is-enabled greetd &>/dev/null; then
-    echo "  greetd: enabled"
+  info "i3 desktop config:"
+  echo "  Autologin: rodnik → i3"
+  echo "  Dashboard: ${I3_DASHBOARD_URL:-(unset)} @ ${I3_DPI:-96} DPI ($(( ${I3_DPI:-96} * 100 / 96 ))%)"
+  if systemctl is-enabled lightdm &>/dev/null; then
+    echo "  lightdm: enabled"
   else
-    warn "  greetd: not enabled"
+    warn "  lightdm: not enabled"
   fi
   if systemctl is-enabled nftables &>/dev/null; then
     echo "  nftables: enabled"

@@ -91,11 +91,6 @@
         icon: snapcast.png
         href: https://snapweb.loft.hsimah.com
         description: Multi-room sync
-    - Spinnik:
-        href: http://spinnik.calavera
-        description: Vinyl stream
-        container: spinnik-icecast
-        server: my-docker
 
 - Monitoring:
     - Beszel:

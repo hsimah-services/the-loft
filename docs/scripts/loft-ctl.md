@@ -121,7 +121,7 @@ You normally log in as `adminhabl`, so `loft-ctl` runs docker directly with no p
 
 - [`setup.sh`](setup.md) — provisions the host so `loft-ctl` works at all
 - [`common.sh`](common-sh.md) — provides `compose_args_for`, `check_containers`, `check_web_ui`
-- Service pages — every entry in `SERVICES` has one: [houstn](../services/houstn.md), [howlr](../services/howlr.md), [mushr](../services/mushr.md), [pawpcorn](../services/pawpcorn.md), [pawst](../services/pawst.md), [pupyrus](../services/pupyrus.md), [snoot](../services/snoot.md), [spinnik](../services/spinnik.md), [stellarr](../services/stellarr.md)
+- Service pages — every entry in `SERVICES` has one: [houstn](../services/houstn.md), [howlr](../services/howlr.md), [mushr](../services/mushr.md), [pawpcorn](../services/pawpcorn.md), [pawst](../services/pawst.md), [pupyrus](../services/pupyrus.md), [snoot](../services/snoot.md), [stellarr](../services/stellarr.md)
 - Root [`DEBUG.md`](../../DEBUG.md) — fleet-wide quick reference, container name table, exit codes
 
 ## Debug & Troubleshooting
@@ -214,4 +214,4 @@ sudo bash setup.sh                                      # deploy any missing
 loft-ctl rebuild <service>            # full down + pull + up --build
 ```
 
-If a service uses a Dockerfile (`mushr`, `spinnik`), the rebuild step uses `--build` and picks up `Dockerfile.*` changes automatically.
+If a service uses a Dockerfile (`mushr`), the rebuild step uses `--build` and picks up `Dockerfile.*` changes automatically.

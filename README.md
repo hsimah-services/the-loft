@@ -10,8 +10,8 @@ For deep dives, see [`docs/`](docs/README.md).
 |------|----------|------|
 | [space-needle](docs/hosts/space-needle.md) | Minisforum MS-01 (i9, x86_64) | Primary server — runs everything |
 | [viking](docs/hosts/viking.md) | Raspberry Pi 3 B+ | Snapcast client + per-host metrics |
-| [fjord](docs/hosts/fjord.md) | Raspberry Pi 3 B+ | Snapcast client + per-host metrics |
-| [calavera](docs/hosts/calavera.md) | Surface Pro 2 (touchscreen) | Vinyl kiosk + audio capture |
+| [fjord](docs/hosts/fjord.md) | Raspberry Pi 3 B+ | Per-host metrics (awaiting cyberdeck repurpose) |
+| [calavera](docs/hosts/calavera.md) | Surface Pro 2 (touchscreen) | Always-on Snapcast client + i3 desktop |
 
 ## Services
 
@@ -24,7 +24,6 @@ For deep dives, see [`docs/`](docs/README.md).
 | [pawst](docs/services/pawst.md) | Static blogs `hbla.ke` and `hsimah.com` |
 | [pupyrus](docs/services/pupyrus.md) | WordPress (+ MariaDB + Redis) |
 | [snoot](docs/services/snoot.md) | Beszel agent on every host |
-| [spinnik](docs/services/spinnik.md) | Vinyl turntable streamer (DarkIce + Icecast + UI) |
 | [stellarr](docs/services/stellarr.md) | *arr stack + Transmission + slskd, behind NordVPN |
 
 ## How it's organized
@@ -32,6 +31,7 @@ For deep dives, see [`docs/`](docs/README.md).
 ```
 hosts/<hostname>/host.conf          # Per-host manifest (services, storage, health checks)
 hosts/<hostname>/overrides/...      # Per-host compose overrides
+hosts/<hostname>/i3/...             # Optional i3 desktop config (deployed by setup.sh when I3_ENABLED)
 services/<name>/docker-compose.yml  # Shared service definition
 services/<name>/.env.example        # Secret template
 control-plane/                      # Shared scripts (common.sh, deploy-pull.sh, ...)
@@ -74,7 +74,7 @@ For a fresh host, see the host-specific docs page and [`docs/scripts/setup.md`](
 - **Containers**: All run as `littledog` (UID/GID 1003), a `nologin` service account.
 - **Admin escalation**: You log in as `adminhabl` and use `sudo` for privileged actions; `loft-ctl` still auto-elevates to `adminhabl` via `su` if invoked by another user.
 - **External access**: Only Pawst (`hbla.ke` + `hsimah.com`) is exposed externally, via Cloudflare Tunnel — no open ports. Everything else is LAN-only.
-- **Kiosk lockdown** (calavera): Chromium managed policies + Cage compositor; kiosk user has no sudo or docker.
+- **i3 desktop** (calavera): lightdm autologs the `rodnik` service account into an i3 session that auto-launches `firefox --kiosk` fullscreen as a Music Assistant touch dashboard (config in `hosts/calavera/i3/`, URL + HiDPI scaling from `host.conf`); `rodnik` has no sudo or docker.
 
 ## Debugging
 

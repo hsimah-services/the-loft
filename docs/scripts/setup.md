@@ -16,10 +16,10 @@ The script auto-detects the host by hostname and sources its [`host.conf`](../..
 |---|-------|-----------|
 | 1 | Preflight — must run as root on Debian/Ubuntu | — |
 | 1a | Source `hosts/$(hostname)/host.conf` | hostname |
-| 2 | `apt install` base packages (`git curl jq skopeo`, plus `xfsprogs` if `STORAGE_FS=xfs`) | `STORAGE_FS` |
+| 2 | `apt install` base packages (`git curl jq skopeo kitty-terminfo`, plus `xfsprogs` if `STORAGE_FS=xfs`) | `STORAGE_FS` |
 | 3 | Storage mount — add fstab entry, mount `STORAGE_MOUNT` | `STORAGE_DEVICE` / `STORAGE_MOUNT` / `STORAGE_FS` |
 | 4 | Groups — create `pack-member` (GID 1003) | — |
-| 5 | Users — `littledog` (UID 1003, nologin service account), `adminhabl` (SSH login + sudo admin), `kiosk` (kiosk hosts) | `LITTLEDOG_EXTRA_GROUPS`, `KIOSK_ENABLED` |
+| 5 | Users — `littledog` (UID 1003, nologin service account), `adminhabl` (SSH login + sudo admin), `rodnik` (i3 display account, i3 hosts) | `LITTLEDOG_EXTRA_GROUPS`, `I3_ENABLED` |
 | 6 | SSH lockdown — `AllowUsers adminhabl`, optional `PasswordAuthentication no` | `SSH_DISABLE_PASSWORD` |
 | 7 | Sudoers entry for `adminhabl` (`/etc/sudoers.d/adminhabl`, validated with `visudo -c`) | — |
 | 8 | Shell config — `.bashrc` sources [`bashrc.d`](../../bashrc.d), `.inputrc` includes [`inputrc.d`](../../inputrc.d) for `adminhabl` | — |
@@ -31,10 +31,9 @@ The script auto-detects the host by hostname and sources its [`host.conf`](../..
 | 10b | Create the `loft-proxy` Docker bridge network (idempotent) | — |
 | 11 | For each service in `SERVICES`: build (if a `Dockerfile` is present), then `docker compose up -d` using the override-aware args from [`common.sh`](common-sh.md) | `SERVICES` |
 | 11a | Source any per-service `services/<name>/setup.sh` after deployment | `SERVICES` |
-| 11b | Kiosk provisioning — `cage`, `chromium-browser`, `greetd`, Chromium managed policies, disable suspend/sleep/DPMS, Surface Pro 2 WiFi udev rule | `KIOSK_ENABLED`, `KIOSK_URL`, `KIOSK_SCALE` |
-| 11c | LP5X ALSA device pinning udev rule (only if `SERVICES` contains `spinnik`) | `SERVICES` |
-| 12 | Cron — `/etc/cron.d/loft-wifi-watchdog` (every 5min, no-op on hosts without `wlan0`) + one `/etc/cron.d/loft-deploy-<name>` per `DEPLOY_TARGETS` entry (hourly, runs [`deploy-pull.sh`](deploy-pull.md)) | `DEPLOY_TARGETS` |
-| 13 | Verification summary — print users, mount status, SSH config, running containers, kiosk status | — |
+| 11b | i3 desktop provisioning — `xorg`, `i3`, `xterm`, `lightdm`; `rodnik` autologin → i3; mask suspend/sleep; Surface Pro 2 WiFi udev rule; remove `iio-sensor-proxy`; clean up legacy kiosk artifacts | `I3_ENABLED` |
+| 12 | Cron — `/etc/cron.d/loft-wifi-watchdog` (every 5min; watches `WIFI_IFACE`, restarts `WIFI_DHCP_UNIT` on IPv4 loss; no-op on hosts without the interface) + one `/etc/cron.d/loft-deploy-<name>` per `DEPLOY_TARGETS` entry (hourly, runs [`deploy-pull.sh`](deploy-pull.md)) | `WIFI_IFACE`, `WIFI_DHCP_UNIT`, `DEPLOY_TARGETS` |
+| 13 | Verification summary — print users, mount status, SSH config, running containers, i3 status | — |
 
 Phase 11 short-circuits a service if its `.env.example` exists but `.env` doesn't — the script logs a warning and moves on instead of failing the whole run.
 
@@ -44,7 +43,7 @@ Phase 11 short-circuits a service if its `.env.example` exists but `.env` doesn'
 
 - [space-needle](../hosts/space-needle.md#configuration) — storage volume, `render,video` groups for Plex, `DEPLOY_TARGETS` for the pawst sites
 - [viking](../hosts/viking.md#configuration) / [fjord](../hosts/fjord.md#configuration) — Pi hosts, no storage, `SSH_DISABLE_PASSWORD=true`
-- [calavera](../hosts/calavera.md#configuration) — kiosk host, `KIOSK_ENABLED=true`, also runs spinnik
+- [calavera](../hosts/calavera.md#configuration) — i3 host, `I3_ENABLED=true`, always-on Snapcast client
 
 ### Things `setup.sh` writes to the host
 
@@ -61,14 +60,11 @@ Phase 11 short-circuits a service if its `.env.example` exists but `.env` doesn'
 | `/var/log/loft` | root | Log directory, target for `deploy-pull.sh` output |
 | `/var/lib/loft/deploy` | root 755 | State directory, stores `<name>.version` files |
 | `/etc/docker/daemon.json` | root | Copied from repo `daemon.json` (log rotation) |
-| `/etc/cron.d/loft-wifi-watchdog` | root 644 | dhcpcd restart if `wlan0` loses IPv4 |
+| `/etc/cron.d/loft-wifi-watchdog` | root 644 | restart `WIFI_DHCP_UNIT` (default `dhcpcd`) if `WIFI_IFACE` (default `wlan0`) loses IPv4 |
 | `/etc/cron.d/loft-deploy-<name>` | root 644 | One file per `DEPLOY_TARGETS` entry (cleared and reinstalled every run) |
-| `/etc/greetd/config.toml` | root | Kiosk auto-login (kiosk hosts) |
-| `/etc/chromium/policies/managed/kiosk.json` | root | Chromium URL allowlist (kiosk hosts) |
-| `/etc/udev/rules.d/99-dpms-off.rules` | root | Disable DPMS (kiosk hosts) |
-| `/etc/udev/rules.d/99-surface-wifi.rules` | root | Disable Marvell WiFi USB autosuspend (kiosk hosts) |
-| `/etc/udev/rules.d/99-lp5x.rules` | root | Pin LP5X ALSA device (spinnik hosts) |
-| `/etc/systemd/logind.conf.d/kiosk.conf` | root | Ignore lid switch (kiosk hosts) |
+| `/etc/lightdm/lightdm.conf.d/50-rodnik-autologin.conf` | root | Autologin `rodnik` → i3 (i3 hosts) |
+| `/etc/udev/rules.d/99-surface-wifi.rules` | root | Disable Marvell WiFi USB autosuspend (i3 hosts) |
+| `/etc/systemd/logind.conf.d/i3.conf` | root | Ignore lid switch (i3 hosts) |
 
 Nothing is deleted from disk except `/etc/cron.d/loft-deploy-*` (re-created from `DEPLOY_TARGETS` each run, so a removed entry stops being scheduled).
 
@@ -86,7 +82,7 @@ sudo bash setup.sh
 - `CONFIG_DIRS` / `MEDIA_DIRS` change (new directories need creating with correct ownership)
 - `DEPLOY_TARGETS` changes (cron files need re-installing)
 - `LITTLEDOG_EXTRA_GROUPS` changes (e.g. adding `render` for a new GPU)
-- `KIOSK_ENABLED` flips on, or kiosk URL/scale changes
+- `I3_ENABLED` flips on
 - Docker `daemon.json` changes
 
 For routine code/config changes after the host is provisioned, use [`loft-ctl update`](loft-ctl.md) — it pulls the repo and rebuilds services without re-running the OS-level provisioning.
@@ -172,11 +168,11 @@ sudo dockerd --debug                # foreground run to see parse errors
 
 Restore the previous `daemon.json` (`git checkout daemon.json`) if the new one is the cause.
 
-### Kiosk provisioning re-ran but Chromium still allows external sites
+### i3 provisioning ran but the host still boots into the old kiosk
 
-**Cause:** Chromium caches managed policies on first launch. Restart Chromium (or reboot) after `setup.sh` regenerates `/etc/chromium/policies/managed/kiosk.json`.
+**Cause:** A leftover greetd session is still grabbing the VT, or lightdm didn't get enabled.
 
-**Fix:** Reboot the kiosk host. The new policy applies cleanly on the next Chromium launch.
+**Fix:** Reboot after `setup.sh`. If it persists, `sudo systemctl disable --now greetd` and `sudo systemctl enable --now lightdm`. `setup.sh` also leaves the old `kiosk` user in place — remove it manually once i3 is confirmed: `sudo userdel -r kiosk`.
 
 ### Cron deploy puller entries didn't update
 
