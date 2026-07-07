@@ -97,7 +97,9 @@ cd the-loft && git checkout calavera-fjord-swap
 COMPOSE_PROFILES=client
 SNAPSERVER_HOST=192.168.86.28        # space-needle's IP — verify
 SOUND_DEVICE=plughw:Audio,0          # USB DAC (ALSA card "Audio", CONEXANT) — NOT "default"
-HOST_ID=Downstairs
+HOST_ID=calavera                     # per-HOST id (= hostname) → MA player ma_calavera.
+                                     # NOT the room/group name — "Downstairs" is a sync GROUP
+                                     # you create in MA and add ma_calavera to.
 ```
 
 > The Surface Pro 2 **dock 3.5mm jack is dead under Linux** — audio must go out the USB DAC.

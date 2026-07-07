@@ -45,7 +45,7 @@ info "Services: ${SERVICES[*]}"
 
 # ─── 2. System packages ──────────────────────────────────────────────────────
 info "Installing system packages..."
-PACKAGES=(git curl jq skopeo)
+PACKAGES=(git curl jq skopeo kitty-terminfo)
 [[ "$STORAGE_FS" == "xfs" ]] && PACKAGES+=(xfsprogs)
 apt-get update -qq
 apt-get install -y -qq "${PACKAGES[@]}" > /dev/null
