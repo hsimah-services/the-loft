@@ -85,7 +85,9 @@ if id "$OLD_USER" &>/dev/null; then
   # Login keys — merge + de-dupe so we never drop an existing adminhabl key.
   if [[ -f "${OLD_HOME}/.ssh/authorized_keys" ]]; then
     tmp="$(mktemp)"
-    cat "${OLD_HOME}/.ssh/authorized_keys" "${NEW_HOME}/.ssh/authorized_keys" 2>/dev/null \
+    # adminhabl may not have an authorized_keys yet (fresh host reached only via
+    # su); the '|| true' keeps that missing file from tripping pipefail + set -e.
+    { cat "${OLD_HOME}/.ssh/authorized_keys" "${NEW_HOME}/.ssh/authorized_keys" 2>/dev/null || true; } \
       | sed '/^$/d' | sort -u > "$tmp"
     install -m 600 -o "$NEW_USER" -g "$NEW_USER" "$tmp" "${NEW_HOME}/.ssh/authorized_keys"
     rm -f "$tmp"
