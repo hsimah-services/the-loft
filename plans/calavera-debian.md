@@ -22,7 +22,7 @@ Services (`hosts/calavera/host.conf` → `SERVICES=(howlr snoot houstn)`):
 3. **houstn** — `metrics` profile (glances)
 
 Display: lightdm autologin as service account **`rodnik`** → i3 (`I3_ENABLED="true"`),
-auto-launching chromium fullscreen as a **Music Assistant touch dashboard** at 200% scale.
+auto-launching `firefox --kiosk` fullscreen as a **Music Assistant touch dashboard** at 200% scale.
 
 ---
 
@@ -115,15 +115,20 @@ sudo ./setup.sh
 ```
 
 This creates `adminhabl` (already present) + `rodnik`, sets `AllowUsers adminhabl` +
-`PasswordAuthentication no`, installs Docker + i3/lightdm/kitty/chromium (rodnik autologin
+`PasswordAuthentication no`, installs Docker + i3/lightdm/kitty/firefox-esr (rodnik autologin
 → i3), deploys the repo's i3 config (`hosts/calavera/i3/`) and generates
-`/usr/local/bin/loft-dashboard` + `~/.Xresources` from `host.conf` (`I3_DASHBOARD_URL`,
-`I3_DPI`), applies the Marvell WiFi USB-autosuspend udev rule, drops `splash` from the
-kernel cmdline (plymouth VT7 race), and brings up `howlr` / `snoot` / `houstn`.
+`/usr/local/bin/loft-dashboard` + a firefox kiosk profile + `~/.Xresources` from `host.conf`
+(`I3_DASHBOARD_URL`, `I3_DPI`), applies the Marvell WiFi USB-autosuspend udev rule, drops
+`splash` from the kernel cmdline (plymouth VT7 race), and brings up `howlr` / `snoot` / `houstn`.
 
-The i3 session auto-launches chromium fullscreen as the **Music Assistant dashboard**
+The i3 session auto-launches `firefox --kiosk` fullscreen as the **Music Assistant dashboard**
 (`https://howlr.loft.hsimah.com`) at **200% scale** (`I3_DPI="192"`, needed because the
 Surface's 1920×1080 panel is tiny at 96 DPI). `mod+Return` (Super) drops to a kitty terminal.
+
+> **Why not Chromium?** trixie's Chromium (150.x) SIGTRAPs on startup — its `chrome_crashpad_handler`
+> helper gets a malformed argv (`--database is required`) and the browser aborts before drawing,
+> regardless of `--no-sandbox`/`--disable-gpu`/`--headless`. Firefox works out of the box, so the
+> dashboard runs on `firefox-esr`.
 
 ---
 
@@ -135,8 +140,8 @@ sudo reboot
 
 - Lands on the i3 session (rodnik autologin, no VT7 hang). If lightdm fails its first
   start, the `Restart=` override recovers it.
-- Dashboard: chromium comes up fullscreen on the Music Assistant UI at 200% scale. If it
-  can't reach `howlr.loft.hsimah.com` (DNS/proxy), edit `I3_DASHBOARD_URL` in `host.conf`
+- Dashboard: firefox comes up fullscreen (`--kiosk`) on the Music Assistant UI at 200% scale.
+  If it can't reach `howlr.loft.hsimah.com` (DNS/proxy), edit `I3_DASHBOARD_URL` in `host.conf`
   to the direct `http://192.168.86.28:8095` and re-run `sudo ./setup.sh`. Touch works;
   `mod+Return` opens kitty for admin.
 - Audio: Downstairs rejoins Snapcast — `docker logs howlr-snapclient`; confirm `ma_calavera`

@@ -1,13 +1,13 @@
 # i3 config for calavera — Music Assistant touch dashboard.
 #
 # Deployed to /home/rodnik/.config/i3/config by setup.sh §11b. rodnik autologs
-# into this i3 session, which launches chromium fullscreen as a Music Assistant
-# dashboard on the Surface Pro 2 touchscreen. It is also a usable admin desktop:
-# mod+Return drops to a kitty terminal, mod+d is a launcher.
+# into this i3 session, which launches firefox fullscreen as a Music Assistant
+# kiosk dashboard on the Surface Pro 2 touchscreen. It is also a usable admin
+# desktop: mod+Return drops to a kitty terminal, mod+d is a launcher.
 #
 # HiDPI is handled outside this file: setup.sh writes ~/.Xresources (Xft.dpi,
 # from I3_DPI) which scales all pango/Xft fonts here, and /usr/local/bin/
-# loft-dashboard passes --force-device-scale-factor to chromium.
+# loft-dashboard sets firefox's layout.css.devPixelsPerPx to match.
 
 # Super as the modifier (Alt stays free for the browser).
 set $mod Mod4
@@ -27,11 +27,12 @@ exec --no-startup-id xset s noblank
 # Hide the mouse cursor after 3s idle — clean touch dashboard.
 exec --no-startup-id unclutter --timeout 3
 
-# The Music Assistant dashboard itself (chromium --app, URL from host.conf).
+# The Music Assistant dashboard itself (firefox --kiosk, URL from host.conf).
 exec --no-startup-id loft-dashboard
 
-# Let i3 own fullscreen for the chromium dashboard window.
-for_window [class="(?i)chromium"] fullscreen enable
+# firefox --kiosk fullscreens itself; make it explicit for i3 too (harmless
+# belt-and-suspenders if the kiosk flag ever changes).
+for_window [class="(?i)firefox"] fullscreen enable
 
 # ── Keybindings (admin) ─────────────────────────────────────────────────────
 bindsym $mod+Return exec kitty

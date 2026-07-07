@@ -6,7 +6,7 @@
 
 `calavera` is an old Surface Pro 2 (Ubuntu, 4GB RAM, Intel 3rd-gen, 10.6" 1080p touchscreen) sitting in a dock. It took over the **Downstairs Snapcast client** role from [fjord](fjord.md), so it's now an always-on audio sink: [Music Assistant on space-needle](space-needle.md) streams to it and it plays out through a USB DAC into the Downstairs speakers.
 
-The display runs an **i3** desktop (lightdm autologs the `rodnik` service account into i3) that auto-launches chromium fullscreen as a **Music Assistant touch dashboard** (`https://howlr.loft.hsimah.com`) at 200% scale. Unlike the old locked chromium/greetd kiosk, this is a real i3 session — `mod+Return` drops to a kitty terminal for local admin. The vinyl-casting stack (Spinnik — DarkIce + Icecast + touch UI capturing the Audio-Technica LP5X) has been **retired entirely** and removed from the repo.
+The display runs an **i3** desktop (lightdm autologs the `rodnik` service account into i3) that auto-launches `firefox --kiosk` fullscreen as a **Music Assistant touch dashboard** (`https://howlr.loft.hsimah.com`) at 200% scale. Unlike the old locked chromium/greetd kiosk, this is a real i3 session — `mod+Return` drops to a kitty terminal for local admin. (Firefox rather than Chromium because trixie's Chromium build SIGTRAPs on startup — see the browser note below.) The vinyl-casting stack (Spinnik — DarkIce + Icecast + touch UI capturing the Audio-Technica LP5X) has been **retired entirely** and removed from the repo.
 
 It also runs the [Houstn](../services/houstn.md) `metrics` profile and the [Snoot](../services/snoot.md) Beszel agent like the rest of the fleet.
 
@@ -29,13 +29,15 @@ Naming aside: calavera is **not** a Raspberry Pi. It's an x86_64 Surface Pro 2 �
 ```
 lightdm (auto-login as rodnik)
   └── i3 session (config from hosts/calavera/i3/config)
-        ├── loft-dashboard → chromium --app fullscreen → Music Assistant
+        ├── loft-dashboard → firefox --kiosk fullscreen → Music Assistant
         └── kitty (mod+Return, admin shell)
 ```
 
 `rodnik` is a locked-down display service account (created by `setup.sh` only when `I3_ENABLED=true`): home dir + login shell, member of `video`/`input`/`audio`, no sudo and no docker. lightdm autologin is configured via `/etc/lightdm/lightdm.conf.d/50-rodnik-autologin.conf`.
 
-The i3 config, kitty config, and the generated `/usr/local/bin/loft-dashboard` launcher come from `hosts/calavera/i3/`; the dashboard URL and HiDPI scale are host-config knobs (`I3_DASHBOARD_URL`, `I3_DPI`) so the i3 config itself stays generic. `I3_DPI="192"` scales the X session (via `~/.Xresources` `Xft.dpi`) and chromium (via `--force-device-scale-factor=2`) to 200%, since the 1920×1080 panel is unreadably tiny at 96 DPI.
+The i3 config, kitty config, and the generated `/usr/local/bin/loft-dashboard` launcher (plus a dedicated firefox kiosk profile under `~rodnik/.local/share/loft-dashboard-firefox/`) come from `hosts/calavera/i3/` + `host.conf`; the dashboard URL and HiDPI scale are host-config knobs (`I3_DASHBOARD_URL`, `I3_DPI`) so the i3 config itself stays generic. `I3_DPI="192"` scales the X session (via `~/.Xresources` `Xft.dpi`) and firefox (via `layout.css.devPixelsPerPx=2.0` in the kiosk profile's `user.js`) to 200%, since the 1920×1080 panel is unreadably tiny at 96 DPI.
+
+> **Browser: Firefox, not Chromium.** trixie's Chromium (150.x) SIGTRAPs immediately on startup — the `chrome_crashpad_handler` helper is invoked with a malformed argv (`chrome_crashpad_handler: --database is required`) and the browser aborts before drawing a window. It reproduces with `--no-sandbox`, `--disable-gpu`, and `--headless`, survives a package reinstall, and isn't AppArmor (no `DENIED` in `dmesg`) — i.e. the packaged build itself is broken. `firefox-esr --kiosk` works out of the box, so the dashboard runs on it. If a future trixie Chromium fixes this, revisit.
 
 Always-on hardening (also in `setup.sh`, because this is now a 24/7 audio sink):
 
@@ -81,9 +83,9 @@ See [`hosts/calavera/host.conf`](../../hosts/calavera/host.conf). The notable va
 | Variable | Value | Purpose |
 |----------|-------|---------|
 | `SERVICES` | `(howlr snoot houstn)` | Always-on snapclient + fleet metrics |
-| `I3_ENABLED` | `true` | Triggers the i3 provisioning block in `setup.sh` (rodnik + lightdm + kitty/chromium dashboard + Surface hardening) |
-| `I3_DASHBOARD_URL` | `https://howlr.loft.hsimah.com` | Fullscreen chromium dashboard target (Music Assistant). Direct fallback: `http://192.168.86.28:8095` |
-| `I3_DPI` | `192` | HiDPI scale for the X session + chromium (192 = 200%; the 1920×1080/10.6" panel is tiny at 96) |
+| `I3_ENABLED` | `true` | Triggers the i3 provisioning block in `setup.sh` (rodnik + lightdm + kitty/firefox dashboard + Surface hardening) |
+| `I3_DASHBOARD_URL` | `https://howlr.loft.hsimah.com` | Fullscreen firefox kiosk target (Music Assistant). Direct fallback: `http://192.168.86.28:8095` |
+| `I3_DPI` | `192` | HiDPI scale for the X session + firefox dashboard (192 = 200%; the 1920×1080/10.6" panel is tiny at 96) |
 | `LITTLEDOG_EXTRA_GROUPS` | `audio` | snapclient needs ALSA access |
 | `SSH_DISABLE_PASSWORD` | `true` | Key-only SSH |
 | `WIFI_IFACE` | `wlx501ac51167c0` | USB adapter's predictable name (not `wlan0`) for the WiFi watchdog |
@@ -115,7 +117,7 @@ howlr `.env` (the per-host values that matter here):
 > [`plans/calavera-debian.md`](../../plans/calavera-debian.md). The notes below cover an
 > in-place re-provision on an already-set-up host.
 
-Same shape as the Pis — clone the repo, copy `.env` files, run `setup.sh`. The script auto-detects `I3_ENABLED=true` and runs the i3 block (installs `xorg`, `i3`, `lightdm`, `kitty`, `chromium`, `unclutter`, `x11-xserver-utils`, `dmenu`; creates `rodnik`; configures lightdm autologin; deploys the `hosts/calavera/i3/` config + `~/.Xresources` + `/usr/local/bin/loft-dashboard`; masks sleep targets; installs the Surface WiFi udev rule; removes `iio-sensor-proxy`). It also cleans up legacy kiosk artifacts (greetd config, chromium managed policy, DPMS-off rule) and removes the `cage`/`chromium-browser`/`greetd` packages.
+Same shape as the Pis — clone the repo, copy `.env` files, run `setup.sh`. The script auto-detects `I3_ENABLED=true` and runs the i3 block (installs `xorg`, `i3`, `lightdm`, `kitty`, `firefox-esr`, `unclutter`, `x11-xserver-utils`, `dmenu`; creates `rodnik`; configures lightdm autologin; deploys the `hosts/calavera/i3/` config + `~/.Xresources` + firefox kiosk profile + `/usr/local/bin/loft-dashboard`; masks sleep targets; installs the Surface WiFi udev rule; removes `iio-sensor-proxy`). It also cleans up legacy kiosk artifacts (greetd config, chromium managed policy, DPMS-off rule) and removes the `cage`/`chromium-browser`/`greetd` packages.
 
 ```bash
 cd /srv/the-loft
@@ -200,9 +202,9 @@ Common causes: lightdm not enabled (`sudo systemctl enable --now lightdm`); the 
 
 ### Dashboard is blank / won't load Music Assistant
 
-The `loft-dashboard` launcher loops chromium, so a crash self-recovers within ~2s. If it stays blank:
+The `loft-dashboard` launcher loops `firefox --kiosk`, so a crash self-recovers within ~2s. If it stays blank:
 
 - Check the URL resolves from calavera: `curl -sI https://howlr.loft.hsimah.com` (or `ping howlr.loft.hsimah.com`). If DNS/proxy is the problem, set `I3_DASHBOARD_URL="http://192.168.86.28:8095"` in `host.conf` and re-run `setup.sh`.
 - Confirm space-needle's `howlr` (Music Assistant) is up.
-- Everything too small/large? Adjust `I3_DPI` in `host.conf` (192 = 200%) and re-run `setup.sh` — it regenerates `~/.Xresources` and `loft-dashboard`.
-- Restart just the dashboard without a reboot: as `rodnik`, `pkill chromium` (the loop relaunches it), or `i3-msg restart`.
+- Everything too small/large? Adjust `I3_DPI` in `host.conf` (192 = 200%) and re-run `setup.sh` — it regenerates `~/.Xresources` (session `Xft.dpi`) and the firefox kiosk profile's `user.js` (`layout.css.devPixelsPerPx`).
+- Restart just the dashboard without a reboot: as `rodnik`, `pkill firefox` (the loop relaunches it), or `i3-msg restart`.
