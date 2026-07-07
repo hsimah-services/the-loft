@@ -412,14 +412,18 @@ fi
 # ─── 12. Cron jobs ───────────────────────────────────────────────────────────
 info "Configuring cron jobs..."
 
-# WiFi watchdog (every 5 minutes) — restarts dhcpcd if wlan0 loses its IPv4 address
-# Harmless on hosts without wlan0 (short-circuits on first check)
+# WiFi watchdog (every 5 minutes) — restart the DHCP unit if the WiFi interface loses its
+# IPv4 address. Both the interface and the unit are host-configurable (defaults suit the Pis:
+# wlan0 + dhcpcd); e.g. calavera uses a USB adapter (wlx…) managed by NetworkManager.
+# Harmless on hosts without the interface (short-circuits on the first check).
+WIFI_IFACE="${WIFI_IFACE:-wlan0}"
+WIFI_DHCP_UNIT="${WIFI_DHCP_UNIT:-dhcpcd}"
 cat > /etc/cron.d/loft-wifi-watchdog <<EOF
-# WiFi DHCP watchdog — restart dhcpcd if wlan0 loses IPv4 — installed by setup.sh
-*/5 * * * * root ip link show wlan0 &>/dev/null && ! ip -4 addr show wlan0 2>/dev/null | grep -q inet && logger -t loft-wifi-watchdog "wlan0 lost IPv4, restarting dhcpcd" && systemctl restart dhcpcd 2>/dev/null
+# WiFi DHCP watchdog — restart ${WIFI_DHCP_UNIT} if ${WIFI_IFACE} loses IPv4 — installed by setup.sh
+*/5 * * * * root ip link show ${WIFI_IFACE} &>/dev/null && ! ip -4 addr show ${WIFI_IFACE} 2>/dev/null | grep -q inet && logger -t loft-wifi-watchdog "${WIFI_IFACE} lost IPv4, restarting ${WIFI_DHCP_UNIT}" && systemctl restart ${WIFI_DHCP_UNIT} 2>/dev/null
 EOF
 chmod 644 /etc/cron.d/loft-wifi-watchdog
-info "Installed WiFi watchdog cron job"
+info "Installed WiFi watchdog cron job (${WIFI_IFACE} → ${WIFI_DHCP_UNIT})"
 
 # Deploy puller cron entries (one per DEPLOY_TARGETS entry)
 # Clear any stale entries from a previous run before installing fresh ones.

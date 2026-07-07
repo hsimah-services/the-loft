@@ -32,7 +32,7 @@ The script auto-detects the host by hostname and sources its [`host.conf`](../..
 | 11 | For each service in `SERVICES`: build (if a `Dockerfile` is present), then `docker compose up -d` using the override-aware args from [`common.sh`](common-sh.md) | `SERVICES` |
 | 11a | Source any per-service `services/<name>/setup.sh` after deployment | `SERVICES` |
 | 11b | i3 desktop provisioning — `xorg`, `i3`, `xterm`, `lightdm`; `rodnik` autologin → i3; mask suspend/sleep; Surface Pro 2 WiFi udev rule; remove `iio-sensor-proxy`; clean up legacy kiosk artifacts | `I3_ENABLED` |
-| 12 | Cron — `/etc/cron.d/loft-wifi-watchdog` (every 5min, no-op on hosts without `wlan0`) + one `/etc/cron.d/loft-deploy-<name>` per `DEPLOY_TARGETS` entry (hourly, runs [`deploy-pull.sh`](deploy-pull.md)) | `DEPLOY_TARGETS` |
+| 12 | Cron — `/etc/cron.d/loft-wifi-watchdog` (every 5min; watches `WIFI_IFACE`, restarts `WIFI_DHCP_UNIT` on IPv4 loss; no-op on hosts without the interface) + one `/etc/cron.d/loft-deploy-<name>` per `DEPLOY_TARGETS` entry (hourly, runs [`deploy-pull.sh`](deploy-pull.md)) | `WIFI_IFACE`, `WIFI_DHCP_UNIT`, `DEPLOY_TARGETS` |
 | 13 | Verification summary — print users, mount status, SSH config, running containers, i3 status | — |
 
 Phase 11 short-circuits a service if its `.env.example` exists but `.env` doesn't — the script logs a warning and moves on instead of failing the whole run.
@@ -60,7 +60,7 @@ Phase 11 short-circuits a service if its `.env.example` exists but `.env` doesn'
 | `/var/log/loft` | root | Log directory, target for `deploy-pull.sh` output |
 | `/var/lib/loft/deploy` | root 755 | State directory, stores `<name>.version` files |
 | `/etc/docker/daemon.json` | root | Copied from repo `daemon.json` (log rotation) |
-| `/etc/cron.d/loft-wifi-watchdog` | root 644 | dhcpcd restart if `wlan0` loses IPv4 |
+| `/etc/cron.d/loft-wifi-watchdog` | root 644 | restart `WIFI_DHCP_UNIT` (default `dhcpcd`) if `WIFI_IFACE` (default `wlan0`) loses IPv4 |
 | `/etc/cron.d/loft-deploy-<name>` | root 644 | One file per `DEPLOY_TARGETS` entry (cleared and reinstalled every run) |
 | `/etc/lightdm/lightdm.conf.d/50-rodnik-autologin.conf` | root | Autologin `rodnik` → i3 (i3 hosts) |
 | `/etc/udev/rules.d/99-surface-wifi.rules` | root | Disable Marvell WiFi USB autosuspend (i3 hosts) |

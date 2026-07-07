@@ -61,7 +61,7 @@ The Surface's Marvell 88W8797 USB WiFi flakes out under aggressive USB autosuspe
 ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="1286", ATTR{power/autosuspend}="-1"
 ```
 
-That disables autosuspend for the Marvell USB WiFi adapter. The fleet-wide `/etc/cron.d/loft-wifi-watchdog` (every 5 minutes, restarts `dhcpcd` if `wlan0` loses IPv4) also runs here, same as on the Pis.
+That disables autosuspend for the Marvell USB WiFi adapter. The fleet-wide `/etc/cron.d/loft-wifi-watchdog` (every 5 minutes, restarts the DHCP unit if the WiFi interface loses IPv4) also runs here — but calavera's WiFi is a USB adapter with a predictable name (`wlx501ac51167c0`) managed by NetworkManager, **not** the Pis' `wlan0` + `dhcpcd`. So `host.conf` overrides the watchdog defaults via `WIFI_IFACE="wlx501ac51167c0"` and `WIFI_DHCP_UNIT="NetworkManager"`.
 
 ### Networking
 
@@ -80,6 +80,8 @@ See [`hosts/calavera/host.conf`](../../hosts/calavera/host.conf). The notable va
 | `I3_ENABLED` | `true` | Triggers the i3 provisioning block in `setup.sh` (rodnik + lightdm + Surface hardening) |
 | `LITTLEDOG_EXTRA_GROUPS` | `audio` | snapclient needs ALSA access |
 | `SSH_DISABLE_PASSWORD` | `true` | Key-only SSH |
+| `WIFI_IFACE` | `wlx501ac51167c0` | USB adapter's predictable name (not `wlan0`) for the WiFi watchdog |
+| `WIFI_DHCP_UNIT` | `NetworkManager` | Unit the watchdog restarts on IPv4 loss (not `dhcpcd`) |
 | `SERVICE_ENDPOINTS` / `HEALTH_URLS` | empty | No web endpoints health-checked from this host |
 
 ### `.env` files
@@ -175,7 +177,7 @@ Confirm `SNAPSERVER_HOST=192.168.86.28` in `services/howlr/.env` and that MA/Sna
 **Causes:**
 
 - Marvell USB autosuspend re-enabled (re-run `setup.sh` to reinstall `/etc/udev/rules.d/99-surface-wifi.rules`)
-- `wlan0` lost its DHCP lease — the fleet-wide `/etc/cron.d/loft-wifi-watchdog` should restart `dhcpcd` within 5 minutes:
+- `wlx501ac51167c0` lost its DHCP lease — the `/etc/cron.d/loft-wifi-watchdog` (here: watches `wlx501ac51167c0`, restarts `NetworkManager`) should recover it within 5 minutes:
 
 ```bash
 journalctl -t loft-wifi-watchdog --since '1 day ago'
