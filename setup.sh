@@ -426,6 +426,10 @@ user_pref("browser.sessionstore.resume_from_crash", false);
 user_pref("datareporting.policy.dataSubmissionEnabled", false);
 user_pref("toolkit.telemetry.enabled", false);
 user_pref("app.update.auto", false);
+// Touchscreen: enable W3C touch events + APZ kinetic panning so the Surface
+// panel gets swipe-to-scroll (pairs with MOZ_USE_XINPUT2=1 in loft-dashboard).
+user_pref("dom.w3c_touch_events.enabled", 1);
+user_pref("apz.gtk.kinetic_scroll.enabled", true);
 FFPREFS
   chown rodnik:rodnik "${FF_PROFILE}/user.js"
 
@@ -436,6 +440,9 @@ FFPREFS
 set -u
 URL="${DASH_URL}"
 PROFILE="\${HOME}/.local/share/loft-dashboard-firefox"
+# Firefox on X11 has no touch swipe-scroll / kinetic panning unless XInput2
+# touch events are enabled via this env var (no CLI flag exists for it).
+export MOZ_USE_XINPUT2=1
 while true; do
   firefox-esr --kiosk --profile "\${PROFILE}" "\${URL}"
   sleep 2

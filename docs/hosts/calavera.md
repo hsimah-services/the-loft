@@ -37,6 +37,8 @@ lightdm (auto-login as rodnik)
 
 The i3 config, kitty config, and the generated `/usr/local/bin/loft-dashboard` launcher (plus a dedicated firefox kiosk profile under `~rodnik/.local/share/loft-dashboard-firefox/`) come from `hosts/calavera/i3/` + `host.conf`; the dashboard URL and HiDPI scale are host-config knobs (`I3_DASHBOARD_URL`, `I3_DPI`) so the i3 config itself stays generic. `I3_DPI="192"` scales the X session (via `~/.Xresources` `Xft.dpi`) and firefox (via `layout.css.devPixelsPerPx=2.0` in the kiosk profile's `user.js`) to 200%, since the 1920×1080 panel is unreadably tiny at 96 DPI.
 
+**Touch swipe-scroll:** Firefox on X11 does nothing with touch drag unless XInput2 touch events are on, so the launcher exports `MOZ_USE_XINPUT2=1` (there's no CLI flag for it) and the kiosk `user.js` sets `dom.w3c_touch_events.enabled=1` + `apz.gtk.kinetic_scroll.enabled=true`. Together these give the Surface panel swipe-to-scroll and kinetic panning in the Music Assistant UI.
+
 > **Browser: Firefox, not Chromium.** trixie's Chromium (150.x) SIGTRAPs immediately on startup — the `chrome_crashpad_handler` helper is invoked with a malformed argv (`chrome_crashpad_handler: --database is required`) and the browser aborts before drawing a window. It reproduces with `--no-sandbox`, `--disable-gpu`, and `--headless`, survives a package reinstall, and isn't AppArmor (no `DENIED` in `dmesg`) — i.e. the packaged build itself is broken. `firefox-esr --kiosk` works out of the box, so the dashboard runs on it. If a future trixie Chromium fixes this, revisit.
 
 Always-on hardening (also in `setup.sh`, because this is now a 24/7 audio sink):
