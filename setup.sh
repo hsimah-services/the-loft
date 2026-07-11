@@ -488,18 +488,21 @@ fi
 # ─── 12. Cron jobs ───────────────────────────────────────────────────────────
 info "Configuring cron jobs..."
 
-# WiFi watchdog (every 5 minutes) — restart the DHCP unit if the WiFi interface loses its
-# IPv4 address. Both the interface and the unit are host-configurable (defaults suit the Pis:
-# wlan0 + dhcpcd); e.g. calavera uses a USB adapter (wlx…) managed by NetworkManager.
+# WiFi watchdog — restart the DHCP unit if the WiFi interface loses its IPv4
+# address. Interface, unit, and check interval are all host-configurable
+# (defaults suit the Pis: wlan0 + dhcpcd, every 5 min); e.g. calavera uses a
+# USB adapter (wlx…) managed by NetworkManager and checks every 2 min because
+# it drops more often. Cron's floor is 1 minute, so the interval is in minutes.
 # Harmless on hosts without the interface (short-circuits on the first check).
 WIFI_IFACE="${WIFI_IFACE:-wlan0}"
 WIFI_DHCP_UNIT="${WIFI_DHCP_UNIT:-dhcpcd}"
+WIFI_WATCHDOG_MINUTES="${WIFI_WATCHDOG_MINUTES:-5}"
 cat > /etc/cron.d/loft-wifi-watchdog <<EOF
 # WiFi DHCP watchdog — restart ${WIFI_DHCP_UNIT} if ${WIFI_IFACE} loses IPv4 — installed by setup.sh
-*/5 * * * * root ip link show ${WIFI_IFACE} &>/dev/null && ! ip -4 addr show ${WIFI_IFACE} 2>/dev/null | grep -q inet && logger -t loft-wifi-watchdog "${WIFI_IFACE} lost IPv4, restarting ${WIFI_DHCP_UNIT}" && systemctl restart ${WIFI_DHCP_UNIT} 2>/dev/null
+*/${WIFI_WATCHDOG_MINUTES} * * * * root ip link show ${WIFI_IFACE} &>/dev/null && ! ip -4 addr show ${WIFI_IFACE} 2>/dev/null | grep -q inet && logger -t loft-wifi-watchdog "${WIFI_IFACE} lost IPv4, restarting ${WIFI_DHCP_UNIT}" && systemctl restart ${WIFI_DHCP_UNIT} 2>/dev/null
 EOF
 chmod 644 /etc/cron.d/loft-wifi-watchdog
-info "Installed WiFi watchdog cron job (${WIFI_IFACE} → ${WIFI_DHCP_UNIT})"
+info "Installed WiFi watchdog cron job (${WIFI_IFACE} → ${WIFI_DHCP_UNIT}, every ${WIFI_WATCHDOG_MINUTES} min)"
 
 # Deploy puller cron entries (one per DEPLOY_TARGETS entry)
 # Clear any stale entries from a previous run before installing fresh ones.
