@@ -13,7 +13,7 @@
 set $mod Mod4
 
 # Font for window titles / mode indicators. Point size stays small; Xft.dpi
-# (192 = 200% on calavera) scales it up to a readable size.
+# (96 = 100% on calavera) scales it to a readable size.
 font pango:DejaVu Sans Mono 8
 
 # ── Autostart ───────────────────────────────────────────────────────────────

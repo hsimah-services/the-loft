@@ -35,7 +35,7 @@ lightdm (auto-login as rodnik)
 
 `rodnik` is a locked-down display service account (created by `setup.sh` only when `I3_ENABLED=true`): home dir + login shell, member of `video`/`input`/`audio`, no sudo and no docker. lightdm autologin is configured via `/etc/lightdm/lightdm.conf.d/50-rodnik-autologin.conf`.
 
-The i3 config, kitty config, and the generated `/usr/local/bin/loft-dashboard` launcher (plus a dedicated firefox kiosk profile under `~rodnik/.local/share/loft-dashboard-firefox/`) come from `hosts/calavera/i3/` + `host.conf`; the dashboard URL and HiDPI scale are host-config knobs (`I3_DASHBOARD_URL`, `I3_DPI`) so the i3 config itself stays generic. `I3_DPI="192"` scales the X session (via `~/.Xresources` `Xft.dpi`) and firefox (via `layout.css.devPixelsPerPx=2.0` in the kiosk profile's `user.js`) to 200%, since the 1920×1080 panel is unreadably tiny at 96 DPI.
+The i3 config, kitty config, and the generated `/usr/local/bin/loft-dashboard` launcher (plus a dedicated firefox kiosk profile under `~rodnik/.local/share/loft-dashboard-firefox/`) come from `hosts/calavera/i3/` + `host.conf`; the dashboard URL and HiDPI scale are host-config knobs (`I3_DASHBOARD_URL`, `I3_DPI`) so the i3 config itself stays generic. `I3_DPI="96"` keeps the session at native scale (1.0). Rather than upscale the whole X session, the dashboard runs Music Assistant's **mobile-mode UI**, which gives a good touch layout at 1.0 (200% was tried on-panel and was too big). `I3_DPI` still drives `~/.Xresources` `Xft.dpi` and firefox's `layout.css.devPixelsPerPx` if a future host wants upscaling.
 
 **Touch swipe-scroll:** Firefox on X11 does nothing with touch drag unless XInput2 touch events are on, so the launcher exports `MOZ_USE_XINPUT2=1` (there's no CLI flag for it) and the kiosk `user.js` sets `dom.w3c_touch_events.enabled=1` + `apz.gtk.kinetic_scroll.enabled=true`. Together these give the Surface panel swipe-to-scroll and kinetic panning in the Music Assistant UI.
 
@@ -87,7 +87,7 @@ See [`hosts/calavera/host.conf`](../../hosts/calavera/host.conf). The notable va
 | `SERVICES` | `(howlr snoot houstn)` | Always-on snapclient + fleet metrics |
 | `I3_ENABLED` | `true` | Triggers the i3 provisioning block in `setup.sh` (rodnik + lightdm + kitty/firefox dashboard + Surface hardening) |
 | `I3_DASHBOARD_URL` | `https://howlr.loft.hsimah.com` | Fullscreen firefox kiosk target (Music Assistant). Direct fallback: `http://192.168.86.28:8095` |
-| `I3_DPI` | `192` | HiDPI scale for the X session + firefox dashboard (192 = 200%; the 1920×1080/10.6" panel is tiny at 96) |
+| `I3_DPI` | `96` | HiDPI scale for the X session + firefox dashboard (96 = 100%; MA mobile-mode handles the touch layout, so no upscaling needed) |
 | `LITTLEDOG_EXTRA_GROUPS` | `audio` | snapclient needs ALSA access |
 | `SSH_DISABLE_PASSWORD` | `true` | Key-only SSH |
 | `WIFI_IFACE` | `wlx501ac51167c0` | USB adapter's predictable name (not `wlan0`) for the WiFi watchdog |
@@ -208,5 +208,5 @@ The `loft-dashboard` launcher loops `firefox --kiosk`, so a crash self-recovers 
 
 - Check the URL resolves from calavera: `curl -sI https://howlr.loft.hsimah.com` (or `ping howlr.loft.hsimah.com`). If DNS/proxy is the problem, set `I3_DASHBOARD_URL="http://192.168.86.28:8095"` in `host.conf` and re-run `setup.sh`.
 - Confirm space-needle's `howlr` (Music Assistant) is up.
-- Everything too small/large? Adjust `I3_DPI` in `host.conf` (192 = 200%) and re-run `setup.sh` — it regenerates `~/.Xresources` (session `Xft.dpi`) and the firefox kiosk profile's `user.js` (`layout.css.devPixelsPerPx`).
+- Everything too small/large? Adjust `I3_DPI` in `host.conf` (96 = 100%; 192 = 200%) and re-run `setup.sh` — it regenerates `~/.Xresources` (session `Xft.dpi`) and the firefox kiosk profile's `user.js` (`layout.css.devPixelsPerPx`).
 - Restart just the dashboard without a reboot: as `rodnik`, `pkill firefox` (the loop relaunches it), or `i3-msg restart`.
