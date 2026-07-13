@@ -6,7 +6,7 @@
 
 `calavera` is an old Surface Pro 2 (Ubuntu, 4GB RAM, Intel 3rd-gen, 10.6" 1080p touchscreen) sitting in a dock. It took over the **Downstairs Snapcast client** role from [fjord](fjord.md), so it's now an always-on audio sink: [Music Assistant on space-needle](space-needle.md) streams to it and it plays out through a USB DAC into the Downstairs speakers.
 
-The display runs an **i3** desktop (lightdm autologs the `rodnik` service account into i3) that auto-launches `firefox --kiosk` fullscreen as a **Music Assistant touch dashboard** (`https://howlr.loft.hsimah.com`) at 200% scale. Unlike the old locked chromium/greetd kiosk, this is a real i3 session — `mod+Return` drops to a kitty terminal for local admin. (Firefox rather than Chromium because trixie's Chromium build SIGTRAPs on startup — see the browser note below.) The vinyl-casting stack (Spinnik — DarkIce + Icecast + touch UI capturing the Audio-Technica LP5X) has been **retired entirely** and removed from the repo.
+The display runs an **i3** desktop (lightdm autologs the `rodnik` service account into i3) that auto-launches `firefox --kiosk` fullscreen as a **Music Assistant touch dashboard** (`https://howlr.loft.hsimah.com`) at 130% scale. Unlike the old locked chromium/greetd kiosk, this is a real i3 session — `mod+Return` drops to a kitty terminal for local admin. (Firefox rather than Chromium because trixie's Chromium build SIGTRAPs on startup — see the browser note below.) The vinyl-casting stack (Spinnik — DarkIce + Icecast + touch UI capturing the Audio-Technica LP5X) has been **retired entirely** and removed from the repo.
 
 It also runs the [Houstn](../services/houstn.md) `metrics` profile and the [Snoot](../services/snoot.md) Beszel agent like the rest of the fleet.
 
@@ -35,7 +35,7 @@ lightdm (auto-login as rodnik)
 
 `rodnik` is a locked-down display service account (created by `setup.sh` only when `I3_ENABLED=true`): home dir + login shell, member of `video`/`input`/`audio`, no sudo and no docker. lightdm autologin is configured via `/etc/lightdm/lightdm.conf.d/50-rodnik-autologin.conf`.
 
-The i3 config, kitty config, and the generated `/usr/local/bin/loft-dashboard` launcher (plus a dedicated firefox kiosk profile under `~rodnik/.local/share/loft-dashboard-firefox/`) come from `hosts/calavera/i3/` + `host.conf`; the dashboard URL and HiDPI scale are host-config knobs (`I3_DASHBOARD_URL`, `I3_DPI`) so the i3 config itself stays generic. `I3_DPI="96"` keeps the session at native scale (1.0). Rather than upscale the whole X session, the dashboard runs Music Assistant's **mobile-mode UI**, which gives a good touch layout at 1.0 (200% was tried on-panel and was too big). `I3_DPI` still drives `~/.Xresources` `Xft.dpi` and firefox's `layout.css.devPixelsPerPx` if a future host wants upscaling.
+The i3 config, kitty config, and the generated `/usr/local/bin/loft-dashboard` launcher (plus a dedicated firefox kiosk profile under `~rodnik/.local/share/loft-dashboard-firefox/`) come from `hosts/calavera/i3/` + `host.conf`; the dashboard URL and HiDPI scale are host-config knobs (`I3_DASHBOARD_URL`, `I3_DPI`) so the i3 config itself stays generic. `I3_DPI="125"` scales the session to ~130% (96 = 100% was tried first and came up too small; 200% was tried before that and was way too big; 130%, dialed in via Firefox's manual zoom, was the sweet spot). The dashboard also runs Music Assistant's **mobile-mode UI** for the touch layout on top of that scale. `I3_DPI` drives both `~/.Xresources` `Xft.dpi` (session fonts) and firefox's `layout.css.devPixelsPerPx` (dashboard scale).
 
 **Touch swipe-scroll:** Firefox on X11 does nothing with touch drag unless XInput2 touch events are on, so the launcher exports `MOZ_USE_XINPUT2=1` (there's no CLI flag for it) and the kiosk `user.js` sets `dom.w3c_touch_events.enabled=1` + `apz.gtk.kinetic_scroll.enabled=true`. Together these give the Surface panel swipe-to-scroll and kinetic panning in the Music Assistant UI.
 
@@ -87,7 +87,7 @@ See [`hosts/calavera/host.conf`](../../hosts/calavera/host.conf). The notable va
 | `SERVICES` | `(howlr snoot houstn)` | Always-on snapclient + fleet metrics |
 | `I3_ENABLED` | `true` | Creates the `rodnik` display account (`setup.sh` §5) and adds it to the verification summary; the i3/lightdm/dashboard/Surface provisioning itself lives in [`hosts/calavera/bootstrap`](../../hosts/calavera/bootstrap), which runs because it exists for this hostname |
 | `I3_DASHBOARD_URL` | `https://howlr.loft.hsimah.com` | Fullscreen firefox kiosk target (Music Assistant). Direct fallback: `http://192.168.86.28:8095` |
-| `I3_DPI` | `96` | HiDPI scale for the X session + firefox dashboard (96 = 100%; MA mobile-mode handles the touch layout, so no upscaling needed) |
+| `I3_DPI` | `125` | HiDPI scale for the X session + firefox dashboard (96 = 100%; 125 ≈ 130%, dialed in via Firefox's manual zoom after 200% proved too big and 100% too small) |
 | `LITTLEDOG_EXTRA_GROUPS` | `audio` | snapclient needs ALSA access |
 | `SSH_DISABLE_PASSWORD` | `true` | Key-only SSH |
 | `WIFI_IFACE` | `wlx501ac51167c0` | USB adapter's predictable name (not `wlan0`) for the WiFi watchdog |
