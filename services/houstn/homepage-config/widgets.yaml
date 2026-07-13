@@ -18,14 +18,15 @@
       - /rootfs
       - /mammoth
     expanded: true
-- glances:
-    url: http://fjord:61208
-    version: 4
-    label: fjord
-    cpu: true
-    mem: true
-    disk: /rootfs
-    expanded: true
+# fjord offline — glances widget suppressed to avoid API-error tile, restore when back
+#- glances:
+#    url: http://fjord:61208
+#    version: 4
+#    label: fjord
+#    cpu: true
+#    mem: true
+#    disk: /rootfs
+#    expanded: true
 - glances:
     url: http://viking:61208
     version: 4
