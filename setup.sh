@@ -332,6 +332,34 @@ if [[ "${I3_ENABLED:-false}" == "true" ]]; then
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
     xorg i3 lightdm kitty firefox-esr unclutter x11-xserver-utils dmenu > /dev/null
 
+  # ── Remove desktop/laptop-task cruft ───────────────────────────────────────
+  # The Debian installer ticks "print server" by default and auto-selects the
+  # "laptop" task on hardware that reads as a laptop (the Surface Pro 2 does),
+  # even when "Debian desktop environment" is unticked. That drags in a full
+  # peripheral stack an unattended kiosk never touches: printing (cups),
+  # Bluetooth, mDNS/service discovery (avahi), cellular modem support,
+  # PackageKit, and speech synthesis. Purge it so it can't come back on a
+  # later `apt upgrade` either. Safe to re-run; no-ops once already removed.
+  info "Removing desktop/laptop-task cruft (printing, Bluetooth, mDNS, modem, PackageKit, speech)..."
+  systemctl disable --now \
+    cups.service cups.socket cups.path cups-browsed.service \
+    bluetooth.service avahi-daemon.service avahi-daemon.socket \
+    ModemManager.service upower.service power-profiles-daemon.service \
+    switcheroo-control.service fwupd.service fwupd-refresh.timer \
+    colord.service accounts-daemon.service 2>/dev/null || true
+  apt-get purge -y -qq \
+    cups cups-browsed cups-daemon cups-client cups-common cups-core-drivers \
+    cups-filters cups-filters-core-drivers cups-ipp-utils cups-pk-helper \
+    cups-ppdc cups-server-common python3-cups python3-cupshelpers \
+    bluetooth bluez bluez-obexd gnome-bluetooth-sendto \
+    avahi-daemon avahi-utils \
+    modemmanager \
+    packagekit packagekit-tools gstreamer1.0-packagekit \
+    speech-dispatcher speech-dispatcher-audio-plugins speech-dispatcher-espeak-ng \
+    upower power-profiles-daemon switcheroo-control fwupd colord \
+    accountsservice > /dev/null 2>&1 || true
+  apt-get autoremove -y -qq > /dev/null
+
   # ── lightdm auto-login (rodnik → i3) ──────────────────────────────────────
   info "Configuring lightdm auto-login (rodnik → i3)..."
   systemctl disable gdm3 2>/dev/null || true

@@ -122,6 +122,8 @@ howlr `.env` (the per-host values that matter here):
 
 Same shape as the Pis — clone the repo, copy `.env` files, run `setup.sh`. The script auto-detects `I3_ENABLED=true` and runs the i3 block (installs `xorg`, `i3`, `lightdm`, `kitty`, `firefox-esr`, `unclutter`, `x11-xserver-utils`, `dmenu`; creates `rodnik`; configures lightdm autologin; deploys the `hosts/calavera/i3/` config + `~/.Xresources` + firefox kiosk profile + `/usr/local/bin/loft-dashboard`; masks sleep targets; installs the Surface WiFi udev rule; removes `iio-sensor-proxy`). It also cleans up legacy kiosk artifacts (greetd config, chromium managed policy, DPMS-off rule) and removes the `cage`/`chromium-browser`/`greetd` packages.
 
+It also purges the printing/Bluetooth/mDNS/modem/PackageKit/speech-synthesis stack (`cups*`, `bluetooth`/`bluez*`, `avahi-daemon`, `modemmanager`, `packagekit*`, `speech-dispatcher*`, `upower`, `power-profiles-daemon`, `switcheroo-control`, `fwupd`, `colord`, `accountsservice`) that the Debian installer's default-ticked "print server" task and auto-selected "laptop" task pull in — none of it is reachable from a wall-mounted single-purpose kiosk. This runs on every `setup.sh` invocation, so it's self-healing if a reimage lets those tasks through again (see the [runbook](../../plans/calavera-debian.md#5-debian-install-choices)).
+
 ```bash
 cd /srv/the-loft
 sudo bash setup.sh
