@@ -66,7 +66,7 @@ sudo dd if=debian-13.x.x-amd64-netinst.iso of=/dev/sdX bs=4M status=progress ofl
 | Partitioning | Guided, use entire disk (wipes Ubuntu; reuse the EFI partition) |
 | Software selection | **Untick** "Debian desktop environment" and "print server" (both ticked by default); the installer also auto-selects "laptop" for this hardware — untick it too if offered. **Tick** "SSH server" + "standard system utilities" only |
 
-`setup.sh` installs i3/lightdm itself, so no desktop is selected here. If "print server" or "laptop" get through anyway (easy to miss, and `tasksel` doesn't always show them explicitly), `setup.sh` §11b purges the resulting cruft — cups, Bluetooth, avahi, ModemManager, PackageKit, speech-dispatcher, upower/power-profiles-daemon/switcheroo-control/fwupd/colord, accountsservice — on every run, so it's self-healing either way.
+`setup.sh` installs i3/lightdm itself, so no desktop is selected here. If "print server" or "laptop" get through anyway (easy to miss, and `tasksel` doesn't always show them explicitly), [`hosts/calavera/bootstrap`](../hosts/calavera/bootstrap) purges the resulting cruft — cups, Bluetooth, avahi, ModemManager, PackageKit, speech-dispatcher, upower/power-profiles-daemon/switcheroo-control/fwupd/colord, accountsservice — on every run, so it's self-healing either way.
 
 ---
 

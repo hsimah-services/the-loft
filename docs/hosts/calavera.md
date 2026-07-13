@@ -85,7 +85,7 @@ See [`hosts/calavera/host.conf`](../../hosts/calavera/host.conf). The notable va
 | Variable | Value | Purpose |
 |----------|-------|---------|
 | `SERVICES` | `(howlr snoot houstn)` | Always-on snapclient + fleet metrics |
-| `I3_ENABLED` | `true` | Triggers the i3 provisioning block in `setup.sh` (rodnik + lightdm + kitty/firefox dashboard + Surface hardening) |
+| `I3_ENABLED` | `true` | Creates the `rodnik` display account (`setup.sh` §5) and adds it to the verification summary; the i3/lightdm/dashboard/Surface provisioning itself lives in [`hosts/calavera/bootstrap`](../../hosts/calavera/bootstrap), which runs because it exists for this hostname |
 | `I3_DASHBOARD_URL` | `https://howlr.loft.hsimah.com` | Fullscreen firefox kiosk target (Music Assistant). Direct fallback: `http://192.168.86.28:8095` |
 | `I3_DPI` | `96` | HiDPI scale for the X session + firefox dashboard (96 = 100%; MA mobile-mode handles the touch layout, so no upscaling needed) |
 | `LITTLEDOG_EXTRA_GROUPS` | `audio` | snapclient needs ALSA access |
@@ -120,9 +120,11 @@ howlr `.env` (the per-host values that matter here):
 > [`plans/calavera-debian.md`](../../plans/calavera-debian.md). The notes below cover an
 > in-place re-provision on an already-set-up host.
 
-Same shape as the Pis — clone the repo, copy `.env` files, run `setup.sh`. The script auto-detects `I3_ENABLED=true` and runs the i3 block (installs `xorg`, `i3`, `lightdm`, `kitty`, `firefox-esr`, `unclutter`, `x11-xserver-utils`, `dmenu`; creates `rodnik`; configures lightdm autologin; deploys the `hosts/calavera/i3/` config + `~/.Xresources` + firefox kiosk profile + `/usr/local/bin/loft-dashboard`; masks sleep targets; installs the Surface WiFi udev rule; removes `iio-sensor-proxy`). It also cleans up legacy kiosk artifacts (greetd config, chromium managed policy, DPMS-off rule) and removes the `cage`/`chromium-browser`/`greetd` packages.
+Same shape as the Pis — clone the repo, copy `.env` files, run `setup.sh`. §5 creates the `rodnik` account (gated on `I3_ENABLED=true`), and §11b sources [`hosts/calavera/bootstrap`](../../hosts/calavera/bootstrap) because that file exists for this hostname — no flag check, the file's presence *is* the gate. The bootstrap installs `xorg`, `i3`, `lightdm`, `kitty`, `firefox-esr`, `unclutter`, `x11-xserver-utils`, `dmenu`; configures lightdm autologin; deploys the `hosts/calavera/i3/` config + `~/.Xresources` + firefox kiosk profile + `/usr/local/bin/loft-dashboard`; masks sleep targets; installs the Surface WiFi udev rule; removes `iio-sensor-proxy`. It also cleans up legacy kiosk artifacts (greetd config, chromium managed policy, DPMS-off rule) and removes the `cage`/`chromium-browser`/`greetd` packages.
 
-It also purges the printing/Bluetooth/mDNS/modem/PackageKit/speech-synthesis stack (`cups*`, `bluetooth`/`bluez*`, `avahi-daemon`, `modemmanager`, `packagekit*`, `speech-dispatcher*`, `upower`, `power-profiles-daemon`, `switcheroo-control`, `fwupd`, `colord`, `accountsservice`) that the Debian installer's default-ticked "print server" task and auto-selected "laptop" task pull in — none of it is reachable from a wall-mounted single-purpose kiosk. This runs on every `setup.sh` invocation, so it's self-healing if a reimage lets those tasks through again (see the [runbook](../../plans/calavera-debian.md#5-debian-install-choices)).
+It also purges the printing/Bluetooth/mDNS/modem/PackageKit/speech-synthesis stack (`cups*`, `bluetooth`/`bluez*`, `avahi-daemon`, `modemmanager`, `packagekit*`, `speech-dispatcher*`, `upower`, `power-profiles-daemon`, `switcheroo-control`, `fwupd`, `colord`, `accountsservice`) that the Debian installer's default-ticked "print server" task and auto-selected "laptop" task pull in — none of it is reachable from a wall-mounted single-purpose kiosk. This runs every time `setup.sh` runs, so it's self-healing if a reimage lets those tasks through again (see the [runbook](../../plans/calavera-debian.md#5-debian-install-choices)).
+
+Any host can pick up equivalent host-specific provisioning the same way: drop a `bootstrap` file at `hosts/<hostname>/bootstrap` (sourced, not executed — like the per-service `setup.sh` scripts in §11a — so `REPO_DIR`/`HOST_NAME`/host.conf vars/`info`/`warn`/`error` are all in scope; see [`hosts/calavera/bootstrap`](../../hosts/calavera/bootstrap) for the pattern) and `setup.sh` §11b picks it up automatically; no code changes needed elsewhere.
 
 ```bash
 cd /srv/the-loft

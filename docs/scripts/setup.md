@@ -31,7 +31,7 @@ The script auto-detects the host by hostname and sources its [`host.conf`](../..
 | 10b | Create the `loft-proxy` Docker bridge network (idempotent) | — |
 | 11 | For each service in `SERVICES`: build (if a `Dockerfile` is present), then `docker compose up -d` using the override-aware args from [`common.sh`](common-sh.md) | `SERVICES` |
 | 11a | Source any per-service `services/<name>/setup.sh` after deployment | `SERVICES` |
-| 11b | i3 desktop provisioning — `xorg`, `i3`, `xterm`, `lightdm`; `rodnik` autologin → i3; mask suspend/sleep; Surface Pro 2 WiFi udev rule; remove `iio-sensor-proxy`; clean up legacy kiosk artifacts | `I3_ENABLED` |
+| 11b | Per-host bootstrap — sources `hosts/$(hostname)/bootstrap` if it exists (e.g. calavera's i3/lightdm/dashboard provisioning + Surface Pro 2 hardware quirks); no-op on hosts without one | hostname (file presence) |
 | 12 | Cron — `/etc/cron.d/loft-wifi-watchdog` (every 5min; watches `WIFI_IFACE`, restarts `WIFI_DHCP_UNIT` on IPv4 loss; no-op on hosts without the interface) + one `/etc/cron.d/loft-deploy-<name>` per `DEPLOY_TARGETS` entry (hourly, runs [`deploy-pull.sh`](deploy-pull.md)) | `WIFI_IFACE`, `WIFI_DHCP_UNIT`, `DEPLOY_TARGETS` |
 | 13 | Verification summary — print users, mount status, SSH config, running containers, i3 status | — |
 
@@ -62,11 +62,11 @@ Phase 11 short-circuits a service if its `.env.example` exists but `.env` doesn'
 | `/etc/docker/daemon.json` | root | Copied from repo `daemon.json` (log rotation) |
 | `/etc/cron.d/loft-wifi-watchdog` | root 644 | restart `WIFI_DHCP_UNIT` (default `dhcpcd`) if `WIFI_IFACE` (default `wlan0`) loses IPv4 |
 | `/etc/cron.d/loft-deploy-<name>` | root 644 | One file per `DEPLOY_TARGETS` entry (cleared and reinstalled every run) |
-| `/etc/lightdm/lightdm.conf.d/50-rodnik-autologin.conf` | root | Autologin `rodnik` → i3 (i3 hosts) |
-| `/etc/udev/rules.d/99-surface-wifi.rules` | root | Disable Marvell WiFi USB autosuspend (i3 hosts) |
-| `/etc/systemd/logind.conf.d/i3.conf` | root | Ignore lid switch (i3 hosts) |
+| `/etc/lightdm/lightdm.conf.d/50-rodnik-autologin.conf` | root | Autologin `rodnik` → i3 (via `hosts/calavera/bootstrap`) |
+| `/etc/udev/rules.d/99-surface-wifi.rules` | root | Disable Marvell WiFi USB autosuspend (via `hosts/calavera/bootstrap`) |
+| `/etc/systemd/logind.conf.d/i3.conf` | root | Ignore lid switch (via `hosts/calavera/bootstrap`) |
 
-Nothing is deleted from disk except `/etc/cron.d/loft-deploy-*` (re-created from `DEPLOY_TARGETS` each run, so a removed entry stops being scheduled).
+Nothing is deleted from disk except `/etc/cron.d/loft-deploy-*` (re-created from `DEPLOY_TARGETS` each run, so a removed entry stops being scheduled) and whatever a host's own `bootstrap` script chooses to remove (calavera's purges legacy kiosk artifacts and desktop/laptop-task cruft — see [calavera](../hosts/calavera.md#first-time-provisioning)).
 
 ## Operations
 
@@ -82,7 +82,7 @@ sudo bash setup.sh
 - `CONFIG_DIRS` / `MEDIA_DIRS` change (new directories need creating with correct ownership)
 - `DEPLOY_TARGETS` changes (cron files need re-installing)
 - `LITTLEDOG_EXTRA_GROUPS` changes (e.g. adding `render` for a new GPU)
-- `I3_ENABLED` flips on
+- `I3_ENABLED` flips on, or `hosts/$(hostname)/bootstrap` changes
 - Docker `daemon.json` changes
 
 For routine code/config changes after the host is provisioned, use [`loft-ctl update`](loft-ctl.md) — it pulls the repo and rebuilds services without re-running the OS-level provisioning.
@@ -101,6 +101,7 @@ sudo bash setup.sh
 - [`loft-ctl`](loft-ctl.md) — day-to-day control of services after the host is provisioned
 - [`common.sh`](common-sh.md) — sourced by `setup.sh` to resolve per-service compose args (base + per-host override)
 - [`deploy-pull.sh`](deploy-pull.md) — installed as `/etc/cron.d/loft-deploy-*` by phase 12
+- [`hosts/calavera/bootstrap`](../../hosts/calavera/bootstrap) — the only per-host bootstrap script today; the pattern to follow for a future host
 - Host pages: [space-needle](../hosts/space-needle.md), [viking](../hosts/viking.md), [fjord](../hosts/fjord.md), [calavera](../hosts/calavera.md)
 - Root [`README.md`](../../README.md) — Quick Start section
 

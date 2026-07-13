@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+# calavera host bootstrap — sourced by setup.sh (§11b)
+# Expects: REPO_DIR, HOST_NAME, info/warn/error functions available in caller
+#
+# i3 touch-dashboard kiosk provisioning + Surface Pro 2 hardware quirks.
+# Gated by hostname (this file only exists for calavera), not I3_ENABLED —
+# see hosts/calavera/host.conf for the I3_* config knobs this reads.
+
+info "Provisioning i3 desktop..."
+
+# ── Packages ──────────────────────────────────────────────────────────────
+# Preseed the display-manager debconf question so the install never blocks on
+# the interactive "default display manager" prompt (lightdm vs gdm3).
+info "Installing i3 + Xorg + dashboard packages..."
+echo "lightdm shared/default-x-display-manager select lightdm" | debconf-set-selections
+# kitty = terminal (mod+Return); firefox-esr = MA dashboard (--kiosk); unclutter
+# hides the idle cursor; x11-xserver-utils gives xset/xrdb for the always-on
+# display + HiDPI resources; dmenu is the launcher. (Chromium was tried first
+# but trixie's build SIGTRAPs on startup — a broken crashpad helper — so the
+# dashboard runs on Firefox instead.)
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+  xorg i3 lightdm kitty firefox-esr unclutter x11-xserver-utils dmenu > /dev/null
+
+# ── Remove desktop/laptop-task cruft ───────────────────────────────────────
+# The Debian installer ticks "print server" by default and auto-selects the
+# "laptop" task on hardware that reads as a laptop (the Surface Pro 2 does),
+# even when "Debian desktop environment" is unticked. That drags in a full
+# peripheral stack an unattended kiosk never touches: printing (cups),
+# Bluetooth, mDNS/service discovery (avahi), cellular modem support,
+# PackageKit, and speech synthesis. Purge it so it can't come back on a
+# later `apt upgrade` either. Safe to re-run; no-ops once already removed.
+info "Removing desktop/laptop-task cruft (printing, Bluetooth, mDNS, modem, PackageKit, speech)..."
+systemctl disable --now \
+  cups.service cups.socket cups.path cups-browsed.service \
+  bluetooth.service avahi-daemon.service avahi-daemon.socket \
+  ModemManager.service upower.service power-profiles-daemon.service \
+  switcheroo-control.service fwupd.service fwupd-refresh.timer \
+  colord.service accounts-daemon.service 2>/dev/null || true
+apt-get purge -y -qq \
+  cups cups-browsed cups-daemon cups-client cups-common cups-core-drivers \
+  cups-filters cups-filters-core-drivers cups-ipp-utils cups-pk-helper \
+  cups-ppdc cups-server-common python3-cups python3-cupshelpers \
+  bluetooth bluez bluez-obexd gnome-bluetooth-sendto \
+  avahi-daemon avahi-utils \
+  modemmanager \
+  packagekit packagekit-tools gstreamer1.0-packagekit \
+  speech-dispatcher speech-dispatcher-audio-plugins speech-dispatcher-espeak-ng \
+  upower power-profiles-daemon switcheroo-control fwupd colord \
+  accountsservice > /dev/null 2>&1 || true
+apt-get autoremove -y -qq > /dev/null
+
+# ── lightdm auto-login (rodnik → i3) ──────────────────────────────────────
+info "Configuring lightdm auto-login (rodnik → i3)..."
+systemctl disable gdm3 2>/dev/null || true
+mkdir -p /etc/lightdm/lightdm.conf.d
+cat > /etc/lightdm/lightdm.conf.d/50-rodnik-autologin.conf <<'LIGHTDM'
+[Seat:*]
+autologin-user=rodnik
+autologin-user-timeout=0
+autologin-session=i3
+user-session=i3
+LIGHTDM
+
+# Survive the boot-time VT/X race: lightdm can fail its first few starts
+# before the console/DRM handoff completes, exhaust systemd's default start
+# rate limit, and give up. Remove the limit and retry until X is ready.
+mkdir -p /etc/systemd/system/lightdm.service.d
+cat > /etc/systemd/system/lightdm.service.d/restart.conf <<'RESTART'
+[Unit]
+StartLimitIntervalSec=0
+
+[Service]
+Restart=on-failure
+RestartSec=2
+RESTART
+
+# lightdm.service is static (no [Install] section), so `systemctl enable`
+# no-ops on it. Select it as THE display manager the Debian/Ubuntu way:
+# the display-manager.service symlink (disabling gdm3 removes the old one).
+ln -sf /usr/lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service
+echo "/usr/sbin/lightdm" > /etc/X11/default-display-manager
+info "lightdm auto-login configured (rodnik → i3)"
+
+# Stop plymouth grabbing VT7: its graphical splash claims the console via
+# vt.handoff and races lightdm's X server for it, which can deadlock the
+# boot (splash spins forever, lightdm retries and never wins the VT). Drop
+# `splash` from the kernel cmdline so plymouth never seizes the VT.
+if [[ -f /etc/default/grub ]] && grep -qE '\bsplash\b' /etc/default/grub; then
+  sed -i 's/\bsplash\b//' /etc/default/grub
+  update-grub 2>/dev/null || true
+  info "Removed 'splash' from kernel cmdline (plymouth VT7 race)"
+fi
+
+# ── Deploy rodnik's i3 config + dashboard ─────────────────────────────────
+# Prefer this host's repo-managed i3 config over the stock /etc/i3/config
+# (which would trigger the first-run wizard under autologin). Falls back to
+# the shipped default if a host enables i3 without providing its own config.
+I3_SRC="${REPO_DIR}/hosts/${HOST_NAME}/i3"
+install -d -o rodnik -g rodnik /home/rodnik/.config/i3
+if [[ -f "${I3_SRC}/config" ]]; then
+  install -o rodnik -g rodnik -m 644 "${I3_SRC}/config" /home/rodnik/.config/i3/config
+  info "Deployed rodnik i3 config from ${I3_SRC}/config"
+elif [[ -f /etc/i3/config && ! -f /home/rodnik/.config/i3/config ]]; then
+  install -o rodnik -g rodnik -m 644 /etc/i3/config /home/rodnik/.config/i3/config
+  info "Seeded /home/rodnik/.config/i3/config from i3 defaults"
+fi
+
+# kitty config (admin terminal font size), if this host ships one.
+if [[ -f "${I3_SRC}/kitty.conf" ]]; then
+  install -d -o rodnik -g rodnik /home/rodnik/.config/kitty
+  install -o rodnik -g rodnik -m 644 "${I3_SRC}/kitty.conf" /home/rodnik/.config/kitty/kitty.conf
+  info "Deployed rodnik kitty config"
+fi
+
+# ── HiDPI scaling (Xft.dpi drives all pango/Xft fonts in the session) ─────
+I3_DPI="${I3_DPI:-96}"
+cat > /home/rodnik/.Xresources <<XRES
+Xft.dpi: ${I3_DPI}
+XRES
+chown rodnik:rodnik /home/rodnik/.Xresources
+info "Set rodnik Xft.dpi=${I3_DPI} ($((I3_DPI * 100 / 96))%)"
+
+# ── loft-dashboard launcher (firefox kiosk → MA dashboard) ────────────────
+# The i3 config execs this; keeping the URL/scale here (from host.conf) keeps
+# the i3 config generic. Loops so a firefox crash self-recovers.
+DASH_URL="${I3_DASHBOARD_URL:-about:blank}"
+# firefox layout.css.devPixelsPerPx = I3_DPI / 96 (2.0 at 192 DPI); awk keeps
+# fractional DPI working. This is absolute (not a multiplier on the session
+# DPI), so it doesn't compound with Xft.dpi.
+DASH_SCALE="$(awk "BEGIN{printf \"%.4g\", ${I3_DPI}/96}")"
+
+# Dedicated firefox kiosk profile: HiDPI scale + no first-run/telemetry/
+# crash-restore nags. user.js is re-read on every start, so re-running
+# setup.sh with a new I3_DPI re-scales the dashboard.
+FF_PROFILE="/home/rodnik/.local/share/loft-dashboard-firefox"
+install -d -o rodnik -g rodnik "$FF_PROFILE"
+cat > "${FF_PROFILE}/user.js" <<FFPREFS
+// Auto-generated by hosts/calavera/bootstrap. Music Assistant kiosk profile.
+user_pref("layout.css.devPixelsPerPx", "${DASH_SCALE}");
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("browser.startup.homepage_override.mstone", "ignore");
+user_pref("browser.sessionstore.resume_from_crash", false);
+user_pref("datareporting.policy.dataSubmissionEnabled", false);
+user_pref("toolkit.telemetry.enabled", false);
+user_pref("app.update.auto", false);
+// Touchscreen: enable W3C touch events + APZ kinetic panning so the Surface
+// panel gets swipe-to-scroll (pairs with MOZ_USE_XINPUT2=1 in loft-dashboard).
+user_pref("dom.w3c_touch_events.enabled", 1);
+user_pref("apz.gtk.kinetic_scroll.enabled", true);
+FFPREFS
+chown rodnik:rodnik "${FF_PROFILE}/user.js"
+
+cat > /usr/local/bin/loft-dashboard <<DASH
+#!/usr/bin/env bash
+# Auto-generated by hosts/calavera/bootstrap from hosts/${HOST_NAME}/host.conf.
+# Fullscreen firefox kiosk pointed at the Music Assistant dashboard.
+set -u
+URL="${DASH_URL}"
+PROFILE="\${HOME}/.local/share/loft-dashboard-firefox"
+# Firefox on X11 has no touch swipe-scroll / kinetic panning unless XInput2
+# touch events are enabled via this env var (no CLI flag exists for it).
+export MOZ_USE_XINPUT2=1
+while true; do
+  firefox-esr --kiosk --profile "\${PROFILE}" "\${URL}"
+  sleep 2
+done
+DASH
+chmod 755 /usr/local/bin/loft-dashboard
+info "Wrote /usr/local/bin/loft-dashboard → ${DASH_URL} (firefox kiosk, ${DASH_SCALE}x)"
+
+# ── Clean up legacy kiosk artifacts (calavera migrated kiosk → i3) ────────
+systemctl disable greetd 2>/dev/null || true
+rm -f /etc/greetd/config.toml \
+      /etc/chromium/policies/managed/kiosk.json \
+      /etc/systemd/logind.conf.d/kiosk.conf \
+      /etc/udev/rules.d/99-dpms-off.rules
+apt-get remove -y -qq cage chromium-browser greetd 2>/dev/null || true
+
+# ── Disable suspend/sleep (always-on audio sink) ──────────────────────────
+info "Disabling suspend/sleep/hibernate..."
+systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+
+mkdir -p /etc/systemd/logind.conf.d
+cat > /etc/systemd/logind.conf.d/i3.conf <<'LOGIND'
+[Login]
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+HandleLidSwitchDocked=ignore
+LOGIND
+info "Lid switch and sleep targets disabled"
+
+# ── Surface Pro 2 WiFi stability ──────────────────────────────────────────
+info "Installing Surface Pro 2 WiFi udev rule..."
+echo 'ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="1286", ATTR{power/autosuspend}="-1"' \
+  > /etc/udev/rules.d/99-surface-wifi.rules
+info "Marvell WiFi USB autosuspend disabled"
+
+# ── Remove screen rotation sensor ────────────────────────────────────────
+apt-get remove -y iio-sensor-proxy 2>/dev/null || true
+info "Removed iio-sensor-proxy (screen rotation disabled)"
+
+info "i3 provisioning complete"

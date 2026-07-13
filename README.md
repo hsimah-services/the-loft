@@ -31,6 +31,7 @@ For deep dives, see [`docs/`](docs/README.md).
 ```
 hosts/<hostname>/host.conf          # Per-host manifest (services, storage, health checks)
 hosts/<hostname>/overrides/...      # Per-host compose overrides
+hosts/<hostname>/bootstrap          # Optional host-specific provisioning, sourced by setup.sh if present
 hosts/<hostname>/i3/...             # Optional i3 desktop config (deployed by setup.sh when I3_ENABLED)
 services/<name>/docker-compose.yml  # Shared service definition
 services/<name>/.env.example        # Secret template
