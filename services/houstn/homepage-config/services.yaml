@@ -110,6 +110,57 @@
           url: http://uptime:3001
           slug: "{{HOMEPAGE_VAR_UPTIME_KUMA_SLUG}}"
 
+- Fleet Version:
+    # Deployed git commit per host — glances AMP reads .deployed-version off
+    # the filesystem (services/houstn/glances.conf: amp_loft_version), kept
+    # current by tracked post-merge/post-checkout hooks. Compare against
+    # the-loft's main on GitHub to see which hosts need a loft-ctl update.
+    - space-needle:
+        icon: mdi-git
+        description: Deployed commit
+        widget:
+          type: customapi
+          url: http://host.docker.internal:61208/api/4/amps
+          refreshInterval: 60000
+          mappings:
+            - field: 0.result
+              label: commit
+              format: text
+    # fjord offline — suppressed to avoid an API-error tile, restore when back
+    #- fjord:
+    #    icon: mdi-git
+    #    description: Deployed commit
+    #    widget:
+    #      type: customapi
+    #      url: http://fjord:61208/api/4/amps
+    #      refreshInterval: 60000
+    #      mappings:
+    #        - field: 0.result
+    #          label: commit
+    #          format: text
+    - viking:
+        icon: mdi-git
+        description: Deployed commit
+        widget:
+          type: customapi
+          url: http://viking:61208/api/4/amps
+          refreshInterval: 60000
+          mappings:
+            - field: 0.result
+              label: commit
+              format: text
+    - calavera:
+        icon: mdi-git
+        description: Deployed commit
+        widget:
+          type: customapi
+          url: http://calavera:61208/api/4/amps
+          refreshInterval: 60000
+          mappings:
+            - field: 0.result
+              label: commit
+              format: text
+
 - Infrastructure:
     - Mushr:
         icon: caddy.svg

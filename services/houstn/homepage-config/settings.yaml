@@ -18,6 +18,9 @@ layout:
   Monitoring:
     style: row
     columns: 2
+  Fleet Version:
+    style: row
+    columns: 3
   Infrastructure:
     style: row
     columns: 3
