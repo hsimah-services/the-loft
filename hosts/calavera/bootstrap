@@ -19,7 +19,8 @@ echo "lightdm shared/default-x-display-manager select lightdm" | debconf-set-sel
 # but trixie's build SIGTRAPs on startup — a broken crashpad helper — so the
 # dashboard runs on Firefox instead.)
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-  xorg i3 lightdm kitty firefox-esr unclutter x11-xserver-utils dmenu > /dev/null
+  xorg i3 lightdm kitty firefox-esr unclutter x11-xserver-utils dmenu \
+  xprintidle python3-websockets > /dev/null
 
 # ── Remove desktop/laptop-task cruft ───────────────────────────────────────
 # The Debian installer ticks "print server" by default and auto-selects the
@@ -167,6 +168,21 @@ done
 DASH
 chmod 755 /usr/local/bin/loft-dashboard
 info "Wrote /usr/local/bin/loft-dashboard → ${DASH_URL} (firefox kiosk, ${DASH_SCALE}x)"
+
+# ── loft-dashboard-power (screen on/off from MA playback + idle) ──────────
+# Script + unit are shared across any i3 dashboard host (control-plane/), only
+# the group list (I3_POWER_GROUPS) is per-host.
+info "Installing loft-dashboard-power..."
+install -o root -g root -m 755 \
+  "${REPO_DIR}/control-plane/loft-dashboard-power.py" /usr/local/bin/loft-dashboard-power
+install -o root -g root -m 644 \
+  "${REPO_DIR}/control-plane/loft-dashboard-power.service" /etc/systemd/system/loft-dashboard-power.service
+cat > /etc/default/loft-dashboard-power <<POWERENV
+LOFT_POWER_GROUPS="${I3_POWER_GROUPS:-}"
+POWERENV
+systemctl daemon-reload
+systemctl enable --now loft-dashboard-power.service
+info "loft-dashboard-power watching groups: ${I3_POWER_GROUPS:-(none configured)}"
 
 # ── Clean up legacy kiosk artifacts (calavera migrated kiosk → i3) ────────
 systemctl disable greetd 2>/dev/null || true

@@ -1,0 +1,17 @@
+[Unit]
+Description=Loft dashboard display power (Music Assistant playback + idle)
+After=lightdm.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rodnik
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/rodnik/.Xauthority
+EnvironmentFile=-/etc/default/loft-dashboard-power
+ExecStart=/usr/local/bin/loft-dashboard-power
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target

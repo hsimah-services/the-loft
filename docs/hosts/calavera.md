@@ -47,7 +47,16 @@ Always-on hardening (also in `setup.sh`, because this is now a 24/7 audio sink):
 - `HandleLidSwitch*=ignore` in `/etc/systemd/logind.conf.d/i3.conf` (runs docked, lid closed)
 - `iio-sensor-proxy` removed (no auto-rotation)
 
-The dashboard screen is kept awake: the i3 config runs `xset s off -dpms` + `xset s noblank` so it never blanks or DPMS-sleeps (it's a wall dashboard), and `unclutter` hides the idle mouse cursor.
+The dashboard screen's power is managed by **`loft-dashboard-power`** rather than staying on unconditionally. The i3 config enables DPMS but with all automatic idle timeouts disabled (`xset dpms 0 0 0`) — only `loft-dashboard-power` (or local input) ever changes the power state. `unclutter` hides the idle mouse cursor as before.
+
+### Display power (`loft-dashboard-power`)
+
+A small daemon (`control-plane/loft-dashboard-power.py`, shared with any other i3 dashboard host — installed as `/usr/local/bin/loft-dashboard-power`, run by `loft-dashboard-power.service`) watches Music Assistant's WebSocket API (`ws://192.168.86.28:8095/ws`) and drives the screen:
+
+- **On** the instant any group listed in `I3_POWER_GROUPS` (host.conf) starts playing.
+- **Off** after 10 minutes with none of those groups playing *and* no local input (`xprintidle`) — so it won't blank while someone's actively browsing the dashboard between tracks, but also won't stay lit indefinitely on true silence.
+
+calavera is never played to directly in Music Assistant — only ever as a member of the `Downstairs` and `All` sync groups — so the daemon watches `player_updated` events for those two group `display_name`s (`I3_POWER_GROUPS="Downstairs,All"`) rather than calavera's own player id (`ma_calavera`). Local input (touch/keyboard) always wakes the display regardless of daemon state, per normal DPMS behavior. Host-specific config lives in `/etc/default/loft-dashboard-power` (written by `hosts/calavera/bootstrap` from `I3_POWER_GROUPS`); the script and systemd unit themselves are host-agnostic.
 
 ### Audio output — USB DAC on the dock
 
@@ -86,8 +95,9 @@ See [`hosts/calavera/host.conf`](../../hosts/calavera/host.conf). The notable va
 |----------|-------|---------|
 | `SERVICES` | `(howlr snoot houstn)` | Always-on snapclient + fleet metrics |
 | `I3_ENABLED` | `true` | Creates the `rodnik` display account (`setup.sh` §5) and adds it to the verification summary; the i3/lightdm/dashboard/Surface provisioning itself lives in [`hosts/calavera/bootstrap`](../../hosts/calavera/bootstrap), which runs because it exists for this hostname |
-| `I3_DASHBOARD_URL` | `https://howlr.loft.hsimah.com` | Fullscreen firefox kiosk target (Music Assistant). Direct fallback: `http://192.168.86.28:8095` |
+| `I3_DASHBOARD_URL` | `https://howlr.loft.hsimah.com/#/home?player=calavera&showFullscreenPlayer=true` | Fullscreen firefox kiosk target — opens straight to the now-playing view on startup. Direct fallback: `http://192.168.86.28:8095` |
 | `I3_DPI` | `125` | HiDPI scale for the X session + firefox dashboard (96 = 100%; 125 ≈ 130%, dialed in via Firefox's manual zoom after 200% proved too big and 100% too small) |
+| `I3_POWER_GROUPS` | `Downstairs,All` | MA sync group `display_name`s that wake the screen when playing (see [Display power](#display-power-loft-dashboard-power)) |
 | `LITTLEDOG_EXTRA_GROUPS` | `audio` | snapclient needs ALSA access |
 | `SSH_DISABLE_PASSWORD` | `true` | Key-only SSH |
 | `WIFI_IFACE` | `wlx501ac51167c0` | USB adapter's predictable name (not `wlan0`) for the WiFi watchdog |
@@ -120,7 +130,7 @@ howlr `.env` (the per-host values that matter here):
 > [`plans/calavera-debian.md`](../../plans/calavera-debian.md). The notes below cover an
 > in-place re-provision on an already-set-up host.
 
-Same shape as the Pis — clone the repo, copy `.env` files, run `setup.sh`. §5 creates the `rodnik` account (gated on `I3_ENABLED=true`), and §11b sources [`hosts/calavera/bootstrap`](../../hosts/calavera/bootstrap) because that file exists for this hostname — no flag check, the file's presence *is* the gate. The bootstrap installs `xorg`, `i3`, `lightdm`, `kitty`, `firefox-esr`, `unclutter`, `x11-xserver-utils`, `dmenu`; configures lightdm autologin; deploys the `hosts/calavera/i3/` config + `~/.Xresources` + firefox kiosk profile + `/usr/local/bin/loft-dashboard`; masks sleep targets; installs the Surface WiFi udev rule; removes `iio-sensor-proxy`. It also cleans up legacy kiosk artifacts (greetd config, chromium managed policy, DPMS-off rule) and removes the `cage`/`chromium-browser`/`greetd` packages.
+Same shape as the Pis — clone the repo, copy `.env` files, run `setup.sh`. §5 creates the `rodnik` account (gated on `I3_ENABLED=true`), and §11b sources [`hosts/calavera/bootstrap`](../../hosts/calavera/bootstrap) because that file exists for this hostname — no flag check, the file's presence *is* the gate. The bootstrap installs `xorg`, `i3`, `lightdm`, `kitty`, `firefox-esr`, `unclutter`, `x11-xserver-utils`, `dmenu`, `xprintidle`, `python3-websockets`; configures lightdm autologin; deploys the `hosts/calavera/i3/` config + `~/.Xresources` + firefox kiosk profile + `/usr/local/bin/loft-dashboard`; installs [`loft-dashboard-power`](../../control-plane/loft-dashboard-power.py) + its systemd unit from `control-plane/` and enables it; masks sleep targets; installs the Surface WiFi udev rule; removes `iio-sensor-proxy`. It also cleans up legacy kiosk artifacts (greetd config, chromium managed policy, DPMS-off rule) and removes the `cage`/`chromium-browser`/`greetd` packages.
 
 It also purges the printing/Bluetooth/mDNS/modem/PackageKit/speech-synthesis stack (`cups*`, `bluetooth`/`bluez*`, `avahi-daemon`, `modemmanager`, `packagekit*`, `speech-dispatcher*`, `upower`, `power-profiles-daemon`, `switcheroo-control`, `fwupd`, `colord`, `accountsservice`) that the Debian installer's default-ticked "print server" task and auto-selected "laptop" task pull in — none of it is reachable from a wall-mounted single-purpose kiosk. This runs every time `setup.sh` runs, so it's self-healing if a reimage lets those tasks through again (see the [runbook](../../plans/calavera-debian.md#5-debian-install-choices)).
 
@@ -215,3 +225,16 @@ The `loft-dashboard` launcher loops `firefox --kiosk`, so a crash self-recovers 
 - Confirm space-needle's `howlr` (Music Assistant) is up.
 - Everything too small/large? Adjust `I3_DPI` in `host.conf` (96 = 100%; 192 = 200%) and re-run `setup.sh` — it regenerates `~/.Xresources` (session `Xft.dpi`) and the firefox kiosk profile's `user.js` (`layout.css.devPixelsPerPx`).
 - Restart just the dashboard without a reboot: as `rodnik`, `pkill firefox` (the loop relaunches it), or `i3-msg restart`.
+
+### Screen won't turn on / off with playback
+
+```bash
+systemctl status loft-dashboard-power
+journalctl -u loft-dashboard-power --since '10 min ago'
+```
+
+The log lines show each `player_updated` event received for the watched groups (`<group> -> <state>`) and every `screen on`/`screen off` transition. Common causes:
+
+- **Never turns on:** confirm `I3_POWER_GROUPS` in `host.conf` matches the MA group's exact `display_name` (case-sensitive) — check in DevTools' WS panel or the MA UI's group name. A stale/renamed group silently means no events ever match.
+- **WS connection errors in the log:** confirm `192.168.86.28:8095` (space-needle/howlr) is reachable from calavera; the daemon reconnects with backoff on its own but will sit dark until the socket comes back.
+- **Never turns off:** something's keeping `xprintidle` non-zero (stray input) or one of the watched groups is stuck reporting `playing` — check the last logged state per group.

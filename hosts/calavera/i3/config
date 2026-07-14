@@ -20,9 +20,14 @@ font pango:DejaVu Sans Mono 8
 # Load HiDPI resources before anything paints.
 exec_always --no-startup-id xrdb -merge ~/.Xresources
 
-# Always-on display: never blank, never DPMS-off (this is a wall dashboard).
-exec --no-startup-id xset s off -dpms
+# DPMS stays enabled but with no automatic idle-based timeouts (0 0 0) — the
+# only thing that ever calls force on/off is loft-dashboard-power, driven by
+# Music Assistant playback state (see host.conf's I3_POWER_GROUPS). Any local
+# input (touch/keyboard) still auto-wakes the display regardless, per normal
+# DPMS behavior.
+exec --no-startup-id xset s off
 exec --no-startup-id xset s noblank
+exec --no-startup-id xset dpms 0 0 0
 
 # Hide the mouse cursor after 3s idle — clean touch dashboard.
 exec --no-startup-id unclutter --timeout 3
