@@ -6,6 +6,9 @@ headerStyle: boxed
 useEqualHeights: true
 
 layout:
+  Fleet:
+    style: row
+    columns: 3
   Media:
     style: row
     columns: 5
@@ -18,9 +21,6 @@ layout:
   Monitoring:
     style: row
     columns: 2
-  Fleet Version:
-    style: row
-    columns: 3
   Infrastructure:
     style: row
     columns: 3
