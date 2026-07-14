@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# post-checkout — writes .deployed-version after switching branches/commits
+# (loft-ctl checks out a branch before pulling). Skipped for file-level
+# checkouts (git's third arg is 0), which don't change the deployed commit.
+set -euo pipefail
+
+[[ "${3:-0}" == "1" ]] || exit 0
+
+repo_root="$(git rev-parse --show-toplevel)"
+git -C "$repo_root" rev-parse --short HEAD > "${repo_root}/.deployed-version"

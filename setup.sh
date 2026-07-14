@@ -43,6 +43,14 @@ info "Host: ${HOST_NAME}"
 info "Repo dir: ${REPO_DIR}"
 info "Services: ${SERVICES[*]}"
 
+# ─── 1b. Git hooks ────────────────────────────────────────────────────────────
+# Tracked hooks (control-plane/hooks) aren't active until core.hooksPath points
+# at them — .git/hooks itself is never version-controlled. This activates
+# post-merge/post-checkout, which keep .deployed-version current (see
+# services/houstn/glances.conf) for any git pull/checkout, not just loft-ctl's.
+git -C "$REPO_DIR" config --local core.hooksPath control-plane/hooks
+info "Activated tracked git hooks (core.hooksPath)"
+
 # ─── 2. System packages ──────────────────────────────────────────────────────
 info "Installing system packages..."
 PACKAGES=(git curl jq skopeo kitty-terminfo)

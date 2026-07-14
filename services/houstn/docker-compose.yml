@@ -79,8 +79,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /:/rootfs:ro
       - /etc/os-release:/etc/os-release:ro
+      - ./glances.conf:/glances/conf/glances.conf:ro
     environment:
-      - GLANCES_OPT=-w
+      - GLANCES_OPT=-w -C /glances/conf/glances.conf
 
 networks:
   loft-proxy:

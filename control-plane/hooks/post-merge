@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# post-merge — writes .deployed-version after every successful `git pull`/
+# `git merge` (fast-forward included), regardless of whether it went through
+# loft-ctl or was run by hand. Consumed by glances (services/houstn/glances.conf)
+# so Homepage can show which hosts are behind main.
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+git -C "$repo_root" rev-parse --short HEAD > "${repo_root}/.deployed-version"
