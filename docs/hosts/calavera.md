@@ -51,12 +51,14 @@ The dashboard screen's power is managed by **`loft-dashboard-power`** rather tha
 
 ### Display power (`loft-dashboard-power`)
 
-A small daemon (`control-plane/loft-dashboard-power.py`, shared with any other i3 dashboard host — installed as `/usr/local/bin/loft-dashboard-power`, run by `loft-dashboard-power.service`) watches Music Assistant's WebSocket API (`ws://192.168.86.28:8095/ws`) and drives the screen:
+A small daemon (`control-plane/loft-dashboard-power.py`, shared with any other i3 dashboard host — installed as `/usr/local/bin/loft-dashboard-power`, run by `loft-dashboard-power.service`) watches **snapserver's own JSON-RPC control API** (`ws://192.168.86.28:1780/jsonrpc` — the same protocol [snapweb](https://snapweb.loft.hsimah.com) itself uses) and drives the screen:
 
-- **On** the instant any group listed in `I3_POWER_GROUPS` (host.conf) starts playing.
-- **Off** after 10 minutes with none of those groups playing *and* no local input (`xprintidle`) — so it won't blank while someone's actively browsing the dashboard between tracks, but also won't stay lit indefinitely on true silence.
+- **On** the instant a `Stream.OnProperties` event reports `playbackStatus: "playing"` for any stream listed in `I3_POWER_GROUPS` (host.conf).
+- **Off** after 10 minutes with none of those streams playing *and* no local input (`xprintidle`) — so it won't blank while someone's actively browsing the dashboard between tracks, but also won't stay lit indefinitely on true silence.
 
-calavera is never played to directly in Music Assistant — only ever as a member of the `Downstairs` and `All` sync groups — so the daemon watches `player_updated` events for those two group `display_name`s (`I3_POWER_GROUPS="Downstairs,All"`) rather than calavera's own player id (`ma_calavera`). Local input (touch/keyboard) always wakes the display regardless of daemon state, per normal DPMS behavior. Host-specific config lives in `/etc/default/loft-dashboard-power` (written by `hosts/calavera/bootstrap` from `I3_POWER_GROUPS`); the script and systemd unit themselves are host-agnostic.
+Music Assistant's *own* WebSocket API (`ws://192.168.86.28:8095/ws`) was tried first and abandoned — a plain reconnecting client never received a single `player_updated` broadcast, even for unrelated players, which points at some undocumented subscribe/`start_listening` handshake the browser UI performs that a bare client connection doesn't get for free. snapserver's JSON-RPC has no such handshake: notifications just flow to any connected client.
+
+calavera is never played to directly in Music Assistant — only ever as a member of the `Downstairs` and `All` sync groups. Each MA sync group gets its own snapserver stream, named `Music Assistant - <queue_id with underscores stripped>` (e.g. MA queue_id `syncgroup_bkmvcshl` → stream id `Music Assistant - syncgroupbkmvcshl`); `I3_POWER_GROUPS` holds that stripped form directly (`syncgroupbkmvcshl,syncgroupzewbtz9n`), confirmed against real events from snapweb's WS panel rather than derived, since the transform isn't documented anywhere. Local input (touch/keyboard) always wakes the display regardless of daemon state, per normal DPMS behavior. Host-specific config lives in `/etc/default/loft-dashboard-power` (written by `hosts/calavera/bootstrap` from `I3_POWER_GROUPS`); the script and systemd unit themselves are host-agnostic.
 
 ### Audio output — USB DAC on the dock
 
@@ -97,7 +99,7 @@ See [`hosts/calavera/host.conf`](../../hosts/calavera/host.conf). The notable va
 | `I3_ENABLED` | `true` | Creates the `rodnik` display account (`setup.sh` §5) and adds it to the verification summary; the i3/lightdm/dashboard/Surface provisioning itself lives in [`hosts/calavera/bootstrap`](../../hosts/calavera/bootstrap), which runs because it exists for this hostname |
 | `I3_DASHBOARD_URL` | `https://howlr.loft.hsimah.com/#/home?player=calavera&showFullscreenPlayer=true` | Fullscreen firefox kiosk target — opens straight to the now-playing view on startup. Direct fallback: `http://192.168.86.28:8095` |
 | `I3_DPI` | `125` | HiDPI scale for the X session + firefox dashboard (96 = 100%; 125 ≈ 130%, dialed in via Firefox's manual zoom after 200% proved too big and 100% too small) |
-| `I3_POWER_GROUPS` | `Downstairs,All` | MA sync group `display_name`s that wake the screen when playing (see [Display power](#display-power-loft-dashboard-power)) |
+| `I3_POWER_GROUPS` | `syncgroupbkmvcshl,syncgroupzewbtz9n` | snapserver stream ids (Downstairs, All) that wake the screen when playing (see [Display power](#display-power-loft-dashboard-power)) |
 | `LITTLEDOG_EXTRA_GROUPS` | `audio` | snapclient needs ALSA access |
 | `SSH_DISABLE_PASSWORD` | `true` | Key-only SSH |
 | `WIFI_IFACE` | `wlx501ac51167c0` | USB adapter's predictable name (not `wlan0`) for the WiFi watchdog |
@@ -233,8 +235,8 @@ systemctl status loft-dashboard-power
 journalctl -u loft-dashboard-power --since '10 min ago'
 ```
 
-The log lines show each `player_updated` event received for the watched groups (`<group> -> <state>`) and every `screen on`/`screen off` transition. Common causes:
+The log lines show each `Stream.OnProperties` event received for the watched streams (`<group> -> <state>`) and every `screen on`/`screen off` transition. Common causes:
 
-- **Never turns on:** confirm `I3_POWER_GROUPS` in `host.conf` matches the MA group's exact `display_name` (case-sensitive) — check in DevTools' WS panel or the MA UI's group name. A stale/renamed group silently means no events ever match.
-- **WS connection errors in the log:** confirm `192.168.86.28:8095` (space-needle/howlr) is reachable from calavera; the daemon reconnects with backoff on its own but will sit dark until the socket comes back.
-- **Never turns off:** something's keeping `xprintidle` non-zero (stray input) or one of the watched groups is stuck reporting `playing` — check the last logged state per group.
+- **Never turns on:** confirm `I3_POWER_GROUPS` in `host.conf` matches the snapserver stream id's stripped-underscore form exactly — check in [snapweb](https://snapweb.loft.hsimah.com)'s DevTools WS panel for the real `Stream.OnProperties.id` (`"Music Assistant - <id>"`). A stale/renamed MA group silently means no events ever match.
+- **WS connection errors in the log:** confirm `192.168.86.28:1780` (space-needle/snapserver) is reachable from calavera; the daemon reconnects with backoff on its own but will sit dark until the socket comes back.
+- **Never turns off:** something's keeping `xprintidle` non-zero (stray input) or one of the watched streams is stuck reporting `playing` — check the last logged state per stream.
