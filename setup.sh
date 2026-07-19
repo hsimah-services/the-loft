@@ -53,7 +53,7 @@ info "Activated tracked git hooks (core.hooksPath)"
 
 # ─── 2. System packages ──────────────────────────────────────────────────────
 info "Installing system packages..."
-PACKAGES=(git curl jq skopeo kitty-terminfo)
+PACKAGES=(git curl jq rsync skopeo kitty-terminfo)
 [[ "$STORAGE_FS" == "xfs" ]] && PACKAGES+=(xfsprogs)
 apt-get update -qq
 apt-get install -y -qq "${PACKAGES[@]}" > /dev/null

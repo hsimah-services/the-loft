@@ -4,7 +4,7 @@
 # Usage: deploy-pull.sh <name> <repo> <target_dir> [post_hook]
 #   name         — short identifier, used for state file & log prefix (e.g. pawst-hblake)
 #   repo         — GitHub repo in "owner/repo" form (e.g. hsimah-services/hbla.ke)
-#   target_dir   — directory to replace with the release's tarball contents
+#   target_dir   — directory to sync the release's tarball contents into
 #   post_hook    — optional shell snippet run after a successful swap (cwd = target_dir)
 #
 # Auth: if /etc/loft/deploy.env exposes GitHub App credentials, requests are
@@ -78,14 +78,17 @@ curl -fsSL "${AUTH_HEADER[@]}" \
   -o "$TARBALL" \
   "$ASSET_URL" || fail "Failed to download asset"
 
-# ── Atomic swap ─────────────────────────────────────────────────────────────
-# tmpdir must live alongside TARGET on the same filesystem for atomic rename.
+# ── Stage and sync ──────────────────────────────────────────────────────────
+# TARGET is synced in place (never renamed/replaced): it may be bind-mounted
+# into a running container, and bind mounts track the inode — replacing the
+# directory would leave the container serving the deleted old tree.
 PARENT="$(dirname "$TARGET")"
 BASENAME="$(basename "$TARGET")"
 mkdir -p "$PARENT"
 
 STAGING="$(mktemp -d "${PARENT}/.${BASENAME}.deploy.XXXXXX")"
-tar xzf "$TARBALL" -C "$STAGING" || { rm -rf "$STAGING"; fail "tar extract failed"; }
+trap 'rm -f "$TARBALL"; rm -rf "$STAGING"' EXIT
+tar xzf "$TARBALL" -C "$STAGING" || fail "tar extract failed"
 
 # Unwrap if release tarball has a single top-level dir.
 shopt -s dotglob nullglob
@@ -100,13 +103,8 @@ fi
 chown -R littledog:pack-member "$STAGING" 2>/dev/null || true
 chmod -R u=rwX,go=rX "$STAGING"
 
-OLD_BACKUP=""
-if [[ -e "$TARGET" ]]; then
-  OLD_BACKUP="${PARENT}/.${BASENAME}.old.$(date +%s)"
-  mv "$TARGET" "$OLD_BACKUP"
-fi
-mv "$STAGING" "$TARGET"
-[[ -n "$OLD_BACKUP" ]] && rm -rf "$OLD_BACKUP"
+mkdir -p "$TARGET"
+rsync -a --delete "$STAGING"/ "$TARGET"/ || fail "rsync into ${TARGET} failed"
 
 echo "$TAG" > "$STATE_FILE"
 log "Deployed ${TAG} to ${TARGET}"

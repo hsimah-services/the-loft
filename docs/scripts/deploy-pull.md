@@ -1,10 +1,10 @@
 # `control-plane/deploy-pull.sh`
 
-> Hourly puller — fetches the latest GitHub Release for a repo and atomically swaps its `.tar.gz` into a bind-mounted target directory.
+> Hourly puller — fetches the latest GitHub Release for a repo and syncs its `.tar.gz` contents into a bind-mounted target directory.
 
 ## Overview
 
-[`deploy-pull.sh`](../../control-plane/deploy-pull.sh) replaces the "self-hosted GitHub Actions runner with `docker.sock` mounted" pattern for static-site deploys. Each app repo's CI runs on stock `ubuntu-latest`, builds an artifact, and attaches it as a `.tar.gz` to a tagged Release. On space-needle, cron runs `deploy-pull.sh` every hour per `DEPLOY_TARGETS` entry; new releases are downloaded and swapped into place. No CI runner on the host, no docker socket exposure, no inbound webhook.
+[`deploy-pull.sh`](../../control-plane/deploy-pull.sh) replaces the "self-hosted GitHub Actions runner with `docker.sock` mounted" pattern for static-site deploys. Each app repo's CI runs on stock `ubuntu-latest`, builds an artifact, and attaches it as a `.tar.gz` to a tagged Release. On space-needle, cron runs `deploy-pull.sh` every hour per `DEPLOY_TARGETS` entry; new releases are downloaded and synced into place. No CI runner on the host, no docker socket exposure, no inbound webhook.
 
 The primary consumer is [pawst](../services/pawst.md) — both `hbla.ke` and `hsimah.com` are pulled this way from their respective `hsimah-services/*` repos.
 
@@ -25,14 +25,14 @@ cron → deploy-pull.sh <name> <repo> <target_dir> [post_hook]
          │
          ├── curl asset → /tmp/<tarball>
          │
-         ├── extract to <target_dir>/../.<basename>.deploy.<rand>/  (sibling on same fs)
+         ├── extract to <target_dir>/../.<basename>.deploy.<rand>/  (sibling staging dir)
          │     └── unwrap single top-level dir if present
          │     └── chown littledog:pack-member, chmod u=rwX,go=rX
          │
-         ├── ATOMIC SWAP:
-         │     mv <target_dir>            → <parent>/.<basename>.old.<epoch>
-         │     mv <staging>                → <target_dir>
-         │     rm -rf <old>
+         ├── IN-PLACE SYNC:
+         │     rsync -a --delete <staging>/ → <target_dir>/
+         │     (target inode never changes — bind mounts into running
+         │      containers stay valid)
          │
          ├── echo <tag> > /var/lib/loft/deploy/<name>.version
          │
@@ -56,10 +56,9 @@ cron → deploy-pull.sh <name> <repo> <target_dir> [post_hook]
 |------|---------|
 | `/var/lib/loft/deploy/<name>.version` | Last successfully deployed tag (one line, e.g. `v1.4.2`) |
 | `/var/log/loft/deploy.log` | All cron-invoked output (stdout + stderr), prefixed with `[deploy:<name>]` |
-| `<parent>/.<basename>.deploy.XXXXXX/` | Transient staging directory during swap |
-| `<parent>/.<basename>.old.<epoch>/` | Transient previous-deploy backup (removed after successful swap) |
+| `<parent>/.<basename>.deploy.XXXXXX/` | Transient staging directory, removed on exit (success or failure) |
 
-The `.deploy.XXXXXX` and `.old.<epoch>` paths live as siblings of the target so the `mv` is on the same filesystem — `mv` between filesystems is a copy, not atomic. Both are deleted at the end of a happy path. After a crash mid-swap, the script will leave one behind; safe to remove manually.
+The staging dir is extracted, unwrapped, and permission-fixed as a sibling of the target, then `rsync -a --delete`ed **into** the target rather than renamed over it. The target directory's inode never changes — this matters because the target is typically bind-mounted into a running container, and Docker bind mounts track the inode: replacing the directory would leave the container serving the deleted old tree until its next restart. After a hard crash mid-run (reboot, `kill -9`) a stray `.deploy.XXXXXX` dir can survive; safe to remove manually.
 
 ### Auth
 
@@ -93,11 +92,10 @@ Re-run `sudo bash setup.sh` after editing `DEPLOY_TARGETS` — phase 12 of `setu
 
 The target dir must:
 
-- Exist (or its parent must — `deploy-pull.sh` does `mkdir -p` on the parent only)
+- Exist (or its parent must — `deploy-pull.sh` `mkdir -p`s both)
 - Be writable by root (cron runs as root, so this is automatic)
-- Live on the same filesystem as its parent (so the atomic swap is one inode rename)
 
-The safest pattern is to add the directory to `CONFIG_DIRS` in `host.conf` so `setup.sh` creates it as `littledog:pack-member` 755 before the first deploy. `deploy-pull.sh` re-chowns the staging tree to `littledog:pack-member` before swap, so the post-swap ownership is consistent.
+The safest pattern is to add the directory to `CONFIG_DIRS` in `host.conf` so `setup.sh` creates it as `littledog:pack-member` 755 before the first deploy. `deploy-pull.sh` chowns the staging tree to `littledog:pack-member` before syncing, so the deployed ownership is consistent.
 
 ### `/etc/loft/deploy.env` (private repos only)
 
@@ -228,19 +226,19 @@ See [`github-app-token.sh`](github-app-token.md#debug--troubleshooting) for setu
 
 ### Post-deploy hook logs `WARNING: post-deploy hook exited non-zero` but the deploy itself succeeded
 
-**Cause:** The hook returned non-zero — that's logged but doesn't unwind the deploy. The file tree is already swapped in.
+**Cause:** The hook returned non-zero — that's logged but doesn't unwind the deploy. The file tree is already synced in.
 
 **Fix:** Read the log for the hook's stderr (it's interleaved with `[deploy:<name>]` lines), fix the hook, optionally re-run by deleting the state file and re-invoking.
 
-### Stale `.<basename>.deploy.XXXXXX` or `.<basename>.old.<epoch>` directory
+### Stale `.<basename>.deploy.XXXXXX` directory
 
-**Cause:** A previous run crashed (host reboot, OOM, `kill -9`) mid-swap.
+**Cause:** A previous run died hard (host reboot, OOM, `kill -9`) before the exit trap could clean up.
 
-**Fix:** Safe to `rm -rf` either one. Re-run `deploy-pull.sh` afterwards to ensure the target is consistent:
+**Fix:** Safe to `rm -rf`. Re-run `deploy-pull.sh` afterwards to ensure the target is consistent:
 
 ```bash
 sudo ls -la <parent>
-sudo rm -rf <parent>/.<basename>.{deploy.*,old.*}
+sudo rm -rf <parent>/.<basename>.deploy.*
 sudo /srv/the-loft/control-plane/deploy-pull.sh <name> <repo> <target>
 ```
 
@@ -259,21 +257,9 @@ curl -fsSL -H "Authorization: Bearer $TOKEN" -H "Accept: application/octet-strea
 file /tmp/probe.tar.gz
 ```
 
-### Atomic swap fails with `Device or resource busy`
-
-**Cause:** Another process has the target dir as its cwd or has a file open inside it. Rare with web servers that re-open files per request (Nginx, Caddy); more common with `tail -f`, a hung shell, or a misconfigured service that long-holds open handles.
-
-**Fix:**
-
-```bash
-sudo lsof +D <target_dir>
-# Kill the holder or restart the consuming service
-loft-ctl rebuild <consuming-service>
-```
-
 ### Permission denied serving the new content
 
-**Cause:** The pre-swap chown was suppressed (`chown … 2>/dev/null || true`) — if `littledog` doesn't exist on the host (forgot to run `setup.sh`), the chown silently fails and files end up root-owned. Nginx as `littledog` then can't read them.
+**Cause:** The staging chown was suppressed (`chown … 2>/dev/null || true`) — if `littledog` doesn't exist on the host (forgot to run `setup.sh`), the chown silently fails and files end up root-owned. Nginx as `littledog` then can't read them.
 
 **Fix:**
 

@@ -21,7 +21,7 @@ Both have a SPA-style fallback (`try_files $uri $uri/ /index.html`), long-cache 
 
 ### Where files come from — pull-based deploys
 
-The container itself is read-only; built sites are bind-mounted from `/opt/pawst/hblake-html` and `/opt/pawst/hsimah-html`. Those directories are populated **on space-needle**, not in CI, by [`control-plane/deploy-pull.sh`](../../control-plane/deploy-pull.sh) which runs hourly via cron. The puller queries `GET /repos/<owner>/<repo>/releases/latest`, compares the tag to its state file, and on a new release downloads and atomically swaps the `.tar.gz` payload. See the scripts page (coming in a separate sub-issue) for the full mechanism.
+The container itself is read-only; built sites are bind-mounted from `/opt/pawst/hblake-html` and `/opt/pawst/hsimah-html`. Those directories are populated **on space-needle**, not in CI, by [`control-plane/deploy-pull.sh`](../../control-plane/deploy-pull.sh) which runs hourly via cron. The puller queries `GET /repos/<owner>/<repo>/releases/latest`, compares the tag to its state file, and on a new release downloads the `.tar.gz` payload and `rsync`s it into the bind-mounted directory in place (the directory is never replaced — its inode must stay stable or the running container's bind mount would detach). See [deploy-pull.sh](../scripts/deploy-pull.md) for the full mechanism.
 
 The two `DEPLOY_TARGETS` entries in [`hosts/space-needle/host.conf`](../../hosts/space-needle/host.conf):
 

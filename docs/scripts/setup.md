@@ -16,7 +16,7 @@ The script auto-detects the host by hostname and sources its [`host.conf`](../..
 |---|-------|-----------|
 | 1 | Preflight — must run as root on Debian/Ubuntu | — |
 | 1a | Source `hosts/$(hostname)/host.conf` | hostname |
-| 2 | `apt install` base packages (`git curl jq skopeo kitty-terminfo`, plus `xfsprogs` if `STORAGE_FS=xfs`) | `STORAGE_FS` |
+| 2 | `apt install` base packages (`git curl jq rsync skopeo kitty-terminfo`, plus `xfsprogs` if `STORAGE_FS=xfs`) | `STORAGE_FS` |
 | 3 | Storage mount — add fstab entry, mount `STORAGE_MOUNT` | `STORAGE_DEVICE` / `STORAGE_MOUNT` / `STORAGE_FS` |
 | 4 | Groups — create `pack-member` (GID 1003) | — |
 | 5 | Users — `littledog` (UID 1003, nologin service account), `adminhabl` (SSH login + sudo admin), `rodnik` (i3 display account, i3 hosts) | `LITTLEDOG_EXTRA_GROUPS`, `I3_ENABLED` |

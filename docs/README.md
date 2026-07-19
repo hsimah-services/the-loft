@@ -32,6 +32,6 @@ Every page follows [`_template.md`](_template.md): Overview · Architecture · C
 |--------|---------|
 | [setup.sh](scripts/setup.md) | Idempotent host provisioner — reads `hosts/$(hostname)/host.conf` and bootstraps a host |
 | [loft-ctl](scripts/loft-ctl.md) | Day-to-day service control — start, stop, rebuild, health, update |
-| [deploy-pull.sh](scripts/deploy-pull.md) | Hourly GitHub Release puller — atomically swaps tarballs into bind-mounted dirs |
+| [deploy-pull.sh](scripts/deploy-pull.md) | Hourly GitHub Release puller — syncs tarballs into bind-mounted dirs |
 | [github-app-token.sh](scripts/github-app-token.md) | Mints GitHub App installation tokens — auth backbone for `deploy-pull.sh` |
 | [common.sh](scripts/common-sh.md) | Sourced library — compose-arg resolution and health-check helpers |
