@@ -32,7 +32,7 @@ The script auto-detects the host by hostname and sources its [`host.conf`](../..
 | 11 | For each service in `SERVICES`: build (if a `Dockerfile` is present), then `docker compose up -d` using the override-aware args from [`common.sh`](common-sh.md) | `SERVICES` |
 | 11a | Source any per-service `services/<name>/setup.sh` after deployment | `SERVICES` |
 | 11b | Per-host bootstrap — sources `hosts/$(hostname)/bootstrap` if it exists (e.g. calavera's i3/lightdm/dashboard provisioning + Surface Pro 2 hardware quirks); no-op on hosts without one | hostname (file presence) |
-| 12 | Cron — `/etc/cron.d/loft-wifi-watchdog` (every 5min; watches `WIFI_IFACE`, restarts `WIFI_DHCP_UNIT` on IPv4 loss; no-op on hosts without the interface) + one `/etc/cron.d/loft-deploy-<name>` per `DEPLOY_TARGETS` entry (hourly, runs [`deploy-pull.sh`](deploy-pull.md)) | `WIFI_IFACE`, `WIFI_DHCP_UNIT`, `DEPLOY_TARGETS` |
+| 12 | Cron — installs [`loft-wifi-watchdog.sh`](../../control-plane/loft-wifi-watchdog.sh) to `/usr/local/bin/loft-wifi-watchdog` + `/etc/default/loft-wifi-watchdog`, then `/etc/cron.d/loft-wifi-watchdog` (every 5min; watches `WIFI_IFACE`, restarts `WIFI_DHCP_UNIT` on IPv4 loss, optionally reloads the driver module first if `WIFI_FW_RECOVERY=true` and dmesg shows a firmware-crash signature; no-op on hosts without the interface) + one `/etc/cron.d/loft-deploy-<name>` per `DEPLOY_TARGETS` entry (hourly, runs [`deploy-pull.sh`](deploy-pull.md)) | `WIFI_IFACE`, `WIFI_DHCP_UNIT`, `WIFI_FW_RECOVERY`, `DEPLOY_TARGETS` |
 | 13 | Verification summary — print users, mount status, SSH config, running containers, i3 status | — |
 
 Phase 11 short-circuits a service if its `.env.example` exists but `.env` doesn't — the script logs a warning and moves on instead of failing the whole run.
@@ -60,7 +60,9 @@ Phase 11 short-circuits a service if its `.env.example` exists but `.env` doesn'
 | `/var/log/loft` | root | Log directory, target for `deploy-pull.sh` output |
 | `/var/lib/loft/deploy` | root 755 | State directory, stores `<name>.version` files |
 | `/etc/docker/daemon.json` | root | Copied from repo `daemon.json` (log rotation) |
-| `/etc/cron.d/loft-wifi-watchdog` | root 644 | restart `WIFI_DHCP_UNIT` (default `dhcpcd`) if `WIFI_IFACE` (default `wlan0`) loses IPv4 |
+| `/usr/local/bin/loft-wifi-watchdog` | root 755 | Copied from `control-plane/loft-wifi-watchdog.sh` |
+| `/etc/default/loft-wifi-watchdog` | root | `WIFI_IFACE`/`WIFI_DHCP_UNIT`/`WIFI_FW_RECOVERY` env for the watchdog script |
+| `/etc/cron.d/loft-wifi-watchdog` | root 644 | Runs the watchdog script; restarts `WIFI_DHCP_UNIT` (default `dhcpcd`) if `WIFI_IFACE` (default `wlan0`) loses IPv4, reloading the driver module first if `WIFI_FW_RECOVERY=true` and a firmware crash is detected |
 | `/etc/cron.d/loft-deploy-<name>` | root 644 | One file per `DEPLOY_TARGETS` entry (cleared and reinstalled every run) |
 | `/etc/lightdm/lightdm.conf.d/50-rodnik-autologin.conf` | root | Autologin `rodnik` → i3 (via `hosts/calavera/bootstrap`) |
 | `/etc/udev/rules.d/99-surface-wifi.rules` | root | Disable Marvell WiFi USB autosuspend (via `hosts/calavera/bootstrap`) |
@@ -169,11 +171,11 @@ sudo dockerd --debug                # foreground run to see parse errors
 
 Restore the previous `daemon.json` (`git checkout daemon.json`) if the new one is the cause.
 
-### i3 provisioning ran but the host still boots into the old kiosk
+### i3 provisioning ran but the host still boots into a login prompt
 
-**Cause:** A leftover greetd session is still grabbing the VT, or lightdm didn't get enabled.
+**Cause:** lightdm didn't get enabled.
 
-**Fix:** Reboot after `setup.sh`. If it persists, `sudo systemctl disable --now greetd` and `sudo systemctl enable --now lightdm`. `setup.sh` also leaves the old `kiosk` user in place — remove it manually once i3 is confirmed: `sudo userdel -r kiosk`.
+**Fix:** Reboot after `setup.sh`. If it persists, `sudo systemctl enable --now lightdm`.
 
 ### Cron deploy puller entries didn't update
 

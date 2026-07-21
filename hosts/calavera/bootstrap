@@ -161,6 +161,17 @@ PROFILE="\${HOME}/.local/share/loft-dashboard-firefox"
 # Firefox on X11 has no touch swipe-scroll / kinetic panning unless XInput2
 # touch events are enabled via this env var (no CLI flag exists for it).
 export MOZ_USE_XINPUT2=1
+
+# The MA frontend only auto-reconnects to its remembered server if its
+# one-shot connection probe succeeds on page load; otherwise it falls back to
+# a blank manual-entry screen with no retry. calavera's USB WiFi (Marvell
+# 88W8797, see loft-wifi-watchdog) doesn't always have a DHCP lease yet by the
+# time i3 autologs in and fires this at boot, so wait for the dashboard to
+# actually be reachable before ever handing control to firefox.
+until curl --fail --silent --max-time 2 --output /dev/null "\${URL%%#*}"; do
+  sleep 1
+done
+
 while true; do
   firefox-esr --kiosk --profile "\${PROFILE}" "\${URL}"
   sleep 2
@@ -183,14 +194,6 @@ POWERENV
 systemctl daemon-reload
 systemctl enable --now loft-dashboard-power.service
 info "loft-dashboard-power watching groups: ${I3_POWER_GROUPS:-(none configured)}"
-
-# ── Clean up legacy kiosk artifacts (calavera migrated kiosk → i3) ────────
-systemctl disable greetd 2>/dev/null || true
-rm -f /etc/greetd/config.toml \
-      /etc/chromium/policies/managed/kiosk.json \
-      /etc/systemd/logind.conf.d/kiosk.conf \
-      /etc/udev/rules.d/99-dpms-off.rules
-apt-get remove -y -qq cage chromium-browser greetd 2>/dev/null || true
 
 # ── Disable suspend/sleep (always-on audio sink) ──────────────────────────
 info "Disabling suspend/sleep/hibernate..."

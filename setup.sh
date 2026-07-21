@@ -344,15 +344,27 @@ info "Configuring cron jobs..."
 # USB adapter (wlx…) managed by NetworkManager and checks every 2 min because
 # it drops more often. Cron's floor is 1 minute, so the interval is in minutes.
 # Harmless on hosts without the interface (short-circuits on the first check).
+# WIFI_FW_RECOVERY opts a host into an extra recovery step (driver module
+# reload) for USB WiFi chips whose firmware can crash independently of the
+# DHCP lease — see control-plane/loft-wifi-watchdog.sh and calavera's
+# host.conf for the mwifiex/Marvell case this was added for.
 WIFI_IFACE="${WIFI_IFACE:-wlan0}"
 WIFI_DHCP_UNIT="${WIFI_DHCP_UNIT:-dhcpcd}"
 WIFI_WATCHDOG_MINUTES="${WIFI_WATCHDOG_MINUTES:-5}"
+WIFI_FW_RECOVERY="${WIFI_FW_RECOVERY:-false}"
+install -o root -g root -m 755 \
+  "${REPO_DIR}/control-plane/loft-wifi-watchdog.sh" /usr/local/bin/loft-wifi-watchdog
+cat > /etc/default/loft-wifi-watchdog <<EOF
+WIFI_IFACE="${WIFI_IFACE}"
+WIFI_DHCP_UNIT="${WIFI_DHCP_UNIT}"
+WIFI_FW_RECOVERY="${WIFI_FW_RECOVERY}"
+EOF
 cat > /etc/cron.d/loft-wifi-watchdog <<EOF
-# WiFi DHCP watchdog — restart ${WIFI_DHCP_UNIT} if ${WIFI_IFACE} loses IPv4 — installed by setup.sh
-*/${WIFI_WATCHDOG_MINUTES} * * * * root ip link show ${WIFI_IFACE} &>/dev/null && ! ip -4 addr show ${WIFI_IFACE} 2>/dev/null | grep -q inet && logger -t loft-wifi-watchdog "${WIFI_IFACE} lost IPv4, restarting ${WIFI_DHCP_UNIT}" && systemctl restart ${WIFI_DHCP_UNIT} 2>/dev/null
+# WiFi watchdog — restart ${WIFI_DHCP_UNIT} (and reload the driver if WIFI_FW_RECOVERY=true) if ${WIFI_IFACE} loses IPv4 — installed by setup.sh
+*/${WIFI_WATCHDOG_MINUTES} * * * * root . /etc/default/loft-wifi-watchdog && /usr/local/bin/loft-wifi-watchdog
 EOF
 chmod 644 /etc/cron.d/loft-wifi-watchdog
-info "Installed WiFi watchdog cron job (${WIFI_IFACE} → ${WIFI_DHCP_UNIT}, every ${WIFI_WATCHDOG_MINUTES} min)"
+info "Installed WiFi watchdog cron job (${WIFI_IFACE} → ${WIFI_DHCP_UNIT}, every ${WIFI_WATCHDOG_MINUTES} min, fw-recovery=${WIFI_FW_RECOVERY})"
 
 # Deploy puller cron entries (one per DEPLOY_TARGETS entry)
 # Clear any stale entries from a previous run before installing fresh ones.

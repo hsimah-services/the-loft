@@ -4,7 +4,7 @@
 
 ## Overview
 
-`calavera` is an old Surface Pro 2 (Ubuntu, 4GB RAM, Intel 3rd-gen, 10.6" 1080p touchscreen) sitting in a dock. It took over the **Downstairs Snapcast client** role from [fjord](fjord.md), so it's now an always-on audio sink: [Music Assistant on space-needle](space-needle.md) streams to it and it plays out through a USB DAC into the Downstairs speakers.
+`calavera` is an old Surface Pro 2 (Debian 13, 4GB RAM, Intel 3rd-gen, 10.6" 1080p touchscreen) sitting in a dock. It took over the **Downstairs Snapcast client** role from [fjord](fjord.md), so it's now an always-on audio sink: [Music Assistant on space-needle](space-needle.md) streams to it and it plays out through a USB DAC into the Downstairs speakers.
 
 The display runs an **i3** desktop (lightdm autologs the `rodnik` service account into i3) that auto-launches `firefox --kiosk` fullscreen as a **Music Assistant touch dashboard** (`https://howlr.loft.hsimah.com`) at 130% scale. Unlike the old locked chromium/greetd kiosk, this is a real i3 session — `mod+Return` drops to a kitty terminal for local admin. (Firefox rather than Chromium because trixie's Chromium build SIGTRAPs on startup — see the browser note below.) The vinyl-casting stack (Spinnik — DarkIce + Icecast + touch UI capturing the Audio-Technica LP5X) has been **retired entirely** and removed from the repo.
 
@@ -36,6 +36,8 @@ lightdm (auto-login as rodnik)
 `rodnik` is a locked-down display service account (created by `setup.sh` only when `I3_ENABLED=true`): home dir + login shell, member of `video`/`input`/`audio`, no sudo and no docker. lightdm autologin is configured via `/etc/lightdm/lightdm.conf.d/50-rodnik-autologin.conf`.
 
 The i3 config, kitty config, and the generated `/usr/local/bin/loft-dashboard` launcher (plus a dedicated firefox kiosk profile under `~rodnik/.local/share/loft-dashboard-firefox/`) come from `hosts/calavera/i3/` + `host.conf`; the dashboard URL and HiDPI scale are host-config knobs (`I3_DASHBOARD_URL`, `I3_DPI`) so the i3 config itself stays generic. `I3_DPI="125"` scales the session to ~130% (96 = 100% was tried first and came up too small; 200% was tried before that and was way too big; 130%, dialed in via Firefox's manual zoom, was the sweet spot). The dashboard also runs Music Assistant's **mobile-mode UI** for the touch layout on top of that scale. `I3_DPI` drives both `~/.Xresources` `Xft.dpi` (session fonts) and firefox's `layout.css.devPixelsPerPx` (dashboard scale).
+
+`loft-dashboard` blocks on a `curl` probe of the dashboard URL before ever launching firefox. The MA frontend remembers the server address in `localStorage` and auto-reconnects on load, but only if its one-shot connection probe succeeds — there's no retry, just a fallback to a blank manual-entry screen. Since i3 autologs in and fires `loft-dashboard` immediately at boot, and calavera's USB WiFi is the flaky part of this host (see below), the probe protects against firefox opening before the network is actually up and forcing a manual re-login every reboot.
 
 **Touch swipe-scroll:** Firefox on X11 does nothing with touch drag unless XInput2 touch events are on, so the launcher exports `MOZ_USE_XINPUT2=1` (there's no CLI flag for it) and the kiosk `user.js` sets `dom.w3c_touch_events.enabled=1` + `apz.gtk.kinetic_scroll.enabled=true`. Together these give the Surface panel swipe-to-scroll and kinetic panning in the Music Assistant UI.
 
@@ -105,6 +107,7 @@ See [`hosts/calavera/host.conf`](../../hosts/calavera/host.conf). The notable va
 | `WIFI_IFACE` | `wlx501ac51167c0` | USB adapter's predictable name (not `wlan0`) for the WiFi watchdog |
 | `WIFI_DHCP_UNIT` | `NetworkManager` | Unit the watchdog restarts on IPv4 loss (not `dhcpcd`) |
 | `WIFI_WATCHDOG_MINUTES` | `2` | Watchdog check interval in minutes (fleet default 5; USB adapter drops more often) |
+| `WIFI_FW_RECOVERY` | `true` | Reload the mwifiex driver module if dmesg shows a firmware crash (see [Surface Pro WiFi drops out](#surface-pro-wifi-drops-out) below) |
 | `SERVICE_ENDPOINTS` / `HEALTH_URLS` | empty | No web endpoints health-checked from this host |
 
 ### `.env` files
@@ -132,7 +135,7 @@ howlr `.env` (the per-host values that matter here):
 > [`plans/calavera-debian.md`](../../plans/calavera-debian.md). The notes below cover an
 > in-place re-provision on an already-set-up host.
 
-Same shape as the Pis — clone the repo, copy `.env` files, run `setup.sh`. §5 creates the `rodnik` account (gated on `I3_ENABLED=true`), and §11b sources [`hosts/calavera/bootstrap`](../../hosts/calavera/bootstrap) because that file exists for this hostname — no flag check, the file's presence *is* the gate. The bootstrap installs `xorg`, `i3`, `lightdm`, `kitty`, `firefox-esr`, `unclutter`, `x11-xserver-utils`, `dmenu`, `xprintidle`, `python3-websockets`; configures lightdm autologin; deploys the `hosts/calavera/i3/` config + `~/.Xresources` + firefox kiosk profile + `/usr/local/bin/loft-dashboard`; installs [`loft-dashboard-power`](../../control-plane/loft-dashboard-power.py) + its systemd unit from `control-plane/` and enables it; masks sleep targets; installs the Surface WiFi udev rule; removes `iio-sensor-proxy`. It also cleans up legacy kiosk artifacts (greetd config, chromium managed policy, DPMS-off rule) and removes the `cage`/`chromium-browser`/`greetd` packages.
+Same shape as the Pis — clone the repo, copy `.env` files, run `setup.sh`. §5 creates the `rodnik` account (gated on `I3_ENABLED=true`), and §11b sources [`hosts/calavera/bootstrap`](../../hosts/calavera/bootstrap) because that file exists for this hostname — no flag check, the file's presence *is* the gate. The bootstrap installs `xorg`, `i3`, `lightdm`, `kitty`, `firefox-esr`, `unclutter`, `x11-xserver-utils`, `dmenu`, `xprintidle`, `python3-websockets`; configures lightdm autologin; deploys the `hosts/calavera/i3/` config + `~/.Xresources` + firefox kiosk profile + `/usr/local/bin/loft-dashboard`; installs [`loft-dashboard-power`](../../control-plane/loft-dashboard-power.py) + its systemd unit from `control-plane/` and enables it; masks sleep targets; installs the Surface WiFi udev rule; removes `iio-sensor-proxy`.
 
 It also purges the printing/Bluetooth/mDNS/modem/PackageKit/speech-synthesis stack (`cups*`, `bluetooth`/`bluez*`, `avahi-daemon`, `modemmanager`, `packagekit*`, `speech-dispatcher*`, `upower`, `power-profiles-daemon`, `switcheroo-control`, `fwupd`, `colord`, `accountsservice`) that the Debian installer's default-ticked "print server" task and auto-selected "laptop" task pull in — none of it is reachable from a wall-mounted single-purpose kiosk. This runs every time `setup.sh` runs, so it's self-healing if a reimage lets those tasks through again (see the [runbook](../../plans/calavera-debian.md#5-debian-install-choices)).
 
@@ -143,8 +146,6 @@ cd /srv/the-loft
 sudo bash setup.sh
 sudo reboot   # boot into the i3 session
 ```
-
-> Migration note: `setup.sh` does **not** delete the old `kiosk` user. Once you've confirmed i3 works, remove it manually: `sudo userdel -r kiosk`.
 
 ### Day-to-day
 
@@ -210,6 +211,16 @@ Confirm `SNAPSERVER_HOST=192.168.86.28` in `services/howlr/.env` and that MA/Sna
 journalctl -t loft-wifi-watchdog --since '1 day ago'
 ```
 
+- **Firmware crash (distinct from a lost lease):** the mwifiex driver can crash its own firmware — the interface stays present but dead, `ip route` shows no default route, and *restarting NetworkManager does nothing* (confirmed live: manually restarting the unit had no effect). `dmesg -T` repeats `PREP_CMD: FW is in a bad state` and `Ignore scan. Card removed or firmware in bad state.` when this is the cause. Only reloading the kernel module re-uploads firmware:
+
+```bash
+lsmod | grep mwifiex
+sudo rmmod mwifiex_usb && sudo rmmod mwifiex
+sudo modprobe mwifiex && sudo modprobe mwifiex_usb
+```
+
+`WIFI_FW_RECOVERY="true"` in `host.conf` makes the watchdog do this automatically — it greps `dmesg` for that signature and reloads the driver module bound to `wlx501ac51167c0` before restarting `NetworkManager`. If it's still not recovering on its own, check `journalctl -t loft-wifi-watchdog` for the "firmware crash detected" line and fall back to the manual `rmmod`/`modprobe` above (or, as a last resort, physically unplug and replug the USB dongle).
+
 ### i3 doesn't start / drops to a login prompt
 
 ```bash
@@ -217,7 +228,7 @@ systemctl status lightdm
 journalctl -u lightdm --since '5 min ago' | tail -50
 ```
 
-Common causes: lightdm not enabled (`sudo systemctl enable --now lightdm`); the `rodnik` account or its `~/.config/i3/config` missing (re-run `setup.sh`); a leftover greetd still grabbing the VT (`sudo systemctl disable --now greetd`).
+Common causes: lightdm not enabled (`sudo systemctl enable --now lightdm`); the `rodnik` account or its `~/.config/i3/config` missing (re-run `setup.sh`).
 
 ### Dashboard is blank / won't load Music Assistant
 
