@@ -26,6 +26,37 @@ For deep dives, see [`docs/`](docs/README.md).
 | [snoot](docs/services/snoot.md) | Beszel agent on every host |
 | [stellarr](docs/services/stellarr.md) | *arr stack + Transmission + slskd, behind NordVPN |
 
+## Image pinning
+
+Every container image is pinned to an explicit version. Nothing runs on `latest`.
+Upgrades are therefore reviewable git commits rather than an untracked
+`docker compose pull`, and `git revert` is a real rollback path.
+
+To bump a service: edit the tag in `services/<name>/docker-compose.yml`, commit,
+then on the host run `loft-ctl update <name>`. Because `loft-ctl rebuild` takes
+the service `down` before it pulls, warm the image first to shorten the outage:
+
+```bash
+sudo docker compose -f services/<name>/docker-compose.yml pull
+loft-ctl update <name>
+```
+
+Rolling back is `git revert` + the same command — the previous image is still on
+disk under its own tag, so no re-download is needed.
+
+Four images are pinned with caveats worth knowing about:
+
+| Image | Pin | Why |
+|-------|-----|-----|
+| `ivdata/snapclient` | digest `sha256:0270a64f…` | Publishes **no** version tags — only `latest` (2023-03-25) and `alpine` (2022-06-06). A digest is the only reproducible pin. Upstream looks abandoned; worth replacing. |
+| `ghcr.io/bubuntux/nordvpn` | `v3.12.3` | Repo **archived** (read-only since 2025-11-22). `v3.12.3` is the final tag and will never be updated. Needs a maintained replacement. |
+| `lscr.io/linuxserver/lidarr` | `nightly` *(unpinned)* | Nightly's database schema is ahead of stable (`3.1.0.4875-ls36`); pinning to stable is a downgrade Lidarr will refuse. Pin to the exact nightly build currently running instead — see the comment in the compose file. |
+| `louislam/uptime-kuma` | `1.23.17` | Deliberately held on 1.x. Kuma 2.x migrates the monitor DB on first start with no rollback. |
+
+`mariadb` (held on 12.2.x) and `redis` (held on 7.x) are likewise pinned below
+their newest releases — both sit under a live WordPress install, so major
+version moves belong in their own change, not a pinning pass.
+
 ## How it's organized
 
 ```
