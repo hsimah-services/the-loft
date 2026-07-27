@@ -1,6 +1,8 @@
 services:
   db:
-    image: mariadb:12.2
+    # Held on the 12.2 line (12.3.2 is current). Moving minor versions
+    # under a live WordPress database is a separate, deliberate migration.
+    image: mariadb:12.2.2
     container_name: pupyrus-db
     logging:
       driver: json-file
@@ -23,7 +25,9 @@ services:
       retries: 5
 
   redis:
-    image: redis:7-alpine
+    # Held on 7.x (8.8.x is current). Redis 8 is a major bump for the
+    # WordPress object cache — upgrade on its own, not as part of a pin.
+    image: redis:7.4.10-alpine
     container_name: pupyrus-redis
     logging:
       driver: json-file
@@ -38,7 +42,7 @@ services:
       retries: 5
 
   wordpress:
-    image: wordpress:latest
+    image: wordpress:7.0.2-php8.5-apache
     container_name: pupyrus
     logging:
       driver: json-file
@@ -70,7 +74,7 @@ services:
         condition: service_healthy
 
   cli:
-    image: wordpress:cli
+    image: wordpress:cli-2.12.0
     container_name: pupyrus-cli
     logging:
       driver: json-file
