@@ -1,7 +1,7 @@
 services:
   pawpcorn:
     container_name: pawpcorn
-    image: plexinc/pms-docker:latest
+    image: plexinc/pms-docker:1.43.3.10828-00f62d37d
     restart: unless-stopped
     logging:
       driver: json-file
