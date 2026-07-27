@@ -1,6 +1,6 @@
 services:
   snoot:
-    image: henrygd/beszel-agent
+    image: henrygd/beszel-agent:0.18.7
     container_name: snoot
     restart: unless-stopped
     network_mode: host
