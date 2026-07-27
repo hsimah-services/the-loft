@@ -48,7 +48,7 @@ Pinned versions:
 | stellarr | `slskd/slskd` | `0.26.0` |
 | stellarr | `lscr.io/linuxserver/radarr` | `6.3.0.10514-ls312` |
 | stellarr | `lscr.io/linuxserver/sonarr` | `4.0.19.2979-ls320` |
-| stellarr | `lscr.io/linuxserver/lidarr` | **still `nightly`** — see Phase 3 |
+| stellarr | `lscr.io/linuxserver/lidarr` | `nightly-3.1.2.4939-ls197` *(nightly on purpose)* |
 | stellarr | `lscr.io/linuxserver/bazarr` | `v1.6.0-ls356` |
 | stellarr | `lscr.io/linuxserver/jackett` | `v0.24.2268-ls474` |
 | mushr | `caddy` (via `CADDY_VERSION`) | `2.11.4` |
@@ -317,19 +317,12 @@ Suggested order within the phase:
 
 1. The bridged *arrs first (`radarr`, `sonarr`, `bazarr`, `jackett`) — safe,
    independent, each does its own config migration on start.
-2. `lidarr` — **the one image left unpinned, deliberately.** It tracks
-   `nightly`, whose database schema is ahead of stable (`3.1.0.4875-ls36`).
-   Pinning to stable would be a downgrade, and Lidarr refuses to open a
-   database written by a newer build — it would fail to start. Resolve it by
-   pinning to the nightly build *currently running*:
-
-   ```bash
-   sudo docker inspect lidarr --format '{{index .Config.Labels "build_version"}}'
-   ```
-
-   then write that exact tag into the compose file. Moving to the stable line
-   at all means exporting the library and rebuilding the database — a separate
-   project, not part of this upgrade.
+2. `lidarr` — pinned to `nightly-3.1.2.4939-ls197`, a **nightly** build
+   rather than the stable line. Its schema (3.1.2) is ahead of stable
+   (`3.1.0.4875-ls36`) and Lidarr refuses to open a database written by a
+   newer build, so stable is a downgrade that fails to start. This freezes
+   the build that was already running. Moving to stable at all means
+   exporting the library and rebuilding the database — a separate project.
 3. `stellarr-vpn`, then `transmission` + `slskd` together, since the latter two
    share its network namespace and must be recreated with it.
 
@@ -354,8 +347,8 @@ Low risk, batchable once the above is settled.
 
 ## Follow-ups for the repo (not blocking the upgrade)
 
-1. ~~**Pin the critical images.**~~ Done — every image except `lidarr` is now
-   pinned in git. See README → "Image pinning" and Phase 3 for lidarr.
+1. ~~**Pin the critical images.**~~ Done — every image in the fleet is now
+   pinned in git. See README → "Image pinning".
 2. **Replace two dead upstreams.** `ivdata/snapclient` has published nothing
    since 2023 and has no version tags (pinned by digest); `bubuntux/nordvpn`
    is an archived repo whose final tag is `v3.12.3`. Both work today, neither
