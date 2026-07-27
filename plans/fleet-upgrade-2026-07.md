@@ -175,7 +175,7 @@ On **space-needle**:
 
 ```bash
 # Warm the image while the current one is still serving
-sudo docker compose -f /opt/the-loft/services/howlr/docker-compose.yml pull
+sudo docker compose -f /srv/the-loft/services/howlr/docker-compose.yml pull
 
 loft-ctl update howlr
 ```
@@ -260,7 +260,7 @@ confirm a recent one exists as a second line of defence.
 ### 2.2 Upgrade
 
 ```bash
-sudo docker compose -f /opt/the-loft/services/pawpcorn/docker-compose.yml pull
+sudo docker compose -f /srv/the-loft/services/pawpcorn/docker-compose.yml pull
 loft-ctl update pawpcorn
 ```
 
