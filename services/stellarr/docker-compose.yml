@@ -1,9 +1,16 @@
 services:
   vpn:
     # UPSTREAM ARCHIVED (github.com/bubuntux/nordvpn, read-only since
-    # 2025-11-22). v3.12.3 is the final published tag — this will never
-    # receive updates. Replacement tracked in README "Image pinning".
-    image: ghcr.io/bubuntux/nordvpn:v3.12.3
+    # 2025-11-22). Replacement tracked in README "Image pinning".
+    #
+    # Pinned by digest to the :latest/:master build, NOT to the v3.12.3
+    # version tag. The semver tags predate master and ship an older nordvpn
+    # client that the service now refuses to authenticate ("A new version of
+    # NordVPN is available!" → "Invalid Username or password", container
+    # exits). Confirmed on 2026-07-27: v3.12.3 is digest 9d688a7f and fails
+    # to log in; :latest is ac521b5a and works. Do not "upgrade" this to a
+    # version tag — it is a downgrade.
+    image: ghcr.io/bubuntux/nordvpn:latest@sha256:ac521b5a8d1387780d812a0ed46dd23aa3ee5e47d6d9f9eace39213ea1f56509
     container_name: stellarr-vpn
     cap_add:
       - NET_ADMIN

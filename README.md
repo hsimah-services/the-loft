@@ -49,7 +49,7 @@ Four images are pinned with caveats worth knowing about:
 | Image | Pin | Why |
 |-------|-----|-----|
 | `ivdata/snapclient` | digest `sha256:0270a64f…` | Publishes **no** version tags — only `latest` (2023-03-25) and `alpine` (2022-06-06). A digest is the only reproducible pin. Upstream looks abandoned; worth replacing. |
-| `ghcr.io/bubuntux/nordvpn` | `v3.12.3` | Repo **archived** (read-only since 2025-11-22). `v3.12.3` is the final tag and will never be updated. Needs a maintained replacement. |
+| `ghcr.io/bubuntux/nordvpn` | digest `sha256:ac521b5a…` | Repo **archived** (read-only since 2025-11-22). Pinned to the `:latest`/`:master` build by digest — the `v3.12.3` semver tag is *older* than master and ships a nordvpn client the service now refuses to authenticate. Do not "upgrade" it to a version tag. Needs a maintained replacement (gluetun). |
 | `lscr.io/linuxserver/lidarr` | `nightly-3.1.2.4939-ls197` | Pinned to a **nightly** build, not the stable line. Its schema (3.1.2) is ahead of stable (`3.1.0.4875-ls36`), and Lidarr won't open a database written by a newer build — so stable is a downgrade that fails to start. Moving to stable means exporting the library and rebuilding the DB. |
 | `louislam/uptime-kuma` | `1.23.17` | Deliberately held on 1.x. Kuma 2.x migrates the monitor DB on first start with no rollback. |
 
