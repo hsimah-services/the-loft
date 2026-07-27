@@ -25,26 +25,62 @@ Debugging guide for Docker services on The Loft fleet. All commands assume you'r
 |---------|-----------|
 | **mushr** | `mushr`, `mushr-tunnel`, `mushr-dns` |
 | **pawpcorn** | `pawpcorn` |
-| **stellarr** | `stellarr-vpn`, `transmission`, `slskd`, `radarr`, `sonarr`, `lidarr`, `jackett` |
+| **stellarr** | `stellarr-vpn`, `transmission`, `slskd`, `radarr`, `sonarr`, `lidarr`, `bazarr`, `jackett` |
 | **pupyrus** | `pupyrus-db`, `pupyrus-redis`, `pupyrus`, `pupyrus-cli` (cli profile only) |
-| **howlr** | `howlr-snapserver`, `howlr-shairport-sync`, `howlr-librespot`, `howlr-snapclient` |
+| **howlr** | `howlr` (Music Assistant, `server` profile), `howlr-snapclient` (`client` profile) |
+| **houstn** | `beszel`, `uptime`, `homepage` (`hub` profile), `glances` (`metrics` profile) |
+| **snoot** | `snoot` |
 | **pawst** | `pawst` |
+
+Music Assistant embeds snapserver, shairport-sync and librespot in the single
+`howlr` container — there are no separate `howlr-snapserver` /
+`howlr-shairport-sync` / `howlr-librespot` containers.
 
 ### Health Check URLs (space-needle)
 
-| Label | URL | Required? |
-|-------|-----|-----------|
+Authoritative source is `HEALTH_URLS` in `hosts/space-needle/host.conf` — this
+table is a summary. Each label is checked across up to three tiers
+(`local` / `lan` / `ssl`).
+
+| Label | Representative URL | Required? |
+|-------|--------------------|-----------|
 | pawpcorn | `http://localhost:32400/web` | Yes |
 | radarr | `http://radarr.space-needle` | Yes (via Caddy) |
 | sonarr | `http://sonarr.space-needle` | Yes (via Caddy) |
 | lidarr | `http://lidarr.space-needle` | Yes (via Caddy) |
+| bazarr | `http://bazarr.space-needle` | Yes (via Caddy) |
 | jackett | `http://jackett.space-needle` | Yes (via Caddy) |
 | pupyrus | `http://pupyrus.space-needle` | Yes (via Caddy) |
 | mushr | `http://localhost:8880/config/` | Yes (host-only admin API) |
+| howlr | `http://localhost:8095` | Yes — but see caveat below |
 | snapweb | `http://localhost:1780` | Yes |
 | pawst | `http://pawst.space-needle` | Yes (via Caddy) |
+| hsimah | `http://hsimah.space-needle` | Yes (via Caddy) |
+| beszel | `http://beszel.space-needle` | Yes (via Caddy) |
+| uptime | `http://uptime.space-needle` | Yes (via Caddy) |
+| homepage | `http://homepage.space-needle` | Yes (via Caddy) |
+| glances | `http://localhost:61208/api/4/status` | Yes (host-only) |
 | transmission | `http://localhost:9091` | Warn only (VPN) |
 | slskd | `http://localhost:5030` | Warn only (VPN) |
+
+> **These checks only assert a non-`000` HTTP response.** They prove a port is
+> answering, not that the service works. Two known false-greens:
+>
+> - **howlr** — Music Assistant has required authentication since 2.7.0, and its
+>   login page returns `200`. `loft-ctl health howlr` passes on a completely
+>   unusable MA. Verify by actually playing audio to a group.
+> - **transmission / slskd** — these answer on `localhost` whether or not they
+>   are inside the VPN namespace. A tunnel that has dropped looks perfectly
+>   healthy here *and* in Uptime Kuma and Homepage. Verify the egress IP
+>   directly:
+>
+>   ```bash
+>   echo "via VPN: $(sudo docker exec transmission curl -s https://ipinfo.io/ip)"
+>   echo "home IP: $(curl -s https://ipinfo.io/ip)"
+>   ```
+>
+>   Those must differ, and the first should geolocate to the configured
+>   `CONNECT` country (currently NETHERLANDS).
 
 ## 2. Container State
 
@@ -292,7 +328,13 @@ sudo docker network inspect loft-proxy --format '{{range .Containers}}{{.Name}} 
 sudo docker network inspect loft-proxy
 ```
 
-Expected members of `loft-proxy`: `mushr`, `mushr-tunnel`, `pupyrus`, `pawst`
+Expected members of `loft-proxy` (space-needle): `mushr`, `mushr-tunnel`,
+`pupyrus`, `pawst`, `beszel`, `uptime`, `homepage`, `radarr`, `sonarr`,
+`lidarr`, `bazarr`, `jackett`.
+
+Not on `loft-proxy`: `howlr` and `glances` (both `network_mode: host`),
+`pawpcorn` (host), and `transmission` / `slskd` (both
+`network_mode: service:vpn`).
 
 ### Container-to-container connectivity
 
@@ -343,9 +385,10 @@ sudo ss -tlnp
 #   80    — mushr (Caddy HTTP)
 #   443   — mushr (Caddy HTTPS)
 #   5030  — slskd (via stellarr-vpn)
-#   1704  — howlr-snapserver (Snapcast stream)
-#   1705  — howlr-snapserver (Snapcast control)
-#   1780  — howlr-snapserver (Snapweb UI)
+#   1704  — howlr (Snapcast stream, embedded in Music Assistant)
+#   1705  — howlr (Snapcast control / JSON-RPC)
+#   1780  — howlr (Snapweb UI + JSON-RPC over HTTP)
+#   8095  — howlr (Music Assistant web UI + API)
 #   7878  — radarr
 #   8081  — pupyrus (WordPress)
 #   8085  — pawst
@@ -409,8 +452,9 @@ sudo du -sh /mammoth/downloads/*/  | sort -rh
 sudo docker volume ls
 
 # Inspect a specific volume
-sudo docker volume inspect caddy-data
-sudo docker volume inspect snapserver-data
+# The only named volumes in the fleet are mushr's:
+sudo docker volume inspect mushr_caddy-data
+sudo docker volume inspect mushr_caddy-config
 ```
 
 ### Permissions check
@@ -516,7 +560,7 @@ loft-ctl start mushr
 | Service stopped, need to start | `loft-ctl start <service>` | Just runs `docker compose up -d` |
 | Service misbehaving, quick restart | `sudo docker restart <container>` | Restarts single container, preserves volumes |
 | Config changed in compose file | `loft-ctl rebuild <service>` | `down` + `pull` + `up` — recreates containers |
-| Image update available | `loft-ctl rebuild <service>` | Pulls latest images |
+| Image tag changed in git | `loft-ctl rebuild <service>` | Pulls the **pinned** tag. Images no longer float on `:latest` — see README "Image pinning". |
 | Deploy new code from git | `loft-ctl update <service>` | `git pull` + rebuild + health check |
 | Audio not working after config change | `loft-ctl rebuild howlr` | Must do full `down`/`up` to get fresh FIFOs |
 | Stale bind mount data | `loft-ctl rebuild <service>` | Fresh mount on new container |
@@ -531,7 +575,7 @@ loft-ctl start mushr
 | **pupyrus** | Deletes MariaDB database (`/opt/pupyrus/db`) — all WordPress content lost |
 | **pawpcorn** | Deletes Plex config (`/opt/pawpcorn/config`) — library metadata, watch history, all settings |
 | **mushr** | Deletes TLS certificates (`caddy-data`) — triggers re-issuance (rate limits apply) |
-| **howlr** | Deletes snapserver speaker group config (`snapserver-data` volume) |
+| **howlr** | No named volumes — state lives in the `/opt/howlr` bind mount, which `down -v` does not touch. Back up `/opt/howlr` before upgrades regardless; it holds the MA database and provider credentials. |
 
 `loft-ctl rebuild` uses `docker compose down` (without `-v`) which is safe — it removes containers but preserves volumes and bind mounts.
 
@@ -548,7 +592,23 @@ loft-ctl start mushr
 [ERROR] Aborting
 ```
 
-**Cause:** MariaDB's two-phase-commit log (`tc.log`) got corrupted, usually because the container was hard-killed mid-startup. This happens intermittently after running `setup.sh` on space-needle, when `docker compose up -d` recreates pupyrus-db while it's in InnoDB recovery.
+**Cause:** MariaDB's two-phase-commit log (`tc.log`) got corrupted because the
+container was SIGKILLed mid-write rather than shut down cleanly.
+
+The root cause was found on 2026-07-27: `pupyrus-db` sets
+`stop_grace_period: 60s`, but dockerd's own `shutdown-timeout` defaults to **15
+seconds** and silently caps it. On every reboot of space-needle MariaDB was
+killed 45 seconds early, mid-flush. `daemon.json` now sets
+`"shutdown-timeout": 90`, which clears the longest grace period in the fleet.
+
+If this recurs, check the daemon actually has the setting — it is read at
+daemon start, so copying `daemon.json` without restarting Docker leaves the old
+value live in the running process:
+
+```bash
+sudo cat /etc/docker/daemon.json | grep shutdown-timeout
+sudo systemctl show docker -p ExecStart | grep -o 'shutdown-timeout=[0-9]*'
+```
 
 **Fix:** WordPress doesn't use XA transactions, so `tc.log` carries no in-flight state worth preserving. Delete it and restart:
 
@@ -613,13 +673,18 @@ loft-ctl start mushr
 
 **Cause:** AirPlay 2 uses 48kHz/32-bit format (`sampleformat=48000:32:2`). Snapweb can't handle this format.
 
-**Fix:** Use native snapclient devices (viking, fjord) for AirPlay playback. Spotify Connect works on all clients including snapweb (uses 44100:16:2).
+**Fix:** Use native snapclient devices (viking, calavera) for AirPlay playback. Spotify Connect works on all clients including snapweb (uses 44100:16:2).
 
 ### Howlr no audio after config change (stale FIFOs)
 
 **Symptom:** After changing snapserver or shairport-sync config, audio stops working entirely. No errors in logs.
 
-**Cause:** Named pipes (FIFOs) used for audio transport between containers become stale when only containers are recreated.
+**Cause:** Predates the current topology, when snapserver, shairport-sync and
+librespot ran as separate containers passing audio over named pipes (FIFOs).
+Music Assistant now embeds all three in the single `howlr` container, so
+cross-container FIFOs no longer exist — but a full `down`/`up` is still the
+right remedy for audio that has stopped without logging an error, since it
+resets snapserver's stream state.
 
 **Fix:**
 ```bash
@@ -743,6 +808,73 @@ loft-ctl rebuild pupyrus
 # 7. If data format incompatible after major version upgrade:
 #    Run mariadb-upgrade inside the container
 sudo docker exec pupyrus-db mariadb-upgrade -u root -p
+```
+
+### `docker compose pull` fails with "pull access denied" for mushr-caddy
+
+**Symptom:**
+
+```
+mushr Warning   pull access denied for mushr-caddy, repository does not exist
+                or may require 'docker login': denied
+```
+
+**Cause:** Harmless. `mushr-caddy` is built locally from `Dockerfile.caddy`
+(Caddy compiled with the `caddy-dns/cloudflare` plugin via xcaddy) and exists in
+no registry. A bare `docker compose pull` tries to fetch every service including
+that one.
+
+`loft-ctl` already swallows this — `do_rebuild` runs its pull as
+`docker compose pull 2>/dev/null || true` — so it only surfaces when pulling by
+hand.
+
+**Fix:** Name only the registry-backed services, or skip buildable ones:
+
+```bash
+sudo docker compose -f /srv/the-loft/services/mushr/docker-compose.yml pull mushr-tunnel mushr-dns
+# or, on compose versions that support it:
+sudo docker compose -f /srv/the-loft/services/mushr/docker-compose.yml pull --ignore-buildable
+```
+
+To rebuild the Caddy image itself, use `build` — and **always build before
+recreating**, so a build failure doesn't leave the fleet with no ingress:
+
+```bash
+sudo docker compose -f /srv/the-loft/services/mushr/docker-compose.yml build
+sudo docker images mushr-caddy    # confirm the new tag exists before proceeding
+loft-ctl update --no-pull mushr
+```
+
+### ghcr.io pulls fail with "denied: denied" on public images
+
+**Symptom:** A pull of a known-public image fails on the daemon:
+
+```
+Error response from daemon: Head "https://ghcr.io/v2/music-assistant/server/manifests/2.9.9": denied: denied
+```
+
+**Cause:** Stale credentials for `ghcr.io` in root's Docker config — often left
+over from the GitHub App token flow used by `deploy-pull.sh` for the private
+`hsimah-services` repos. Docker sends the expired token instead of fetching an
+anonymous one, and ghcr rejects it. The image itself is fine.
+
+**Confirm** the tag really is public before chasing auth (this needs no
+credentials, so a 200 here proves the problem is local):
+
+```bash
+TOK=$(curl -s "https://ghcr.io/token?scope=repository:music-assistant/server:pull" \
+  | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOK" \
+  -H "Accept: application/vnd.oci.image.index.v1+json" \
+  https://ghcr.io/v2/music-assistant/server/manifests/2.9.9
+```
+
+**Fix:**
+
+```bash
+sudo cat /root/.docker/config.json | python3 -m json.tool   # see what's cached
+sudo docker logout ghcr.io
+# retry the pull
 ```
 
 ### Caddy SSL errors after idle (HTTP/3 QUIC timeout)
