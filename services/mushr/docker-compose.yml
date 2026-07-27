@@ -3,7 +3,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.caddy
-    image: mushr-caddy:latest
+    # Locally built (Dockerfile.caddy = caddy + caddy-dns/cloudflare plugin).
+    # Tag tracks the CADDY_VERSION build arg so rebuilds are traceable and the
+    # previous build stays on disk under its own tag for rollback.
+    image: mushr-caddy:2.11.4
     container_name: mushr
     restart: unless-stopped
     logging:
@@ -32,7 +35,7 @@ services:
       retries: 3
 
   mushr-tunnel:
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2026.7.3
     container_name: mushr-tunnel
     restart: unless-stopped
     logging:
@@ -50,7 +53,7 @@ services:
         condition: service_healthy
 
   mushr-dns:
-    image: drpsychick/dnsmasq:latest
+    image: drpsychick/dnsmasq:2.93
     container_name: mushr-dns
     restart: unless-stopped
     network_mode: host
