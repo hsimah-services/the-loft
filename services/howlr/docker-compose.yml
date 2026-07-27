@@ -1,7 +1,7 @@
 services:
   # ── Server profile ──────────────────────────────────────────────
   music-assistant:
-    image: ghcr.io/music-assistant/server:latest
+    image: ghcr.io/music-assistant/server:2.9.9
     container_name: howlr
     profiles:
       - server
@@ -17,7 +17,11 @@ services:
 
   # ── Client profile ─────────────────────────────────────────────
   snapclient:
-    image: ivdata/snapclient:latest
+    # Pinned by digest, not tag: ivdata/snapclient publishes no version tags at
+    # all — only "latest" (last pushed 2023-03-25) and "alpine" (2022-06-06).
+    # The digest is the only way to make this reproducible. Upstream is
+    # effectively abandoned; see README "Image pinning" for replacement options.
+    image: ivdata/snapclient:latest@sha256:0270a64fbc028691e4fb84bb0db9b2ca7fb024468b0d47b59dcf6a6accca6c44
     container_name: howlr-snapclient
     profiles:
       - client
