@@ -9,6 +9,12 @@
 # No-ops cleanly on hosts without the configured interface.
 set -u
 
+# Cron's default PATH (/usr/bin:/bin on Debian) omits /sbin and /usr/sbin,
+# where ip/rmmod/modprobe live — without this, `ip` fails with "command not
+# found" under cron, and the `||` below misreads that as "interface absent",
+# silently no-oping instead of recovering the connection.
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
 : "${WIFI_IFACE:=wlan0}"
 : "${WIFI_DHCP_UNIT:=dhcpcd}"
 : "${WIFI_FW_RECOVERY:=false}"

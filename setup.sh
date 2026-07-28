@@ -355,9 +355,9 @@ WIFI_FW_RECOVERY="${WIFI_FW_RECOVERY:-false}"
 install -o root -g root -m 755 \
   "${REPO_DIR}/control-plane/loft-wifi-watchdog.sh" /usr/local/bin/loft-wifi-watchdog
 cat > /etc/default/loft-wifi-watchdog <<EOF
-WIFI_IFACE="${WIFI_IFACE}"
-WIFI_DHCP_UNIT="${WIFI_DHCP_UNIT}"
-WIFI_FW_RECOVERY="${WIFI_FW_RECOVERY}"
+export WIFI_IFACE="${WIFI_IFACE}"
+export WIFI_DHCP_UNIT="${WIFI_DHCP_UNIT}"
+export WIFI_FW_RECOVERY="${WIFI_FW_RECOVERY}"
 EOF
 cat > /etc/cron.d/loft-wifi-watchdog <<EOF
 # WiFi watchdog — restart ${WIFI_DHCP_UNIT} (and reload the driver if WIFI_FW_RECOVERY=true) if ${WIFI_IFACE} loses IPv4 — installed by setup.sh
