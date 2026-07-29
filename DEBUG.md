@@ -730,6 +730,42 @@ sudo docker stats --no-stream
 # If on a Pi, reduce services or add memory limits in compose
 ```
 
+### calavera wifi drops and doesn't recover
+
+**Symptom:** calavera loses network. `journalctl -t loft-wifi-watchdog` shows
+the watchdog is running, but the interface stays dead.
+
+**Cause:** calavera's USB WiFi adapter (`wlx501ac51167c0`, Marvell 88W8797/
+mwifiex) can crash its firmware under USB autosuspend — see
+`control-plane/loft-wifi-watchdog.sh`. `WIFI_FW_RECOVERY=true` in
+`hosts/calavera/host.conf` makes the cron watchdog reload the driver module
+on every lost-IPv4 detection, every 2 minutes.
+
+**Run the watchdog manually** (e.g. to test a change, or recover faster than
+waiting for cron). It must be invoked the same way cron does — sourcing the
+env file first — otherwise it falls back to built-in defaults (`wlan0`,
+`dhcpcd`) that don't match calavera and it will silently no-op:
+
+```bash
+sudo sh -c '. /etc/default/loft-wifi-watchdog && /usr/local/bin/loft-wifi-watchdog'
+```
+
+**Manual last-resort recovery** (what actually worked before the
+unconditional-reload fix landed):
+
+```bash
+sudo rmmod mwifiex_sdio 2>/dev/null || sudo rmmod mwifiex_pcie 2>/dev/null
+sudo modprobe mwifiex_sdio 2>/dev/null || sudo modprobe mwifiex_pcie 2>/dev/null
+```
+
+(Check the real module first: `readlink -f /sys/class/net/wlx501ac51167c0/device/driver/module`.)
+
+**Check watchdog activity:**
+
+```bash
+journalctl -t loft-wifi-watchdog --since "1 hour ago"
+```
+
 ### deploy-pull.sh isn't pulling a new release
 
 **Symptom:** A new tag/release exists in the source repo but `/opt/<target>` still contains the old build.

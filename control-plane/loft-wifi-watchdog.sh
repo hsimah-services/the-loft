@@ -27,20 +27,19 @@ ip -4 addr show "$WIFI_IFACE" 2>/dev/null | grep -q inet && exit 0
 # their firmware under USB autosuspend: the interface stays present but dead,
 # and no amount of restarting the DHCP unit brings it back — only reloading
 # the kernel driver module re-uploads firmware. Restarting NetworkManager/
-# dhcpcd is a no-op for this failure mode, so detect it separately and reload
-# the actual driver bound to the interface before falling through to the
-# normal DHCP-unit restart below.
+# dhcpcd is a no-op for this failure mode. Detecting the crash via dmesg
+# pattern-matching proved unreliable in practice, so when opted in, just
+# unconditionally reload the driver on any lost-IPv4 detection before
+# falling through to the normal DHCP-unit restart below.
 if [[ "$WIFI_FW_RECOVERY" == "true" ]]; then
-  if dmesg -T 2>/dev/null | tail -50 | grep -qiE 'firmware is in a bad state|firmware in bad state|card removed'; then
-    driver_path="/sys/class/net/${WIFI_IFACE}/device/driver/module"
-    if [[ -e "$driver_path" ]]; then
-      module="$(basename "$(readlink -f "$driver_path")")"
-      logger -t loft-wifi-watchdog "${WIFI_IFACE} firmware crash detected, reloading driver module ${module}"
-      rmmod "$module" 2>/dev/null
-      sleep 1
-      modprobe "$module" 2>/dev/null
-      sleep 3
-    fi
+  driver_path="/sys/class/net/${WIFI_IFACE}/device/driver/module"
+  if [[ -e "$driver_path" ]]; then
+    module="$(basename "$(readlink -f "$driver_path")")"
+    logger -t loft-wifi-watchdog "${WIFI_IFACE} lost IPv4, reloading driver module ${module}"
+    rmmod "$module" 2>/dev/null
+    sleep 1
+    modprobe "$module" 2>/dev/null
+    sleep 3
   fi
 fi
 
