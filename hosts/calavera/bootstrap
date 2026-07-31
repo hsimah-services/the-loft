@@ -50,6 +50,43 @@ apt-get purge -y -qq \
   accountsservice > /dev/null 2>&1 || true
 apt-get autoremove -y -qq > /dev/null
 
+# ── Remove full desktop-environment task cruft ─────────────────────────────
+# Separate from the laptop-task cleanup above: the Debian installer also
+# ticked task-desktop (the "Debian desktop environment" meta-task) on this
+# install, which drags in a full GNOME desktop (calculator, calendar,
+# contacts, maps, music, weather, terminal, tweaks, remote-desktop...), the
+# Evolution mail/groupware suite, Chromium, and the entire LibreOffice
+# suite. None of it is used — the kiosk only ever runs i3 + lightdm +
+# firefox-esr (chromium was tried and dropped, see the package comment
+# above). Purge the task metapackages plus each unused suite explicitly, so
+# it can't come back on a later `apt upgrade`. Safe to re-run; no-ops once
+# already removed. NetworkManager/wpasupplicant/wireless tooling and
+# pipewire/gstreamer are deliberately left alone — WiFi and audio playback
+# are load-bearing for this host.
+info "Removing desktop-task cruft (GNOME apps, Evolution, Chromium, LibreOffice)..."
+apt-get purge -y -qq \
+  chromium \
+  libreoffice-base-core libreoffice-calc libreoffice-common libreoffice-core \
+  libreoffice-draw libreoffice-gnome libreoffice-gtk3 libreoffice-help-common \
+  libreoffice-help-en-us libreoffice-impress libreoffice-math \
+  libreoffice-style-colibre libreoffice-style-elementary \
+  libreoffice-uiconfig-calc libreoffice-uiconfig-common \
+  libreoffice-uiconfig-draw libreoffice-uiconfig-impress \
+  libreoffice-uiconfig-math libreoffice-uiconfig-writer libreoffice-writer \
+  libstaroffice-0.0-0 \
+  evolution evolution-common evolution-data-server evolution-data-server-common \
+  evolution-ews evolution-plugin-bogofilter evolution-plugin-pstimport \
+  evolution-plugins \
+  gnome-calculator gnome-calendar gnome-characters gnome-clocks \
+  gnome-connections gnome-contacts gnome-disk-utility gnome-font-viewer \
+  gnome-logs gnome-maps gnome-music gnome-remote-desktop gnome-snapshot \
+  gnome-sound-recorder gnome-sushi gnome-system-monitor gnome-terminal \
+  gnome-text-editor gnome-tour gnome-tweaks gnome-user-docs gnome-weather \
+  nautilus file-roller baobab evince totem totem-plugins shotwell \
+  simple-scan rygel-playbin rygel-tracker loupe yelp zenity tecla seahorse \
+  task-desktop task-laptop laptop-detect dmidecode > /dev/null 2>&1 || true
+apt-get autoremove -y -qq > /dev/null
+
 # ── lightdm auto-login (rodnik → i3) ──────────────────────────────────────
 info "Configuring lightdm auto-login (rodnik → i3)..."
 systemctl disable gdm3 2>/dev/null || true
