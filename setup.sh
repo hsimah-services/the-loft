@@ -347,17 +347,21 @@ info "Configuring cron jobs..."
 # WIFI_FW_RECOVERY opts a host into an extra recovery step (driver module
 # reload) for USB WiFi chips whose firmware can crash independently of the
 # DHCP lease — see control-plane/loft-wifi-watchdog.sh and calavera's
-# host.conf for the mwifiex/Marvell case this was added for.
+# host.conf for the mwifiex/Marvell case this was added for. WIFI_FW_MODULE
+# must name the exact module to reload (e.g. mwifiex_usb) — sysfs-based
+# discovery proved unreliable, so this is a required, explicit per-host value.
 WIFI_IFACE="${WIFI_IFACE:-wlan0}"
 WIFI_DHCP_UNIT="${WIFI_DHCP_UNIT:-dhcpcd}"
 WIFI_WATCHDOG_MINUTES="${WIFI_WATCHDOG_MINUTES:-5}"
 WIFI_FW_RECOVERY="${WIFI_FW_RECOVERY:-false}"
+WIFI_FW_MODULE="${WIFI_FW_MODULE:-}"
 install -o root -g root -m 755 \
   "${REPO_DIR}/control-plane/loft-wifi-watchdog.sh" /usr/local/bin/loft-wifi-watchdog
 cat > /etc/default/loft-wifi-watchdog <<EOF
 export WIFI_IFACE="${WIFI_IFACE}"
 export WIFI_DHCP_UNIT="${WIFI_DHCP_UNIT}"
 export WIFI_FW_RECOVERY="${WIFI_FW_RECOVERY}"
+export WIFI_FW_MODULE="${WIFI_FW_MODULE}"
 EOF
 cat > /etc/cron.d/loft-wifi-watchdog <<EOF
 # WiFi watchdog — restart ${WIFI_DHCP_UNIT} (and reload the driver if WIFI_FW_RECOVERY=true) if ${WIFI_IFACE} loses IPv4 — installed by setup.sh

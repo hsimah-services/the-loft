@@ -739,7 +739,27 @@ the watchdog is running, but the interface stays dead.
 mwifiex) can crash its firmware under USB autosuspend — see
 `control-plane/loft-wifi-watchdog.sh`. `WIFI_FW_RECOVERY=true` in
 `hosts/calavera/host.conf` makes the cron watchdog reload the driver module
-on every lost-IPv4 detection, every 2 minutes.
+(`WIFI_FW_MODULE=mwifiex_usb`) on every lost-IPv4 detection, every 2 minutes.
+
+**Two ways this stayed broken across multiple "fixes" (2026-07-30 outage) —
+worth checking both if it recurs:**
+
+1. **Stale deploy.** `control-plane/loft-wifi-watchdog.sh` is only installed
+   to `/usr/local/bin/loft-wifi-watchdog` by `setup.sh` §12 — a `git pull` on
+   the host's checkout does *not* update the installed copy. Two prior fixes
+   (commits `9ca9209`, `f94c06c`) landed in the repo but were never
+   re-deployed to calavera, so the host kept running pre-fix behavior for
+   days. Confirm with `grep -c "firmware crash detected"
+   /usr/local/bin/loft-wifi-watchdog` (non-zero = stale, pre-`f94c06c`); fix
+   by re-running `setup.sh` on the host.
+2. **Module misdiscovery.** The watchdog used to discover the driver module
+   dynamically via `/sys/class/net/$WIFI_IFACE/device/driver/module`. On
+   calavera that path resolves to `usbcore` — even while the interface is
+   healthy, not just mid-crash — so `rmmod usbcore` silently failed
+   (`2>/dev/null`; usbcore backs every other USB device on the box) and the
+   reload never actually ran. Fixed by making `WIFI_FW_MODULE` an explicit,
+   required host.conf value (`mwifiex_usb` for calavera) instead of
+   discovering it at runtime.
 
 **Run the watchdog manually** (e.g. to test a change, or recover faster than
 waiting for cron). It must be invoked the same way cron does — sourcing the
@@ -750,15 +770,12 @@ env file first — otherwise it falls back to built-in defaults (`wlan0`,
 sudo sh -c '. /etc/default/loft-wifi-watchdog && /usr/local/bin/loft-wifi-watchdog'
 ```
 
-**Manual last-resort recovery** (what actually worked before the
-unconditional-reload fix landed):
+**Manual last-resort recovery:**
 
 ```bash
-sudo rmmod mwifiex_sdio 2>/dev/null || sudo rmmod mwifiex_pcie 2>/dev/null
-sudo modprobe mwifiex_sdio 2>/dev/null || sudo modprobe mwifiex_pcie 2>/dev/null
+sudo rmmod mwifiex_usb
+sudo modprobe mwifiex_usb
 ```
-
-(Check the real module first: `readlink -f /sys/class/net/wlx501ac51167c0/device/driver/module`.)
 
 **Check watchdog activity:**
 
