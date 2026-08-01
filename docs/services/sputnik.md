@@ -123,7 +123,7 @@ The `FROM` line is the model selector — change it to whatever [`bench.sh`](#me
 
 ## Performance
 
-space-needle is a Minisforum MS-01 (i9) with no discrete GPU, so inference is CPU-bound and limited by memory bandwidth. Rough expectations at Q4 — but measure rather than trust these:
+space-needle is a Minisforum MS-01 with an **i9-12900H, 31 GB RAM (27 GB typically free), no discrete GPU** (measured 2026-08-01), so inference is CPU-bound and limited by memory bandwidth. Rough expectations at Q4 — but measure rather than trust these:
 
 | Model | RAM | Generation | Notes |
 |-------|-----|-----------|-------|
@@ -151,6 +151,27 @@ It needs only `curl` and `python3` — it talks to the Ollama API on loopback, s
 - **first tok** — the wait before any text appears.
 
 Run it before buying a card, and again after, to make the comparison on data rather than estimates.
+
+### Thread count on a hybrid CPU
+
+The i9-12900H is 6 P-cores + 8 E-cores, so `nproc` reports 20 threads and Ollama will use all of them by default. That is usually the wrong choice: inference splits work evenly per thread, so the P-cores finish early and idle while the slower E-cores straggle, and every token waits on the slowest thread. Capping to the P-cores often wins despite using fewer cores.
+
+`Modelfile.assistant` sets `PARAMETER num_thread 6`. Confirm it on this workload rather than trusting it — build three variants and bench them:
+
+```bash
+# 6 = P-cores, 12 = P-core threads, and Ollama's own default for comparison
+for n in 6 12; do
+  printf 'FROM qwen3:30b-a3b\nPARAMETER num_thread %s\n' "$n" \
+    | sudo docker exec -i ollama ollama create "thr-$n" -f /dev/stdin
+done
+bash services/sputnik/bench.sh qwen3:30b-a3b thr-6 thr-12
+```
+
+Take the winner's value into `Modelfile.assistant`, rebuild `sputnik-assistant`, then clean up:
+
+```bash
+sudo docker exec -it ollama ollama rm thr-6 thr-12
+```
 
 Two upgrade paths:
 
