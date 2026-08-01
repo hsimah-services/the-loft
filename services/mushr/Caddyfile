@@ -87,6 +87,18 @@ uptime.{$LOFT_DOMAIN} {
 	reverse_proxy uptime:3001
 }
 
+# sputnik — Open WebUI chat surface. Note there is deliberately NO route for
+# ollama itself: it has no authentication, so it stays on the bridge only.
+sputnik.{$LOFT_DOMAIN} {
+	import cloudflare_tls
+	reverse_proxy open-webui:8080
+}
+
+n8n.{$LOFT_DOMAIN} {
+	import cloudflare_tls
+	reverse_proxy n8n:5678
+}
+
 hbla.ke {
 	import cloudflare_tls
 	reverse_proxy pawst:80
@@ -176,6 +188,16 @@ http://beszel.space-needle:80 {
 
 http://uptime.space-needle:80 {
 	reverse_proxy uptime:3001
+}
+
+http://sputnik.space-needle:80 {
+	reverse_proxy open-webui:8080
+}
+
+# Reachable over plain HTTP for convenience, but always use the HTTPS name for
+# Google OAuth — the registered redirect URI is scheme-exact.
+http://n8n.space-needle:80 {
+	reverse_proxy n8n:5678
 }
 
 http://space-needle:80 {

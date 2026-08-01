@@ -24,6 +24,7 @@ For deep dives, see [`docs/`](docs/README.md).
 | [pawst](docs/services/pawst.md) | Static blogs `hbla.ke` and `hsimah.com` |
 | [pupyrus](docs/services/pupyrus.md) | WordPress (+ MariaDB + Redis) |
 | [snoot](docs/services/snoot.md) | Beszel agent on every host |
+| [sputnik](docs/services/sputnik.md) | Local LLM — Ollama + Open WebUI + n8n, read-only Gmail/Calendar assistant |
 | [stellarr](docs/services/stellarr.md) | *arr stack + Transmission + slskd, behind NordVPN |
 
 ## Image pinning
@@ -105,7 +106,8 @@ For a fresh host, see the host-specific docs page and [`docs/scripts/setup.md`](
 - **SSH**: Only `adminhabl` can SSH in. Password auth disabled on Pis.
 - **Containers**: All run as `littledog` (UID/GID 1003), a `nologin` service account.
 - **Admin escalation**: You log in as `adminhabl` and use `sudo` for privileged actions; `loft-ctl` still auto-elevates to `adminhabl` via `su` if invoked by another user.
-- **External access**: Only Pawst (`hbla.ke` + `hsimah.com`) is exposed externally, via Cloudflare Tunnel — no open ports. Everything else is LAN-only.
+- **External access**: Only Pawst (`hbla.ke` + `hsimah.com`) is exposed externally, via Cloudflare Tunnel — no open ports. Everything else is LAN-only. Sputnik's `n8n` holds a live Google OAuth refresh token, so keep it (and `sputnik`) out of the tunnel's public-hostname list in the Cloudflare dashboard.
+- **Unauthenticated services**: `ollama` has no auth of any kind — anything that reaches port 11434 can run inference and pull or delete models. It is published on `127.0.0.1` only and deliberately has no Caddy route.
 - **i3 desktop** (calavera): lightdm autologs the `rodnik` service account into an i3 session that auto-launches `firefox --kiosk` fullscreen as a Music Assistant touch dashboard (config in `hosts/calavera/i3/`, URL + HiDPI scaling from `host.conf`); `rodnik` has no sudo or docker.
 
 ## Debugging
@@ -117,4 +119,5 @@ See [DEBUG.md](DEBUG.md) for container/log/network/Caddy diagnostics, plus the *
 A GitHub Actions workflow (`.github/workflows/validate.yml`) validates every push:
 - All compose + override combinations pass `docker compose config --quiet`
 - Howlr validated under both `COMPOSE_PROFILES=server` and `=client`
+- Sputnik validated under `engine`, `chat`, `agent`, and all three combined
 - All shell scripts and `host.conf` files pass `bash -n`

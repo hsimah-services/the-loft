@@ -30,6 +30,13 @@ jobs:
             COMPOSE_PROFILES="${profile}" docker compose -f services/howlr/docker-compose.yml config --quiet
           done
 
+      - name: Validate sputnik compose profiles
+        run: |
+          for profile in engine chat agent engine,chat,agent; do
+            echo "Validating services/sputnik/docker-compose.yml (profile: ${profile})..."
+            COMPOSE_PROFILES="${profile}" docker compose -f services/sputnik/docker-compose.yml config --quiet
+          done
+
       - name: Validate compose with overrides
         run: |
           for host_dir in hosts/*/; do
@@ -55,7 +62,8 @@ jobs:
 
       - name: Syntax-check shell scripts
         run: |
-          for f in setup.sh loft-ctl control-plane/*.sh services/*/setup.sh; do
+          for f in setup.sh loft-ctl control-plane/*.sh services/*/*.sh; do
+            [ -e "$f" ] || continue
             echo "Checking $f..."
             bash -n "$f"
           done

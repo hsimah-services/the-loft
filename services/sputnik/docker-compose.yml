@@ -1,0 +1,112 @@
+services:
+  # ── Engine profile ──────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:0.32.5
+    container_name: ollama
+    restart: unless-stopped
+    profiles:
+      - engine
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Bulk model weights live on /mammoth — a Q4 30B MoE is ~20 GB and the
+    # root disk also holds every other service's /opt config.
+    volumes:
+      - /mammoth/sputnik/models:/root/.ollama
+    # Loopback only. Ollama has NO authentication of any kind — anything that
+    # can reach 11434 can run inference, pull models, and delete them. It is
+    # deliberately absent from the Caddyfile; the only consumers are
+    # open-webui and n8n over the loft-proxy bridge (by container name), plus
+    # the host itself for `loft-ctl health` and CLI use.
+    ports:
+      - "127.0.0.1:11434:11434"
+    environment:
+      # Bind inside the container; the ports mapping above is the real boundary.
+      - OLLAMA_HOST=0.0.0.0
+      # Never evict the model. On CPU a cold load of a 20 GB MoE costs ~30-60s,
+      # which would be paid on every idle n8n cron tick with the 5m default.
+      - OLLAMA_KEEP_ALIVE=-1
+      # One model, one request at a time — parallelism just splits scarce cores
+      # and makes every request slower on a CPU-bound host.
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_FLASH_ATTENTION=1
+      # Agent turns carry tool schemas + mail bodies; the 4096 default truncates
+      # them silently. Raise only with RAM headroom — KV cache grows with this.
+      - OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH:-16384}
+    networks:
+      - loft-proxy
+
+  # ── Chat profile ────────────────────────────────────────────────────────────
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:0.11.0
+    container_name: open-webui
+    restart: unless-stopped
+    profiles:
+      - chat
+    depends_on:
+      - ollama
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    env_file: .env
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_AUTH=true
+      - WEBUI_URL=https://sputnik.${LOFT_DOMAIN}
+    volumes:
+      - /opt/sputnik/open-webui:/app/backend/data
+    # Needs to resolve n8n's own external hostname when calling it as a tool
+    # server; see the space-needle container DNS quirk in docs/hosts.
+    dns:
+      - 192.168.86.28
+    networks:
+      - loft-proxy
+
+  # ── Agent profile ───────────────────────────────────────────────────────────
+  n8n:
+    # Held on the 2.32 line — 2.33 shipped the same day and is not yet the
+    # GitHub "latest release". n8n encrypts stored credentials with
+    # N8N_ENCRYPTION_KEY; back that key up before any major-version bump.
+    image: n8nio/n8n:2.32.7
+    container_name: n8n
+    restart: unless-stopped
+    profiles:
+      - agent
+    depends_on:
+      - ollama
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    env_file: .env
+    # n8n's image runs as uid 1000; /opt is owned littledog:pack-member (1003).
+    user: "1003:1003"
+    environment:
+      - N8N_HOST=n8n.${LOFT_DOMAIN}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      # Both must be the public HTTPS origin — n8n builds the Google OAuth
+      # redirect URI from these, and Google rejects http:// and bare hostnames.
+      - N8N_EDITOR_BASE_URL=https://n8n.${LOFT_DOMAIN}
+      - WEBHOOK_URL=https://n8n.${LOFT_DOMAIN}
+      - GENERIC_TIMEZONE=${TZ:-America/Los_Angeles}
+      - TZ=${TZ:-America/Los_Angeles}
+      - N8N_RUNNERS_ENABLED=true
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_PERSONALIZATION_SURVEY_ENABLED=false
+    volumes:
+      - /opt/sputnik/n8n:/home/node/.n8n
+    dns:
+      - 192.168.86.28
+    networks:
+      - loft-proxy
+
+networks:
+  loft-proxy:
+    external: true

@@ -1,0 +1,255 @@
+# `sputnik`
+
+> Local open-weights LLM engine plus two assistant surfaces — a chat UI and a workflow runner — used to read and summarise Gmail and Google Calendar without sending any of it to a third-party model provider.
+
+## Overview
+
+`sputnik` runs a quantised open-weights model on [space-needle](../hosts/space-needle.md) via Ollama, and exposes it through two consumers: **Open WebUI** for conversational queries and **n8n** for scheduled work (morning inbox triage, calendar briefings, thread summaries). Google account access is held by n8n as an OAuth credential, scoped read-only.
+
+The name is the obvious one: *sputnik* is Russian for "travelling companion", it was the first satellite, and Laika followed on Sputnik 2 — so it lands on both the space and dog theme pools, and "companion" is literally the job.
+
+This is the fleet's first genuinely compute-hungry service. Unlike Plex, which offloads to QuickSync, inference here is memory-bandwidth-bound on the CPU and will compete with everything else on the box. See [Performance](#performance) before assuming a model size.
+
+## Architecture
+
+### Containers
+
+`sputnik` is a **bundle** — three independent products under one umbrella name, like [houstn](houstn.md) and [stellarr](stellarr.md) — so each container is named for its own product rather than prefixed. Compose profiles select which run:
+
+| Profile | Container | Image | Purpose |
+|---------|-----------|-------|---------|
+| `engine` | `ollama` | `ollama/ollama:0.32.5` | Inference server, OpenAI-compatible API + native tool calling |
+| `chat` | `open-webui` | `ghcr.io/open-webui/open-webui:0.11.0` | Conversational UI |
+| `agent` | `n8n` | `n8nio/n8n:2.32.7` | Scheduled workflows, holds the Google credential |
+
+space-needle runs `COMPOSE_PROFILES=engine,chat,agent`. No other host runs sputnik — the Pi hosts ([viking](../hosts/viking.md), [fjord](../hosts/fjord.md), [calavera](../hosts/calavera.md)) cannot serve a model of any useful size.
+
+```
+                    ┌──────────────┐
+  browser (LAN) ───▶│    Caddy     │──▶ sputnik.loft.hsimah.com ──▶ open-webui:8080
+                    │   (mushr)    │──▶ n8n.loft.hsimah.com     ──▶ n8n:5678
+                    └──────────────┘
+                                              │            │
+                                              └────┬───────┘
+                                                   ▼
+                                            ollama:11434
+                                        (loft-proxy bridge +
+                                         127.0.0.1 on the host)
+                                                   │
+                                                   ▼
+                                      /mammoth/sputnik/models
+```
+
+### Why Ollama is not proxied
+
+**Ollama has no authentication whatsoever.** Anything that can reach port 11434 can run inference, pull arbitrary models, and delete existing ones. It is therefore deliberately absent from [mushr](mushr.md)'s Caddyfile and published only on `127.0.0.1:11434` for host-side health checks. Its only real consumers reach it as `http://ollama:11434` over the `loft-proxy` bridge.
+
+If a future host needs remote inference, put it behind a Caddy route with `basic_auth` rather than exposing 11434 directly.
+
+### Public exposure
+
+Both HTTPS routes exist in the Caddyfile, but that alone does **not** publish them to the internet. mushr's Cloudflare Tunnel is remotely managed via `TUNNEL_TOKEN`, so a hostname is only reachable externally once it is added as a public hostname in the Cloudflare dashboard. Leave `sputnik` and `n8n` out of that list to keep them LAN-only — mushr's dnsmasq resolves `*.loft.hsimah.com` to `192.168.86.28`, so LAN browsers still get a real Let's Encrypt cert.
+
+Keeping n8n off the tunnel is the recommended posture: it stores a live Google OAuth refresh token.
+
+### Storage layout
+
+```
+/mammoth/sputnik/models        Ollama model blobs (~20 GB for a Q4 30B MoE)
+/opt/sputnik/open-webui        Open WebUI SQLite DB, users, chat history
+/opt/sputnik/n8n               n8n SQLite DB + encrypted credentials
+```
+
+Model weights live on `/mammoth` because they dwarf every other service's config; the two small SQLite databases stay on the root disk under `/opt` with everything else.
+
+## Configuration
+
+### `.env`
+
+```bash
+cp services/sputnik/.env.example services/sputnik/.env
+```
+
+| Variable | Purpose |
+|----------|---------|
+| `COMPOSE_PROFILES` | `engine,chat,agent` on space-needle |
+| `LOFT_DOMAIN` | Must match `services/mushr/.env` — interpolated into the n8n and Open WebUI hostnames |
+| `TZ` | `America/Los_Angeles`, as elsewhere in the fleet |
+| `OLLAMA_CONTEXT_LENGTH` | Token window. `16384` fits tool schemas plus a mail thread; KV cache scales with it |
+| `WEBUI_SECRET_KEY` | `openssl rand -hex 32`. Rotating it logs everyone out |
+| `ENABLE_SIGNUP` | `true` to create the first admin account, then flip to `false` |
+| `N8N_ENCRYPTION_KEY` | `openssl rand -hex 32`. **Back this up** — see below |
+
+> **`N8N_ENCRYPTION_KEY` is the one irreplaceable secret here.** n8n encrypts every stored credential with it, including the Google refresh token. Lose the key and `/opt/sputnik/n8n` becomes unreadable and every Google connection must be re-authorised from scratch.
+
+### Google OAuth
+
+The full click-path is documented inline in [`services/sputnik/.env.example`](../../services/sputnik/.env.example). The parts that catch people out:
+
+1. **Publishing status must be "Production", not "Testing".** Google expires refresh tokens after 7 days while the consent screen is in Testing, so the assistant silently dies every week. Publishing shows an "unverified app" interstitial you click through as the developer; formal verification is only needed to distribute to other people.
+2. **The redirect URI is exact** — `https://n8n.loft.hsimah.com/rest/oauth2-credential/callback`, HTTPS, no trailing slash. This is why `N8N_EDITOR_BASE_URL` and `WEBHOOK_URL` must both be the public HTTPS origin.
+3. **The OAuth flow works LAN-only.** Google never fetches the redirect URI — your browser does. Complete the connection from a machine on the LAN and dnsmasq plus Caddy handle it locally.
+
+### Scopes
+
+Currently provisioned **read-only**:
+
+```
+https://www.googleapis.com/auth/gmail.readonly
+https://www.googleapis.com/auth/calendar.readonly
+```
+
+An 8B-class model acting on the contents of an untrusted inbox is a live prompt-injection surface — a crafted email is user input that the model cannot reliably distinguish from your instructions. Read-only means the worst case is a wrong summary rather than a sent email or a deleted event.
+
+The natural next step, once its drafts have been watched for a while, is `gmail.compose` — drafts land in the Drafts folder and still require a human to press send. Adding a scope requires re-running the OAuth consent flow.
+
+### Assistant persona
+
+The system prompt lives in [`services/sputnik/Modelfile.assistant`](../../services/sputnik/Modelfile.assistant) and is baked into a derived model rather than typed into a chat UI or a workflow's prompt field — that way both surfaces get the same guardrails and neither can quietly drop them:
+
+```bash
+sudo docker exec -i ollama ollama create sputnik-assistant \
+  -f /dev/stdin < services/sputnik/Modelfile.assistant
+```
+
+Re-run after every edit; `ollama create` overwrites in place. Select `sputnik-assistant` (not the raw base model) in Open WebUI and in n8n's Ollama node.
+
+Two things it encodes that matter more than tone:
+
+- **It states the read-only limit as a fact about its access**, not a policy it is choosing to follow, so the model reports "I can't send that" instead of hallucinating a sent message.
+- **It frames all mail content as untrusted data.** An inbox is attacker-reachable input; a message can contain text crafted to read as instructions. The prompt tells the model to treat anything inside a body, subject, or sender name as text to summarise and never as a command — and to flag it as a likely phishing signal when it sees one. This is mitigation, not a guarantee: a sufficiently clever injection can still land, which is the underlying reason the OAuth scopes are read-only.
+
+The `FROM` line is the model selector — change it to whatever [`bench.sh`](#measuring-actual-throughput) recommends for the RAM in the box.
+
+## Performance
+
+space-needle is a Minisforum MS-01 (i9) with no discrete GPU, so inference is CPU-bound and limited by memory bandwidth. Rough expectations at Q4 — but measure rather than trust these:
+
+| Model | RAM | Generation | Notes |
+|-------|-----|-----------|-------|
+| Qwen3 8B | ~6 GB | 10–12 tok/s | Weakest tool caller of the three |
+| Qwen3 14B | ~10 GB | 5–6 tok/s | Too slow for an agent loop |
+| **Qwen3 30B-A3B** | ~20 GB | 18–25 tok/s | MoE — only ~3B params active per token |
+
+The mixture-of-experts model is the one that makes this viable: 30B-class quality at roughly 8B-class speed, because only a fraction of the weights activate per token.
+
+**Prefill is the real bottleneck, not generation.** An agent turn carrying tool schemas plus an email thread is 2–5k tokens of prompt processing at roughly 30–80 tok/s on CPU, so expect 30–60 seconds before the first token. This is why `OLLAMA_KEEP_ALIVE=-1` is set — the default 5-minute eviction would otherwise add a full cold model load to every idle cron tick. It is also why n8n (scheduled, latency-insensitive) is a better fit than Open WebUI (interactive) until there is a GPU in the box.
+
+### Measuring actual throughput
+
+[`services/sputnik/bench.sh`](../../services/sputnik/bench.sh) reports the two numbers that actually decide the GPU question, per installed model:
+
+```bash
+bash services/sputnik/bench.sh                 # every installed model
+bash services/sputnik/bench.sh qwen3:30b-a3b   # one model
+```
+
+It needs only `curl` and `python3` — it talks to the Ollama API on loopback, so no docker and no sudo. It prints the host's CPU/RAM/GPU, recommends a base model for the memory actually available (not total — the model has to stay resident alongside Plex, the *arr stack, WordPress and Music Assistant), then warms each model and measures:
+
+- **prefill tok/s** — prompt processing. Dominates agent-loop latency and is what a GPU improves most.
+- **gen tok/s** — token generation. Below ~10 makes interactive chat unpleasant; largely irrelevant to a 7am cron job.
+- **first tok** — the wait before any text appears.
+
+Run it before buying a card, and again after, to make the comparison on data rather than estimates.
+
+Two upgrade paths:
+
+- **Intel iGPU via Vulkan** — roughly 1.5–2×, but contends with Plex transcoding for `/dev/dri`. Requires swapping Ollama for a llama.cpp server build.
+- **Low-profile GPU** — the MS-01 has a PCIe 4.0 x16 slot that takes a single-slot low-profile card. This is the change that makes interactive chat comfortable.
+
+## Operations
+
+```bash
+# First deploy
+cp services/sputnik/.env.example services/sputnik/.env   # fill in the two keys
+sudo bash setup.sh                                       # creates the directories
+loft-ctl start sputnik
+
+# Pull the model (one-off, ~20 GB — expect a long download)
+sudo docker exec -it ollama ollama pull qwen3:30b-a3b
+
+# Bake in the assistant persona + guardrails
+sudo docker exec -i ollama ollama create sputnik-assistant \
+  -f /dev/stdin < services/sputnik/Modelfile.assistant
+
+# Confirm it is loaded and answering
+sudo docker exec -it ollama ollama list
+curl -s http://localhost:11434/api/tags | jq '.models[].name'
+
+# Measure real throughput (informs both model choice and the GPU decision)
+bash services/sputnik/bench.sh
+
+# Health across all tiers
+loft-ctl health sputnik
+
+# Watch memory while a model is resident
+sudo docker stats ollama --no-stream
+```
+
+### First-run sequence
+
+1. `loft-ctl start sputnik`
+2. `bash services/sputnik/bench.sh` — with no models pulled it still reports host RAM and recommends a base model; set that as the `FROM` line in `Modelfile.assistant`
+3. Pull that model — nothing works until one exists
+4. `ollama create sputnik-assistant` (above), then re-run `bench.sh` for real throughput numbers
+5. Open `https://sputnik.loft.hsimah.com`, create the admin account, select **sputnik-assistant** as the model, then set `ENABLE_SIGNUP=false` and `loft-ctl rebuild sputnik`
+6. Open `https://n8n.loft.hsimah.com`, create the owner account
+7. In n8n → Credentials → Google OAuth2 API, paste the client ID and secret, click **Connect my account** from a LAN browser
+8. Build the first workflow: Schedule Trigger → Gmail (Get Many) → Ollama Chat Model (`sputnik-assistant`) → summary
+
+## Related
+
+- [space-needle](../hosts/space-needle.md) — the only host that runs this
+- [mushr](mushr.md) — supplies the TLS routes and LAN DNS
+- Root [`README.md`](../../README.md) — fleet service table
+
+## Debug & Troubleshooting
+
+### Google connection stops working after exactly a week
+
+**Cause:** The OAuth consent screen is still in "Testing" publishing status. Google expires refresh tokens issued by unpublished apps after 7 days.
+
+**Fix:** Google Cloud Console → APIs & Services → OAuth consent screen → **Publish app**, then re-authorise the credential in n8n. Click through the "unverified app" warning as the developer.
+
+### n8n container exits immediately with a permissions error on `/home/node/.n8n`
+
+**Cause:** The `n8nio/n8n` image runs as uid 1000, but `/opt` directories in this fleet are owned `littledog:pack-member` (1003). The compose file pins `user: "1003:1003"` to match; if that line is lost, or the directory was created by hand as root, n8n cannot write its database.
+
+**Fix:**
+
+```bash
+sudo chown -R littledog:pack-member /opt/sputnik/n8n
+sudo docker restart n8n
+```
+
+### Every request takes 60+ seconds even for a trivial prompt
+
+**Cause:** Almost always the model being evicted and reloaded between requests, not slow inference.
+
+**Fix:** Confirm `OLLAMA_KEEP_ALIVE=-1` is in effect and the model is resident:
+
+```bash
+sudo docker exec ollama ollama ps        # should list the model with "Forever"
+sudo docker logs ollama | grep -i "loading model"
+```
+
+Repeated "loading model" lines mean the setting is not applied — check that `loft-ctl rebuild sputnik` was run after editing `.env`. If the model *is* resident and it is still slow, the cost is prompt prefill, which is expected on CPU (see [Performance](#performance)).
+
+### Open WebUI shows no models in the dropdown
+
+**Cause:** Either no model has been pulled, or Open WebUI cannot reach Ollama.
+
+**Fix:**
+
+```bash
+sudo docker exec ollama ollama list                        # is anything pulled?
+sudo docker exec open-webui curl -s http://ollama:11434/api/tags   # can it reach the engine?
+```
+
+An empty `models` array from the first command means pull one. A connection failure from the second means the two containers are not on the `loft-proxy` network — check `sudo docker network inspect loft-proxy`.
+
+### The model invents email contents
+
+**Cause:** Context truncation. `OLLAMA_CONTEXT_LENGTH` caps the window; when a workflow feeds in more mail than fits, the oldest tokens fall out silently and the model fills the gaps.
+
+**Fix:** Reduce how many messages the Gmail node returns per run, or raise `OLLAMA_CONTEXT_LENGTH` if there is RAM headroom (KV cache grows with the window, on top of the model weights).

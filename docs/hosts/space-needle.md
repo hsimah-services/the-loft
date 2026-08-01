@@ -12,7 +12,7 @@ The host name comes from the Space Needle, the obvious Seattle landmark within s
 
 ### Services running here
 
-`hosts/space-needle/host.conf` declares `SERVICES=(mushr pawpcorn stellarr pupyrus howlr pawst houstn snoot)`. With the Houstn `hub,metrics` profile combo this resolves to:
+`hosts/space-needle/host.conf` declares `SERVICES=(mushr pawpcorn stellarr pupyrus howlr pawst houstn snoot sputnik)`. With the Houstn `hub,metrics` and Sputnik `engine,chat,agent` profile combos this resolves to:
 
 | Service | Containers | Notes |
 |---------|-----------|-------|
@@ -24,6 +24,7 @@ The host name comes from the Space Needle, the obvious Seattle landmark within s
 | [pawst](../services/pawst.md) | `pawst` | Static blogs `hbla.ke` + `hsimah.com` |
 | [houstn](../services/houstn.md) | `beszel`, `uptime`, `homepage`, `glances` | `COMPOSE_PROFILES=hub,metrics` |
 | [snoot](../services/snoot.md) | `snoot` | Beszel agent |
+| [sputnik](../services/sputnik.md) | `ollama`, `open-webui`, `n8n` | Local LLM engine + assistant surfaces; `COMPOSE_PROFILES=engine,chat,agent` |
 
 ### Networking
 
@@ -52,6 +53,7 @@ dnsmasq inside `mushr-dns` is the LAN's primary resolver. Set the router's DHCP 
     /transmission                 Transmission completed
     /soulseek                     slskd downloads
   /pawpcorn/transcode             Plex transcoding workspace
+  /sputnik/models                 Ollama model blobs (~20 GB for a Q4 30B MoE)
 
 /opt
   /pawpcorn/config                Plex configuration
@@ -65,6 +67,8 @@ dnsmasq inside `mushr-dns` is the LAN's primary resolver. Set the router's DHCP 
   /houstn/uptime/data             Uptime Kuma database
   /pawst/hblake-html              hbla.ke static site (deployed by deploy-pull.sh)
   /pawst/hsimah-html              hsimah.com static site (deployed by deploy-pull.sh)
+  /sputnik/open-webui             Open WebUI database, users, chat history
+  /sputnik/n8n                    n8n database + encrypted credentials
 ```
 
 `/opt` config dirs are owned `littledog:pack-member` (755). `/mammoth` media dirs are 775. Houstn's Homepage config is the exception — no `/opt` dir, the YAML files are bind-mounted directly from `services/houstn/homepage-config/` in the repo.
@@ -93,6 +97,7 @@ cp services/pupyrus/.env.example  services/pupyrus/.env    # MYSQL_*, GRAPHQL_JW
 cp services/howlr/.env.example    services/howlr/.env      # COMPOSE_PROFILES=server
 cp services/houstn/.env.example   services/houstn/.env     # COMPOSE_PROFILES=hub,metrics + HOMEPAGE_VAR_*
 cp services/snoot/.env.example    services/snoot/.env      # BESZEL_KEY, BESZEL_TOKEN (after first hub launch)
+cp services/sputnik/.env.example  services/sputnik/.env    # WEBUI_SECRET_KEY, N8N_ENCRYPTION_KEY, LOFT_DOMAIN
 ```
 
 ### Per-host overrides
