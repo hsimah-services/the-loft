@@ -127,14 +127,24 @@ items — handled in the Code node.
 
 | Name | Value |
 |------|-------|
-| `format` | `metadata` |
-| `metadataHeaders` | `From` |
-| `metadataHeaders` | `Subject` |
+| `format` | `full` |
 
-`format=metadata` returns headers plus Gmail's own `snippet` and never
-downloads message bodies — less data, faster, and a smaller blast radius if a
-message is hostile. Add `metadataHeaders` twice; n8n sends repeated keys, which
-is what the API expects.
+**This was `format=metadata` and had to change.** Metadata returns headers plus
+Gmail's ~200-character `snippet`, which is a preview taken from the *start of
+the body* — and in a forwarded message the start of the body is the forwarding
+header block. A strata levy notice arrived as nothing but
+`---- Forwarded message ---- From: … Date: … Subject: … To: …`, with no amount
+and no due date, and was correctly reported as needing no action. The model was
+never shown a bill. Relaxing the truncation would not have helped: `snippet`
+was all the API returned, so there was no further text to reveal.
+
+`format=full` returns the whole MIME tree, so the Code node can walk it for the
+real body. The cost is honest and worth stating: more attacker-controlled text
+now reaches the model than under metadata. That is mitigated rather than
+eliminated — bodies are truncated to 600 characters, quoting and forwarding
+boilerplate is stripped, long URLs are collapsed, and section 1 of the prompt
+exists precisely to surface anything that reads as an instruction. The
+alternative was a briefing that silently omits bills.
 
 Set **Settings → Always Output Data** so an empty inbox doesn't halt the run.
 
@@ -162,12 +172,49 @@ const cal = events.length
 const header = (m, name) =>
   (m.payload?.headers || []).find(h => h.name === name)?.value || '';
 
+const decode = (d) => Buffer.from(d, 'base64url').toString('utf8');
+
+// format=full returns either a flat body or a nested parts tree depending on
+// how the sender composed the message. Walk it for the first matching type.
+const findPart = (part, mime) => {
+  if (!part) return '';
+  if (part.mimeType === mime && part.body?.data) return decode(part.body.data);
+  for (const p of part.parts || []) {
+    const found = findPart(p, mime);
+    if (found) return found;
+  }
+  return '';
+};
+
+const stripHtml = (h) => h
+  .replace(/<(style|script)[\s\S]*?<\/\1>/gi, '')
+  .replace(/<[^>]+>/g, ' ');
+
+// A forward buries the real content under a header block and a reply chain
+// repeats it. Both otherwise consume the entire character budget the model
+// sees — which is exactly how a levy notice arrived as nothing but "From:
+// Date: Subject: To:" and was reported as needing no action.
+const clean = (t) => t
+  .replace(/-{3,}\s*Forwarded message\s*-{3,}/gi, '')
+  .replace(/^\s*(From|Date|Subject|To|Cc|Bcc|Sent|Reply-To):.*$/gim, '')
+  .replace(/^\s*On .+ wrote:\s*$/gim, '')
+  .replace(/^\s*>.*$/gm, '')
+  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+  .replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+  .replace(/https?:\/\/\S{40,}/g, '[link]')
+  .replace(/[ \t ]+/g, ' ')
+  .replace(/\n{2,}/g, '\n')
+  .trim();
+
 const inbox = mail.length
   ? mail.map(m => {
       const from = header(m, 'From').replace(/<.*>/, '').trim() || '(unknown)';
       const subj = header(m, 'Subject') || '(no subject)';
-      const snip = (m.snippet || '').slice(0, 300);
-      return `- ${from}: ${subj}\n  ${snip}`;
+      const raw = findPart(m.payload, 'text/plain')
+               || stripHtml(findPart(m.payload, 'text/html'))
+               || m.snippet || '';
+      const body = clean(raw).slice(0, 600);
+      return `- ${from}: ${subj}\n  ${body || '(no readable text)'}`;
     }).join('\n')
   : '(no new mail)';
 
@@ -225,9 +272,12 @@ Write a briefing, in this order:
 2. Coming up — one line per event with its time, over the next 24
    hours. Say "nothing scheduled" if the calendar is empty. Do not pad
    it out.
-3. Mail that plausibly needs a reply, and why. Name the sender and
-   what they want. If nothing does, say so rather than manufacturing an
-   item to fill the section.
+3. Mail that needs something from me — a reply, a payment, a form
+   returned, a booking confirmed, a decision someone is waiting on.
+   Name the sender, say what is being asked, and include any amount,
+   reference or deadline that appears. A bill or invoice belongs here
+   even though nobody expects a written reply. If nothing needs
+   anything, say so rather than manufacturing an item.
 4. Anything time-sensitive that connects the two — a meeting whose prep
    landed by email since the last check, a deadline in mail that falls
    inside the next 24 hours.
