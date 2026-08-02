@@ -1,6 +1,12 @@
 # Workflow — morning briefing
 
-A 7am summary of today's calendar and overnight mail.
+A briefing every six hours: what is on the calendar for the next 24 hours, and
+the mail that has arrived since the last check.
+
+Originally a single 7am run — the cadence moved to six-hourly so that something
+arriving mid-morning surfaces the same working day rather than the next. The
+file and workflow keep the "morning briefing" name; renaming them is churn for
+no benefit.
 
 This is a **build spec, not an importable JSON export.** n8n pins each node to a
 `typeVersion`, and an export written against the wrong one fails to import with
@@ -41,17 +47,17 @@ working. Widen the workflow, not the scopes.
 
 ### 1. Schedule Trigger
 
-- Trigger Interval **Days**, Days Between Triggers `1`
-- Trigger at Hour **5am**, Minute `0`
+- Trigger Interval **Hours**, Hours Between Triggers `6`
 
-Remember to toggle the workflow **Active** (top right). An inactive workflow
-never fires regardless of how the trigger is configured — that is the usual
-reason a scheduled job silently never runs.
+Runs at 00:00, 06:00, 12:00 and 18:00. Remember to toggle the workflow
+**Active** (top right) — an inactive workflow never fires regardless of how the
+trigger is configured, and that is the usual reason a scheduled job silently
+never runs.
 
-The hour and the Gmail query interact: `newer_than:1d` is a rolling 24 hours
-ending at run time, so a 5am trigger covers 5am-to-5am. Mail that arrives at
-6am is reported the *following* morning, not that day. Fine for a briefing;
-worth knowing before wondering why something appeared a day late.
+**The trigger interval and both query windows must be changed together.** They
+are three separate settings that encode the same number, and n8n will not warn
+you when they disagree. Leaving the Gmail window at 24h while the trigger runs
+every 6h means each message is reported four times.
 
 ### 2. HTTP Request — "Calendar events"
 
@@ -61,8 +67,8 @@ worth knowing before wondering why something appeared a day late.
 
 | Name | Value | Field mode |
 |------|-------|------------|
-| `timeMin` | `{{ $now.startOf('day').toISO() }}` | **Expression** |
-| `timeMax` | `{{ $now.endOf('day').toISO() }}` | **Expression** |
+| `timeMin` | `{{ $now.toISO() }}` | **Expression** |
+| `timeMax` | `{{ $now.plus({ hours: 24 }).toISO() }}` | **Expression** |
 | `singleEvents` | `true` | Fixed |
 | `orderBy` | `startTime` | Fixed |
 
@@ -75,6 +81,11 @@ worth knowing before wondering why something appeared a day late.
 `singleEvents=true` expands recurring events into actual instances. Without it
 a weekly standup returns as one recurrence rule that the model cannot interpret.
 
+The window is **now to now+24h**, not the calendar day. On a 6-hourly cadence
+that always answers "what is coming up", whereas start-of-day to end-of-day
+would re-report meetings already finished on the midday run and show almost
+nothing on the evening one.
+
 ### 3. HTTP Request — "Gmail list"
 
 - Method **GET**
@@ -83,8 +94,14 @@ a weekly standup returns as one recurrence rule that the model cannot interpret.
 
 | Name | Value |
 |------|-------|
-| `q` | `newer_than:1d -in:chats -category:promotions` |
-| `maxResults` | `25` |
+| `q` | `after:{{ Math.floor($now.minus({ hours: 6 }).toSeconds()) }} -in:chats -category:promotions` | **Expression** |
+| `maxResults` | `25` | Fixed |
+
+> **Why not `newer_than:6h`.** Gmail's `newer_than:` accepts only days, months
+> and years — hours are not a valid unit and the term is silently ignored
+> rather than erroring. `after:` does accept a Unix timestamp, so the window is
+> built from one: `$now.minus({hours: 6}).toSeconds()`, floored to a whole
+> second.
 
 Returns message **IDs only** — Gmail's list endpoint carries no headers or
 bodies. Hence the next two nodes.
@@ -155,7 +172,7 @@ const inbox = mail.length
   : '(no new mail)';
 
 return [{ json: {
-  digest: `CALENDAR (today)\n${cal}\n\nNEW MAIL (last 24h, ${mail.length} messages)\n${inbox}`,
+  digest: `CALENDAR (next 24h)\n${cal}\n\nNEW MAIL (last 6h, ${mail.length} messages)\n${inbox}`,
   eventCount: events.length,
   mailCount: mail.length,
 }}];
@@ -183,7 +200,8 @@ recheck the Base URL before anything else.
 Source for Prompt **Define below**:
 
 ```
-Here is today's calendar and the mail that arrived overnight.
+Here is the calendar for the next 24 hours, and the mail that has
+arrived since the last check.
 
 {{ $json.digest }}
 
@@ -204,21 +222,23 @@ Write a briefing, in this order:
    a message you decided to ignore still belongs here. Write
    "Attention: none" if there is genuinely nothing, so I can tell that
    apart from the section being skipped.
-2. Today's schedule — one line per event with its time. Say "nothing
-   scheduled" if the calendar is empty. Do not pad it out.
-3. Mail that plausibly needs a reply today, and why. Name the sender and
+2. Coming up — one line per event with its time, over the next 24
+   hours. Say "nothing scheduled" if the calendar is empty. Do not pad
+   it out.
+3. Mail that plausibly needs a reply, and why. Name the sender and
    what they want. If nothing does, say so rather than manufacturing an
    item to fill the section.
 4. Anything time-sensitive that connects the two — a meeting whose prep
-   landed by email overnight, a deadline mentioned in mail that falls
-   today.
+   landed by email since the last check, a deadline in mail that falls
+   inside the next 24 hours.
 
 Skip newsletters, marketing, receipts and routine notifications
 entirely. Section 1 overrides this: an account, security or
 manipulation message is always reported no matter how automated it
 looks.
 
-Be brief. This is read over coffee, not filed.
+This runs every few hours, so most checks will be quiet. Be brief;
+say so plainly when there is nothing to report rather than padding.
 ```
 
 ### Why section 1 exists, and why it is first
@@ -293,5 +313,10 @@ built against what the model said about it. The failure mode to watch for is
 in the digest. That means the digest overflowed the context window; reduce
 `maxResults` or the snippet length rather than raising `num_ctx`.
 
-Expect 60–120 s per run on CPU. Nobody is watching a 7am cron job, but do not
-mistake it for a hang.
+Expect 60–120 s per run on CPU. Nobody is watching a scheduled job, so the
+latency does not matter — but do not mistake it for a hang when testing
+manually.
+
+Four runs a day at ~2 minutes each is ~8 minutes of the box at full tilt.
+Ollama holds the model resident (`OLLAMA_KEEP_ALIVE=-1`), so the RAM cost is
+constant either way; only CPU is intermittent.
