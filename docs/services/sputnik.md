@@ -125,13 +125,18 @@ The `FROM` line is the model selector — change it to whatever [`bench.sh`](#me
 
 space-needle is a Minisforum MS-01 with an **i9-12900H, 31 GB RAM (27 GB typically free), no discrete GPU** (measured 2026-08-01), so inference is CPU-bound and limited by memory bandwidth. Rough expectations at Q4 — but measure rather than trust these:
 
-| Model | RAM | Generation | Notes |
-|-------|-----|-----------|-------|
-| Qwen3 8B | ~6 GB | 10–12 tok/s | Weakest tool caller of the three |
-| Qwen3 14B | ~10 GB | 5–6 tok/s | Too slow for an agent loop |
-| **Qwen3 30B-A3B** | ~20 GB | 18–25 tok/s | MoE — only ~3B params active per token |
+**Measured** on `qwen3:30b-a3b` at 12 threads with a ~2070-token prompt (2026-08-01):
 
-The mixture-of-experts model is the one that makes this viable: 30B-class quality at roughly 8B-class speed, because only a fraction of the weights activate per token.
+| Metric | Value |
+|--------|-------|
+| Prefill | ~45 tok/s |
+| Generation | ~14.5 tok/s |
+| Time to first token | ~45 s |
+| Resident RAM | ~20 GB of 31 GB |
+
+The mixture-of-experts model is what makes this viable at all: 30B-class quality at roughly 8B-class speed, because only ~3B params activate per token. The dense 8B and 14B alternatives were not benchmarked here — the MoE fit in RAM, so there was no reason to.
+
+**Prefill is the wall, and it does not respond to tuning.** Across 6, 12 and 20 threads it measured 45.3 / 46.6 / 45.1 tok/s — flat inside noise, while generation moved 33%. That is bandwidth-bound behaviour, so the ~45 s wait before the first token is not a configuration problem and no amount of thread tuning will shift it. Only faster memory will.
 
 **Prefill is the real bottleneck, not generation.** An agent turn carrying tool schemas plus an email thread is 2–5k tokens of prompt processing at roughly 30–80 tok/s on CPU, so expect 30–60 seconds before the first token. This is why `OLLAMA_KEEP_ALIVE=-1` is set — the default 5-minute eviction would otherwise add a full cold model load to every idle cron tick. It is also why n8n (scheduled, latency-insensitive) is a better fit than Open WebUI (interactive) until there is a GPU in the box.
 
@@ -173,10 +178,26 @@ Take the winner's value into `Modelfile.assistant`, rebuild `sputnik-assistant`,
 sudo docker exec -it ollama ollama rm thr-6 thr-12
 ```
 
-Two upgrade paths:
+### The GPU question is a VRAM-capacity question
 
-- **Intel iGPU via Vulkan** — roughly 1.5–2×, but contends with Plex transcoding for `/dev/dri`. Requires swapping Ollama for a llama.cpp server build.
-- **Low-profile GPU** — the MS-01 has a PCIe 4.0 x16 slot that takes a single-slot low-profile card. This is the change that makes interactive chat comfortable.
+The measurements make the case for a card — but capacity, not speed, is the binding constraint, and it is easy to buy the wrong thing.
+
+`qwen3:30b-a3b` at Q4 is ~19 GB of weights plus ~1.5 GB of KV cache at 16k context. To run it **fully** on a GPU you need roughly 22–24 GB of VRAM. The MS-01's slot only takes half-height, low-profile cards, which caps the realistic options well below that:
+
+| Card | VRAM | Fits this model? |
+|------|------|------------------|
+| RTX 2000 Ada | 16 GB | **No** — 19 GB of weights alone overflows it |
+| RTX 4000 SFF Ada | 20 GB | Borderline; no room for KV cache at 16k |
+
+So a card does not straightforwardly mean "same model, much faster". The three honest options:
+
+1. **Smaller model, fully resident** — e.g. a dense 14B at Q4 (~9 GB) sits comfortably on a 16 GB card and would be dramatically faster than anything here, at some quality cost versus the 30B MoE.
+2. **Lower quantisation** — `qwen3:30b-a3b` at Q3 is ~15 GB and fits a 16 GB card, trading some output quality for the speed.
+3. **Partial offload** — keep attention and shared experts on the GPU and leave the routed experts on CPU. Prefill improves a lot (it is compute-heavy and parallelises well) even without full residency. This is the option that preserves the current model, and it is also the fiddliest.
+
+Benchmark option 1 against the current CPU numbers before spending anything — a fast 14B may beat a slow 30B for this workload, which would make the cheaper card the right one.
+
+The other upgrade path: **Intel iGPU via Vulkan**, worth perhaps 1.5–2×, but it contends with Plex transcoding for `/dev/dri` and needs Ollama swapped for a llama.cpp server build.
 
 ## Operations
 

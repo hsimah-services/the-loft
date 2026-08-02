@@ -30,10 +30,18 @@ PARAMETER num_ctx 16384
 # slower E-cores — they become stragglers and the token waits on the slowest.
 # Pinning to the P-cores is usually faster despite using fewer cores.
 #
-# 6 is the P-core count. Worth A/B-ing against 12 (P-core threads) and against
-# removing this line entirely (Ollama's default) on this specific workload —
-# see the bench.sh comparison recipe in docs/services/sputnik.md.
-PARAMETER num_thread 6
+# Measured on this box 2026-08-01 (bench.sh, qwen3:30b-a3b, ~2070-token prompt):
+#
+#   threads          prefill t/s    gen t/s
+#   20 (default)            45.3       10.9
+#    6 (P-cores)            46.6       11.8
+#   12 (P-core threads)     45.1       14.5   ← winner, +33% gen over default
+#
+# 12 rather than 6: hyperthreading on the P-cores is worth having, and the
+# E-cores are what drag. Prefill is unmoved by any of this — it is bandwidth-
+# bound, not core-bound, which is also why first-token latency stays ~45s.
+# Re-measure if the model or the RAM configuration changes.
+PARAMETER num_thread 12
 
 SYSTEM """
 You are Sputnik, a personal assistant running locally on a home server. You
