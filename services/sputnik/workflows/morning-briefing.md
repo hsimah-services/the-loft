@@ -50,12 +50,18 @@ working. Widen the workflow, not the scopes.
 - URL `https://www.googleapis.com/calendar/v3/calendars/primary/events`
 - Send Query Parameters **on**:
 
-| Name | Value |
-|------|-------|
-| `timeMin` | `={{ $now.startOf('day').toISO() }}` |
-| `timeMax` | `={{ $now.endOf('day').toISO() }}` |
-| `singleEvents` | `true` |
-| `orderBy` | `startTime` |
+| Name | Value | Field mode |
+|------|-------|------------|
+| `timeMin` | `{{ $now.startOf('day').toISO() }}` | **Expression** |
+| `timeMax` | `{{ $now.endOf('day').toISO() }}` | **Expression** |
+| `singleEvents` | `true` | Fixed |
+| `orderBy` | `startTime` | Fixed |
+
+> **Expression vs Fixed.** Hover a value field and switch it from *Fixed* to
+> *Expression* before entering anything containing `{{ }}`, or n8n sends the
+> literal braces. Do **not** type a leading `=` — that is how n8n stores
+> expressions internally (you will see it in an exported JSON), but typing it
+> in the UI makes it part of the value and the request fails.
 
 `singleEvents=true` expands recurring events into actual instances. Without it
 a weekly standup returns as one recurrence rule that the model cannot interpret.
@@ -89,7 +95,8 @@ items — handled in the Code node.
 ### 5. HTTP Request — "Gmail message"
 
 - Method **GET**
-- URL: `=https://gmail.googleapis.com/gmail/v1/users/me/messages/{{ $json.id }}`
+- URL — set the field to **Expression** mode, then enter (no leading `=`):
+  `https://gmail.googleapis.com/gmail/v1/users/me/messages/{{ $json.id }}`
 - Send Query Parameters **on**:
 
 | Name | Value |
@@ -147,9 +154,20 @@ return [{ json: {
 
 ### 7. Ollama Chat Model
 
-- Base URL `http://ollama:11434` — the container name on the `loft-proxy`
-  bridge. **Not** `localhost`, which inside the n8n container is n8n itself.
-- Model `sputnik-assistant`
+This node asks for a credential. It is **not** authentication — Ollama has none
+(which is exactly why it is bound to loopback and absent from the Caddyfile).
+n8n models the connection target as a credential, and the only field is a URL.
+
+- **Credential → Create new** → *Ollama account*
+- **Base URL:** `http://ollama:11434`
+
+  The container name on the `loft-proxy` bridge. **Not** `localhost` — inside
+  the n8n container that is n8n itself, and **not** `127.0.0.1:11434`, which is
+  the host-side loopback publish and unreachable from another container.
+- **Model:** `sputnik-assistant`
+
+If the model dropdown is empty after saving, n8n could not reach Ollama —
+recheck the Base URL before anything else.
 
 ### 8. Basic LLM Chain
 
