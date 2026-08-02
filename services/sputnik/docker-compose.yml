@@ -88,6 +88,16 @@ services:
     # n8n's image runs as uid 1000; /opt is owned littledog:pack-member (1003).
     user: "1003:1003"
     environment:
+      # uid 1003 has no /etc/passwd entry inside this image, so Node's
+      # os.homedir() falls back to "/" and n8n tries to mkdir /.n8n on the
+      # read-only-to-it root filesystem — EACCES, crash loop, and the bind
+      # mount below never gets consulted at all. Both paths are therefore
+      # pinned explicitly rather than derived from $HOME:
+      #   N8N_USER_FOLDER  n8n appends ".n8n" to it → /home/node/.n8n (the mount)
+      #   HOME             a writable dir for anything else that wants one
+      # Do not remove these while `user:` is set to a uid the image doesn't know.
+      - N8N_USER_FOLDER=/home/node
+      - HOME=/home/node/.n8n
       - N8N_HOST=n8n.${LOFT_DOMAIN}
       - N8N_PORT=5678
       - N8N_PROTOCOL=https

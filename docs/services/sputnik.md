@@ -253,16 +253,28 @@ sudo docker stats ollama --no-stream
 
 **Fix:** Google Cloud Console → APIs & Services → OAuth consent screen → **Publish app**, then re-authorise the credential in n8n. Click through the "unverified app" warning as the developer.
 
-### n8n container exits immediately with a permissions error on `/home/node/.n8n`
+### n8n crash-loops with `EACCES: permission denied, mkdir '/.n8n'`
 
-**Cause:** The `n8nio/n8n` image runs as uid 1000, but `/opt` directories in this fleet are owned `littledog:pack-member` (1003). The compose file pins `user: "1003:1003"` to match; if that line is lost, or the directory was created by hand as root, n8n cannot write its database.
+**Symptom:** `docker ps -a` shows `Restarting (1)`, `/opt/sputnik/n8n` is empty (link count 2 — no subdirectories), and the log reads:
 
-**Fix:**
-
-```bash
-sudo chown -R littledog:pack-member /opt/sputnik/n8n
-sudo docker restart n8n
 ```
+Error: Failed to load command "start"
+Error: EACCES: permission denied, mkdir '/.n8n'
+```
+
+**Cause:** Note the path — `/.n8n` at the filesystem **root**, not `/home/node/.n8n`. The compose file sets `user: "1003:1003"` to match the fleet's `littledog` convention, but uid 1003 has no entry in this image's `/etc/passwd`. Node's `os.homedir()` falls back to `/` for an unknown uid, so n8n resolves its data directory to `/.n8n`, fails to create it on a root filesystem it cannot write, and exits before touching the bind mount.
+
+**Chowning the volume does nothing** — the mount at `/home/node/.n8n` was never in the resolved path. This is a `$HOME`-resolution bug, not a file-ownership one, and the empty data directory is the tell that distinguishes them: an ownership problem produces a *partially* written directory, this produces an untouched one.
+
+**Fix:** `N8N_USER_FOLDER` and `HOME` are both pinned explicitly in `docker-compose.yml` so nothing depends on `$HOME` resolution. If they have been removed, restore them:
+
+```yaml
+environment:
+  - N8N_USER_FOLDER=/home/node   # n8n appends ".n8n" → /home/node/.n8n
+  - HOME=/home/node/.n8n         # writable dir for anything else
+```
+
+Then `loft-ctl rebuild sputnik`. The same trap applies to any image whose entrypoint assumes its own baked-in user — check for it whenever adding `user:` to a service that did not previously have one.
 
 ### Every request takes 60+ seconds even for a trivial prompt
 
