@@ -46,8 +46,15 @@ services:
     restart: unless-stopped
     profiles:
       - chat
+    # required:false because ollama lives in a different profile. The short
+    # form (`depends_on: [ollama]`) makes it a hard reference, so validating or
+    # running this profile alone fails with "depends on undefined service".
+    # This keeps the start ordering when engine runs on the same host, and is a
+    # no-op when it does not — which is the actual relationship: these consume
+    # ollama over the bridge and tolerate it arriving late or living elsewhere.
     depends_on:
-      - ollama
+      ollama:
+        required: false
     logging:
       driver: json-file
       options:
@@ -77,8 +84,15 @@ services:
     restart: unless-stopped
     profiles:
       - agent
+    # required:false because ollama lives in a different profile. The short
+    # form (`depends_on: [ollama]`) makes it a hard reference, so validating or
+    # running this profile alone fails with "depends on undefined service".
+    # This keeps the start ordering when engine runs on the same host, and is a
+    # no-op when it does not — which is the actual relationship: these consume
+    # ollama over the bridge and tolerate it arriving late or living elsewhere.
     depends_on:
-      - ollama
+      ollama:
+        required: false
     logging:
       driver: json-file
       options:

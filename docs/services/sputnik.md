@@ -254,6 +254,38 @@ sudo docker stats ollama --no-stream
 
 **Fix:** Google Cloud Console → APIs & Services → OAuth consent screen → **Publish app**, then re-authorise the credential in n8n. Click through the "unverified app" warning as the developer.
 
+### CI fails with "depends on undefined service"
+
+**Symptom:** the compose validation job fails on one profile but the stack runs
+fine on space-needle:
+
+```
+service "open-webui" depends on undefined service "ollama"
+```
+
+**Cause:** `depends_on` in its short list form is a **hard** reference. When a
+profile is validated on its own — `COMPOSE_PROFILES=chat` — `ollama` is not in
+the active set, and the dependency dangles. The full `engine,chat,agent` combo
+passes, which is why this shows up in CI rather than in normal use.
+
+**Fix:** use the long form with `required: false`, which is what these services
+actually mean — start after `ollama` when it runs on the same host, no-op when
+it does not:
+
+```yaml
+depends_on:
+  ollama:
+    required: false
+```
+
+Needs Compose v2.20 or newer. Removing `depends_on` entirely also works and
+costs almost nothing here: both consumers reach Ollama over the bridge and
+tolerate it starting late.
+
+**The general rule:** a `depends_on` that crosses a profile boundary must be
+`required: false`. Worth checking whenever a profile is added to an existing
+service.
+
 ### n8n crash-loops with `EACCES: permission denied, mkdir '/.n8n'`
 
 **Symptom:** `docker ps -a` shows `Restarting (1)`, `/opt/sputnik/n8n` is empty (link count 2 — no subdirectories), and the log reads:
