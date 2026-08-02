@@ -1,51 +1,123 @@
 # Workflow — morning briefing
 
-The first workflow worth building: a 7am summary of today's calendar and
-overnight mail.
+A 7am summary of today's calendar and overnight mail.
 
-This is a **build spec, not an importable JSON export.** n8n's workflow JSON
-pins each node to a `typeVersion`, and a file written against the wrong version
-fails to import with an unhelpful error. Building it once in the UI from this
-spec takes about ten minutes and cannot go stale the way a checked-in export
-would. Export your own JSON afterwards if you want a backup — that one will be
-correct by construction.
+This is a **build spec, not an importable JSON export.** n8n pins each node to a
+`typeVersion`, and an export written against the wrong one fails to import with
+an unhelpful error. Building from this spec takes ~15 minutes and cannot go
+stale. Export your own JSON afterwards as a backup — that one is correct by
+construction.
+
+## Why HTTP Request nodes instead of the Gmail node
+
+n8n's built-in **Gmail** and **Google Calendar** nodes require their own
+credential types (`Gmail OAuth2 API`, `Google Calendar OAuth2 API`) whose
+scopes are **hardcoded in the credential definition** — there is no scope field
+to narrow. The Gmail one requests send, modify and delete, because the node
+supports those operations.
+
+Granting that would give a model reading untrusted email the ability to send
+and delete mail. Sputnik is deliberately read-only (see the service doc), so
+the built-in nodes are unusable here.
+
+Calling the REST APIs directly through **HTTP Request** nodes with the generic
+`Google OAuth2 API` credential keeps the granted scopes at exactly:
+
+```
+https://www.googleapis.com/auth/gmail.readonly
+https://www.googleapis.com/auth/calendar.readonly
+```
+
+Every HTTP Request node below uses the same setup:
+
+- **Authentication:** Predefined Credential Type
+- **Credential Type:** Google OAuth2 API
+- **Credential:** the one holding the two read-only scopes
+
+If a request ever returns `403 insufficient permissions`, that is the boundary
+working. Widen the workflow, not the scopes.
 
 ## Nodes
 
 ### 1. Schedule Trigger
 
-- Trigger Interval: **Days**, Days Between Triggers `1`
-- Trigger at Hour: **7am**, Trigger at Minute `0`
+- Trigger Interval **Days**, Days Between Triggers `1`
+- Trigger at Hour **7am**, Minute `0`
 
-### 2. Google Calendar — "Today's events"
+### 2. HTTP Request — "Calendar events"
 
-- Credential: the Google OAuth2 credential
-- Resource **Event**, Operation **Get Many**
-- Calendar: your primary
-- Return All: **on**
-- Options → After: `{{ $now.startOf('day').toISO() }}`
-- Options → Before: `{{ $now.endOf('day').toISO() }}`
+- Method **GET**
+- URL `https://www.googleapis.com/calendar/v3/calendars/primary/events`
+- Send Query Parameters **on**:
 
-### 3. Gmail — "Overnight mail"
+| Name | Value |
+|------|-------|
+| `timeMin` | `={{ $now.startOf('day').toISO() }}` |
+| `timeMax` | `={{ $now.endOf('day').toISO() }}` |
+| `singleEvents` | `true` |
+| `orderBy` | `startTime` |
 
-- Same credential
-- Resource **Message**, Operation **Get Many**
-- Return All: **off**, Limit `25`
-- Options → Search: `newer_than:1d -in:chats`
-- Simplify: **on** (returns subject/from/snippet without the raw MIME payload)
+`singleEvents=true` expands recurring events into actual instances. Without it
+a weekly standup returns as one recurrence rule that the model cannot interpret.
 
-> The limit and the `newer_than:1d` filter both matter. The model has a 16k
-> context; an unbounded fetch will silently overflow it and the summary will
-> quietly omit whatever fell out.
+### 3. HTTP Request — "Gmail list"
 
-### 4. Code — "Build digest"
+- Method **GET**
+- URL `https://gmail.googleapis.com/gmail/v1/users/me/messages`
+- Send Query Parameters **on**:
 
-Runs once for all items. Truncates aggressively — the goal is a compact block
-the model can hold entirely in context, not fidelity.
+| Name | Value |
+|------|-------|
+| `q` | `newer_than:1d -in:chats -category:promotions` |
+| `maxResults` | `25` |
+
+Returns message **IDs only** — Gmail's list endpoint carries no headers or
+bodies. Hence the next two nodes.
+
+> The cap and the date filter both matter. The model holds 16k of context; an
+> unbounded fetch overflows it silently and the summary omits whatever fell out,
+> with no error.
+
+### 4. Split Out — "One per message"
+
+- Field to Split Out: `messages`
+
+Turns the single response into one item per message so the next node runs per
+message. If there is no new mail the field is absent and the branch produces no
+items — handled in the Code node.
+
+### 5. HTTP Request — "Gmail message"
+
+- Method **GET**
+- URL: `=https://gmail.googleapis.com/gmail/v1/users/me/messages/{{ $json.id }}`
+- Send Query Parameters **on**:
+
+| Name | Value |
+|------|-------|
+| `format` | `metadata` |
+| `metadataHeaders` | `From` |
+| `metadataHeaders` | `Subject` |
+
+`format=metadata` returns headers plus Gmail's own `snippet` and never
+downloads message bodies — less data, faster, and a smaller blast radius if a
+message is hostile. Add `metadataHeaders` twice; n8n sends repeated keys, which
+is what the API expects.
+
+Set **Settings → Always Output Data** so an empty inbox doesn't halt the run.
+
+### 6. Code — "Build digest"
+
+Mode: **Run Once for All Items**.
 
 ```javascript
-const events = $('Today\'s events').all().map(i => i.json);
-const mail   = $('Overnight mail').all().map(i => i.json);
+const events = $('Calendar events').first().json.items || [];
+
+let mail = [];
+try {
+  mail = $('Gmail message').all().map(i => i.json);
+} catch (e) {
+  mail = [];            // node produced no items — no new mail
+}
 
 const cal = events.length
   ? events.map(e => {
@@ -54,10 +126,13 @@ const cal = events.length
     }).join('\n')
   : '(nothing scheduled)';
 
+const header = (m, name) =>
+  (m.payload?.headers || []).find(h => h.name === name)?.value || '';
+
 const inbox = mail.length
   ? mail.map(m => {
-      const from = (m.From || m.from || '?').replace(/<.*>/, '').trim();
-      const subj = m.Subject || m.subject || '(no subject)';
+      const from = header(m, 'From').replace(/<.*>/, '').trim() || '(unknown)';
+      const subj = header(m, 'Subject') || '(no subject)';
       const snip = (m.snippet || '').slice(0, 300);
       return `- ${from}: ${subj}\n  ${snip}`;
     }).join('\n')
@@ -70,15 +145,15 @@ return [{ json: {
 }}];
 ```
 
-### 5. Ollama Chat Model
+### 7. Ollama Chat Model
 
-- Base URL: `http://ollama:11434` — container name on the `loft-proxy` bridge,
-  **not** `localhost`, which inside the n8n container is n8n itself
-- Model: `sputnik-assistant`
+- Base URL `http://ollama:11434` — the container name on the `loft-proxy`
+  bridge. **Not** `localhost`, which inside the n8n container is n8n itself.
+- Model `sputnik-assistant`
 
-### 6. Basic LLM Chain
+### 8. Basic LLM Chain
 
-Source for Prompt: **Define below**, with:
+Source for Prompt **Define below**:
 
 ```
 Here is today's calendar and the mail that arrived overnight.
@@ -92,9 +167,9 @@ Write a briefing, in this order:
 2. Mail that plausibly needs a reply today, and why. Name the sender and
    what they want. If nothing does, say so rather than manufacturing an
    item to fill the section.
-3. Anything time-sensitive that connects the two — a meeting whose
-   prep landed by email overnight, a deadline mentioned in mail that
-   falls today.
+3. Anything time-sensitive that connects the two — a meeting whose prep
+   landed by email overnight, a deadline mentioned in mail that falls
+   today.
 
 Skip newsletters, notifications, receipts and automated mail entirely
 unless one contains something genuinely time-critical.
@@ -102,34 +177,33 @@ unless one contains something genuinely time-critical.
 Be brief. This is read over coffee, not filed.
 ```
 
-The persona, the read-only framing and the untrusted-input rules all come from
-`sputnik-assistant` itself (see `Modelfile.assistant`) — do not restate them
-here, and do not paste them into the n8n prompt field. Keeping them in one
-place is the entire reason the model is built rather than configured per
-workflow.
+Persona, the read-only framing and the untrusted-input rules all come from
+`sputnik-assistant` itself (`Modelfile.assistant`). Do not restate them here —
+keeping them in one place is the whole reason the model is built rather than
+configured per workflow.
 
 ## Where the output goes
 
-**The read-only scope means this workflow cannot email you the briefing.** No
-`gmail.send`. Pick a delivery route:
+**The read-only scope means this workflow cannot email you the briefing.** Pick
+a delivery route:
 
 | Option | Effort | Notes |
 |--------|--------|-------|
-| n8n execution log | none | Works today. Open n8n → Executions → read the last run. Fine for validating the workflow, tedious as a daily habit. |
-| ntfy | ~30 min | Self-hosted push to phone and desktop. The natural fit for this fleet — one small container, an HTTP Request node, no third party, no new Google scope. |
-| Write to a file | ~15 min | Drop it somewhere Homepage can render as a widget. |
+| n8n execution log | none | Works today. Executions → read the last run. Fine for validating, tedious daily. |
+| ntfy | ~30 min | Self-hosted push to phone and desktop. Natural fit for this fleet — one container, an HTTP Request node, no third party, no new Google scope. |
+| Write to a file | ~15 min | Somewhere Homepage can render as a widget. |
 | Separate SMTP credential | ~15 min | n8n's Send Email node with its own SMTP account is unrelated to the Gmail OAuth scope, so this does **not** widen the assistant's access. |
 
 Start with the execution log to prove the workflow, then choose. ntfy is the
-recommendation — it keeps everything on the LAN and adds no account surface.
+recommendation — stays on the LAN, adds no account surface.
 
 ## Validating it
 
-Run it manually before trusting the schedule, and check the digest the Code
-node produced against what the model said about it. The failure mode to watch
-for is fabricated detail — a sender or time that appears in the summary but not
-in the digest. That means the digest overflowed the context window; reduce the
-Gmail limit or the snippet length rather than raising `num_ctx`.
+Run manually before trusting the schedule, and check the digest the Code node
+built against what the model said about it. The failure mode to watch for is
+**fabricated detail** — a sender, time or deadline in the summary that is not
+in the digest. That means the digest overflowed the context window; reduce
+`maxResults` or the snippet length rather than raising `num_ctx`.
 
-Expect roughly 60–120 seconds per run on CPU. Nobody is watching, so this does
-not matter — but do not mistake it for a hang.
+Expect 60–120 s per run on CPU. Nobody is watching a 7am cron job, but do not
+mistake it for a hang.
