@@ -42,7 +42,16 @@ working. Widen the workflow, not the scopes.
 ### 1. Schedule Trigger
 
 - Trigger Interval **Days**, Days Between Triggers `1`
-- Trigger at Hour **7am**, Minute `0`
+- Trigger at Hour **5am**, Minute `0`
+
+Remember to toggle the workflow **Active** (top right). An inactive workflow
+never fires regardless of how the trigger is configured — that is the usual
+reason a scheduled job silently never runs.
+
+The hour and the Gmail query interact: `newer_than:1d` is a rolling 24 hours
+ending at run time, so a 5am trigger covers 5am-to-5am. Mail that arrives at
+6am is reported the *following* morning, not that day. Fine for a briefing;
+worth knowing before wondering why something appeared a day late.
 
 ### 2. HTTP Request — "Calendar events"
 
