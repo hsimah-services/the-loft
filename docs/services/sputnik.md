@@ -237,7 +237,7 @@ sudo docker stats ollama --no-stream
 5. Open `https://sputnik.loft.hsimah.com`, create the admin account, select **sputnik-assistant** as the model, then set `ENABLE_SIGNUP=false` and `loft-ctl rebuild sputnik`
 6. Open `https://n8n.loft.hsimah.com`, create the owner account
 7. In n8n → Credentials → Google OAuth2 API, paste the client ID and secret, click **Connect my account** from a LAN browser
-8. Build the first workflow: Schedule Trigger → Gmail (Get Many) → Ollama Chat Model (`sputnik-assistant`) → summary
+8. Build the first workflow — node-by-node spec in [`services/sputnik/workflows/morning-briefing.md`](../../services/sputnik/workflows/morning-briefing.md)
 
 ## Related
 
