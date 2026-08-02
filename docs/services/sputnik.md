@@ -57,7 +57,8 @@ Keeping n8n off the tunnel is the recommended posture: it stores a live Google O
 ```
 /mammoth/sputnik/models        Ollama model blobs (~20 GB for a Q4 30B MoE)
 /opt/sputnik/open-webui        Open WebUI SQLite DB, users, chat history
-/opt/sputnik/n8n               n8n SQLite DB + encrypted credentials
+/opt/sputnik/n8n               n8n's container home (mounted as /home/node)
+/opt/sputnik/n8n/.n8n          └─ SQLite DB + encrypted credentials
 ```
 
 Model weights live on `/mammoth` because they dwarf every other service's config; the two small SQLite databases stay on the root disk under `/opt` with everything else.
@@ -266,15 +267,21 @@ Error: EACCES: permission denied, mkdir '/.n8n'
 
 **Chowning the volume does nothing** — the mount at `/home/node/.n8n` was never in the resolved path. This is a `$HOME`-resolution bug, not a file-ownership one, and the empty data directory is the tell that distinguishes them: an ownership problem produces a *partially* written directory, this produces an untouched one.
 
-**Fix:** `N8N_USER_FOLDER` and `HOME` are both pinned explicitly in `docker-compose.yml` so nothing depends on `$HOME` resolution. If they have been removed, restore them:
+**Fix:** the compose file mounts the **whole home** and pins both variables:
 
 ```yaml
 environment:
   - N8N_USER_FOLDER=/home/node   # n8n appends ".n8n" → /home/node/.n8n
-  - HOME=/home/node/.n8n         # writable dir for anything else
+  - HOME=/home/node
+volumes:
+  - /opt/sputnik/n8n:/home/node  # the home itself, not .n8n underneath it
 ```
 
-Then `loft-ctl rebuild sputnik`. The same trap applies to any image whose entrypoint assumes its own baked-in user — check for it whenever adding `user:` to a service that did not previously have one.
+Mounting one level down (`/home/node/.n8n`) gets n8n's own database working but leaves `/home/node` unwritable, and the next start fails on `mkdir '/home/node/.cache'` instead — n8n writes `.n8n`, but other code reaches for sibling directories under the home. Chasing those one `EACCES` at a time does not converge. The home itself has to be the mount.
+
+Then `loft-ctl rebuild sputnik`.
+
+**The general trap:** any image built around its own baked-in user breaks when `user:` overrides it with a uid absent from the image's `/etc/passwd`. Two independent things go wrong — `$HOME` stops resolving, and paths owned by the image's user stop being writable. Ollama and Open WebUI are unaffected because they run as root and never consult `$HOME`. Treat this as the default suspicion whenever adding `user:` to a service that did not previously have one.
 
 ### Every request takes 60+ seconds even for a trivial prompt
 

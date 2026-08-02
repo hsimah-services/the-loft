@@ -68,7 +68,7 @@ dnsmasq inside `mushr-dns` is the LAN's primary resolver. Set the router's DHCP 
   /pawst/hblake-html              hbla.ke static site (deployed by deploy-pull.sh)
   /pawst/hsimah-html              hsimah.com static site (deployed by deploy-pull.sh)
   /sputnik/open-webui             Open WebUI database, users, chat history
-  /sputnik/n8n                    n8n database + encrypted credentials
+  /sputnik/n8n                    n8n container home; DB + credentials in .n8n/
 ```
 
 `/opt` config dirs are owned `littledog:pack-member` (755). `/mammoth` media dirs are 775. Houstn's Homepage config is the exception — no `/opt` dir, the YAML files are bind-mounted directly from `services/houstn/homepage-config/` in the repo.
