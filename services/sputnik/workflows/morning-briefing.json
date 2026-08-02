@@ -1,0 +1,285 @@
+{
+  "name": "Sputnik — morning briefing",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "e462ab7d-639c-45a3-97ac-72b065bdab78",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Here is today's calendar and the mail that arrived overnight.\n\n{{ $json.digest }}\n\nWrite a briefing, in this order:\n\n1. Today's schedule — one line per event with its time. Say \"nothing\n   scheduled\" if the calendar is empty. Do not pad it out.\n2. Mail that plausibly needs a reply today, and why. Name the sender and\n   what they want. If nothing does, say so rather than manufacturing an\n   item to fill the section.\n3. Anything time-sensitive that connects the two — a meeting whose prep\n   landed by email overnight, a deadline mentioned in mail that falls\n   today.\n\nSkip newsletters, notifications, receipts and automated mail entirely\nunless one contains something genuinely time-critical.\n\nBe brief. This is read over coffee, not filed.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1456,
+        0
+      ],
+      "id": "f5d97a19-50c2-41e7-8ec9-e74d6f91f406",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "model": "sputnik-assistant:latest",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        1456,
+        176
+      ],
+      "id": "06ebc080-dab1-4bfc-b1ee-5bc7021089ee",
+      "name": "Ollama Chat Model",
+      "credentials": {
+        "ollamaApi": {
+          "id": "K36QQ9WeznF5PjZP",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "timeMin",
+              "value": "={{ $now.startOf('day').toISO() }}"
+            },
+            {
+              "name": "timeMax",
+              "value": "={{ $now.endOf('day').toISO() }}"
+            },
+            {
+              "name": "singleEvents",
+              "value": "true"
+            },
+            {
+              "name": "orderBy",
+              "value": "startTime"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "d4904ada-7537-47fb-b742-76520348a3f4",
+      "name": "Calendar events",
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "lnToFeiSaIvnPVKL",
+          "name": "candymountain.home@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "newer_than:1d -in:chats -category:promotions"
+            },
+            {
+              "name": "maxResults",
+              "value": "25"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "62493fbb-72a6-43af-b6c5-c30d20540a19",
+      "name": "Gmail headers",
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "lnToFeiSaIvnPVKL",
+          "name": "candymountain.home@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/messages/{{ $json.id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "format",
+              "value": "metadata"
+            },
+            {
+              "name": "metadataHeaders",
+              "value": "From"
+            },
+            {
+              "name": "metadataHeaders",
+              "value": "Subject"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        832,
+        0
+      ],
+      "id": "795f1066-df94-48fc-9935-c2dcd5e0c6e5",
+      "name": "Gmail message",
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "lnToFeiSaIvnPVKL",
+          "name": "candymountain.home@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "messages",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        624,
+        0
+      ],
+      "id": "3a23ac3d-c589-4ef9-9259-68fdbdfb9f8c",
+      "name": "Process Gmail headers"
+    },
+    {
+      "parameters": {
+        "jsCode": "const events = $('Calendar events').first().json.items || [];\n\nlet mail = [];\ntry {\n  mail = $('Gmail message').all().map(i => i.json);\n} catch (e) {\n  mail = [];            // node produced no items — no new mail\n}\n\nconst cal = events.length\n  ? events.map(e => {\n      const start = e.start?.dateTime || e.start?.date || '?';\n      return `- ${start} — ${e.summary || '(no title)'}`;\n    }).join('\\n')\n  : '(nothing scheduled)';\n\nconst header = (m, name) =>\n  (m.payload?.headers || []).find(h => h.name === name)?.value || '';\n\nconst inbox = mail.length\n  ? mail.map(m => {\n      const from = header(m, 'From').replace(/<.*>/, '').trim() || '(unknown)';\n      const subj = header(m, 'Subject') || '(no subject)';\n      const snip = (m.snippet || '').slice(0, 300);\n      return `- ${from}: ${subj}\\n  ${snip}`;\n    }).join('\\n')\n  : '(no new mail)';\n\nreturn [{ json: {\n  digest: `CALENDAR (today)\\n${cal}\\n\\nNEW MAIL (last 24h, ${mail.length} messages)\\n${inbox}`,\n  eventCount: events.length,\n  mailCount: mail.length,\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "27db4985-51b6-4e0c-aafa-26155ac529ae",
+      "name": "Build digest"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Calendar events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar events": {
+      "main": [
+        [
+          {
+            "node": "Gmail headers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail headers": {
+      "main": [
+        [
+          {
+            "node": "Process Gmail headers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail message": {
+      "main": [
+        [
+          {
+            "node": "Build digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Gmail headers": {
+      "main": [
+        [
+          {
+            "node": "Gmail message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build digest": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": []
+}
