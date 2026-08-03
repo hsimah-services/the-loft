@@ -1,12 +1,12 @@
-# Workflow — morning briefing
+# Workflow — briefing
 
 A briefing every six hours: what is on the calendar for the next 24 hours, and
 the mail that has arrived since the last check.
 
-Originally a single 7am run — the cadence moved to six-hourly so that something
-arriving mid-morning surfaces the same working day rather than the next. The
-file and workflow keep the "morning briefing" name; renaming them is churn for
-no benefit.
+Originally a single 7am run, hence the "morning briefing" name it carried for
+a while — the cadence moved to six-hourly so that something arriving
+mid-morning surfaces the same working day rather than the next, at which point
+the name stopped being true and was dropped.
 
 This is a **build spec, not an importable JSON export.** n8n pins each node to a
 `typeVersion`, and an export written against the wrong one fails to import with
@@ -301,7 +301,7 @@ This runs every few hours, so most checks will be quiet. Be brief;
 say so plainly when there is nothing to report rather than padding.
 ```
 
-### Why section 1 exists, and why it is first
+#### Why section 1 exists, and why it is first
 
 Two live findings shaped it.
 
