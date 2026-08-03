@@ -122,6 +122,62 @@ Two things it encodes that matter more than tone:
 
 The `FROM` line is the model selector — change it to whatever [`bench.sh`](#measuring-actual-throughput) recommends for the RAM in the box.
 
+## Threat model
+
+Sputnik reads an inbox, and an inbox is input anyone can write to. Assume every
+message body is hostile and reason from there.
+
+### What an injection can achieve today
+
+| Attack | Possible? | Why |
+|--------|-----------|-----|
+| Make the assistant send, delete or label mail | **No** | The OAuth scopes are `gmail.readonly` and `calendar.readonly`. The API rejects the call regardless of what the model decides. |
+| Make the assistant call any API at all | **No** | The model has **no tools**. The LLM node takes text and emits text; credentials belong to the HTTP Request nodes that run *before* it, with fixed URLs. There is no path from model output to an API call. |
+| Exfiltrate mailbox contents | **No** | Output goes to n8n's execution log. Nothing carries it off the host. |
+| Persist across runs | **No** | Each run is stateless. No memory, no accumulated context. |
+| **Corrupt the briefing** | **Yes** | "Disregard the invoice from X" and the item is silently dropped. This is the realistic harm. |
+| **Use the briefing as a delivery channel** | **Yes** | The model writes *"Your bank flagged unusual activity — call 0800-…"* as an ordinary summary line. You trust the briefing, so you act. |
+
+The second one is the dangerous one, and it is worth being clear about why: the
+model launders attacker-controlled text through a source you have decided to
+trust. The harm is not that the model does something wrong — it is that **you**
+do, on its word.
+
+### Why the boundary holds
+
+Not because the model is well-behaved. An injection can fully compromise its
+reasoning and still achieve none of the first four rows, because the capability
+is absent from the architecture rather than withheld by good judgement. Two
+properties do that work:
+
+1. **Read-only scopes.** The API refuses writes no matter what the model decides.
+2. **No tools on the model.** Nothing downstream of the LLM node can act.
+
+Either alone would be insufficient. Together they mean the worst case is a
+wrong briefing rather than a wrong action.
+
+### What would change the calculus
+
+- **Giving the model tools.** An n8n AI Agent node with tool access, or wiring
+  the LLM output into an action node, turns every message in the inbox into a
+  potential command. This is the single change that converts "wrong summary"
+  into "unauthorised action". Make it deliberately, never as a convenience.
+- **Widening the OAuth scopes.** Covered at length above; the built-in Gmail
+  node wants exactly this.
+- **Rendering the briefing somewhere that follows links.** An injection can put
+  a phishing URL into a notification you trust. If delivery moves off the
+  execution log, prefer plain text without link rendering or previews.
+
+### What `format=full` cost
+
+Switching the message fetch from `metadata` to `full` was a real widening —
+more attacker-controlled text reaches the model. It is a difference of degree
+rather than kind: Gmail's `snippet` was already attacker-controlled text on the
+same path. Mitigations are bodies truncated to 600 characters, boilerplate and
+quoted chains stripped before the model sees them, long URLs collapsed, and
+section 1 of the prompt existing to surface anything that reads as an
+instruction. The alternative was a briefing that silently omits bills.
+
 ## Performance
 
 space-needle is a Minisforum MS-01 with an **i9-12900H, 31 GB RAM (27 GB typically free), no discrete GPU** (measured 2026-08-01), so inference is CPU-bound and limited by memory bandwidth. Rough expectations at Q4 — but measure rather than trust these:
