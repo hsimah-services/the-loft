@@ -161,7 +161,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const events = $('Calendar events').first().json.items || [];\n\nlet mail = [];\ntry {\n  mail = $('Gmail message').all().map(i => i.json);\n} catch (e) {\n  mail = [];            // node produced no items — no new mail\n}\n\nconst cal = events.length\n  ? events.map(e => {\n      const start = e.start?.dateTime || e.start?.date || '?';\n      return `- ${start} — ${e.summary || '(no title)'}`;\n    }).join('\\n')\n  : '(nothing scheduled)';\n\nconst header = (m, name) =>\n  (m.payload?.headers || []).find(h => h.name === name)?.value || '';\n\nconst decode = (d) => Buffer.from(d, 'base64url').toString('utf8');\n\n// format=full returns either a flat body or a nested parts tree depending on\n// how the sender composed the message. Walk it for the first matching type.\nconst findPart = (part, mime) => {\n  if (!part) return '';\n  if (part.mimeType === mime && part.body?.data) return decode(part.body.data);\n  for (const p of part.parts || []) {\n    const found = findPart(p, mime);\n    if (found) return found;\n  }\n  return '';\n};\n\nconst stripHtml = (h) => h\n  .replace(/<(style|script)[\\s\\S]*?<\\/\\1>/gi, '')\n  .replace(/<[^>]+>/g, ' ');\n\n// A forward buries the real content under a header block and a reply chain\n// repeats it. Both otherwise consume the entire character budget the model\n// sees — which is exactly how a levy notice arrived as nothing but \"From:\n// Date: Subject: To:\" and was reported as needing no action.\nconst clean = (t) => t\n  .replace(/-{3,}\\s*Forwarded message\\s*-{3,}/gi, '')\n  .replace(/^\\s*(From|Date|Subject|To|Cc|Bcc|Sent|Reply-To):.*$/gim, '')\n  .replace(/^\\s*On .+ wrote:\\s*$/gim, '')\n  .replace(/^\\s*>.*$/gm, '')\n  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>').replace(/&#39;/g, \"'\").replace(/&quot;/g, '\"')\n  .replace(/https?:\\/\\/\\S{40,}/g, '[link]')\n  .replace(/[ \\t ]+/g, ' ')\n  .replace(/\\n{2,}/g, '\\n')\n  .trim();\n\nconst inbox = mail.length\n  ? mail.map(m => {\n      const from = header(m, 'From').replace(/<.*>/, '').trim() || '(unknown)';\n      const subj = header(m, 'Subject') || '(no subject)';\n      const raw = findPart(m.payload, 'text/plain')\n               || stripHtml(findPart(m.payload, 'text/html'))\n               || m.snippet || '';\n      const body = clean(raw).slice(0, 600);\n      return `- ${from}: ${subj}\\n  ${body || '(no readable text)'}`;\n    }).join('\\n')\n  : '(no new mail)';\n\nreturn [{ json: {\n  digest: `CALENDAR (next 24h)\\n${cal}\\n\\nNEW MAIL (last 6h, ${mail.length} messages)\\n${inbox}`,\n  eventCount: events.length,\n  mailCount: mail.length,\n}}];\n"
+        "jsCode": "const events = $('Calendar events').first().json.items || [];\n\nlet mail = [];\ntry {\n  mail = $('Gmail message').all().map(i => i.json);\n} catch (e) {\n  mail = [];            // node produced no items — no new mail\n}\n\nconst cal = events.length\n  ? events.map(e => {\n      const start = e.start?.dateTime || e.start?.date || '?';\n      return `- ${start} — ${e.summary || '(no title)'}`;\n    }).join('\\n')\n  : '(nothing scheduled)';\n\nconst header = (m, name) =>\n  (m.payload?.headers || []).find(h => h.name === name)?.value || '';\n\nconst decode = (d) => Buffer.from(d, 'base64url').toString('utf8');\n\n// format=full returns either a flat body or a nested parts tree depending on\n// how the sender composed the message. Walk it for the first matching type.\nconst findPart = (part, mime) => {\n  if (!part) return '';\n  if (part.mimeType === mime && part.body?.data) return decode(part.body.data);\n  for (const p of part.parts || []) {\n    const found = findPart(p, mime);\n    if (found) return found;\n  }\n  return '';\n};\n\nconst stripHtml = (h) => h\n  .replace(/<(style|script)[\\s\\S]*?<\\/\\1>/gi, '')\n  .replace(/<[^>]+>/g, ' ');\n\n// A forward buries the real content under a header block and a reply chain\n// repeats it. Both otherwise consume the entire character budget the model\n// sees — which is exactly how a levy notice arrived as nothing but \"From:\n// Date: Subject: To:\" and was reported as needing no action.\nconst clean = (t) => t\n  .replace(/-{3,}\\s*Forwarded message\\s*-{3,}/gi, '')\n  .replace(/^\\s*(From|Date|Subject|To|Cc|Bcc|Sent|Reply-To):.*$/gim, '')\n  .replace(/^\\s*On .+ wrote:\\s*$/gim, '')\n  .replace(/^\\s*>.*$/gm, '')\n  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>').replace(/&#39;/g, \"'\").replace(/&quot;/g, '\"')\n  .replace(/https?:\\/\\/\\S{40,}/g, '[link]')\n  .replace(/[ \\t ]+/g, ' ')\n  .replace(/\\n{2,}/g, '\\n')\n  .trim();\n\nconst inbox = mail.length\n  ? mail.map(m => {\n      const from = header(m, 'From').replace(/<.*>/, '').trim() || '(unknown)';\n      const subj = header(m, 'Subject') || '(no subject)';\n      const raw = findPart(m.payload, 'text/plain')\n               || stripHtml(findPart(m.payload, 'text/html'))\n               || m.snippet || '';\n      const body = clean(raw).slice(0, 600);\n      return `- ${from}: ${subj}\\n  ${body || '(no readable text)'}`;\n    }).join('\\n')\n  : '(no new mail)';\n\n// Deterministic manifest — sender and subject only, straight from the API.\n// The model never sees or touches this; it is the check on the model.\nconst manifest = mail.length\n  ? mail.map((m, i) =>\n      `${i + 1}. ${header(m, 'From').replace(/<.*>/, '').trim() || '(unknown)'}`\n      + ` — ${header(m, 'Subject') || '(no subject)'}`).join('\\n')\n  : '(none)';\n\nreturn [{ json: {\n  manifest,\n  calendar: cal,\n  digest: `CALENDAR (next 24h)\\n${cal}\\n\\nNEW MAIL (last 6h, ${mail.length} messages)\\n${inbox}`,\n  eventCount: events.length,\n  mailCount: mail.length,\n}}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -191,6 +191,20 @@
       ],
       "id": "11f70127-7f95-49e1-a66d-de8fcd7f626e",
       "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ground truth. Everything here is built from the API response directly and\n// never passes through the model, so no instruction hidden in an email can\n// suppress, alter or invent an entry. If the briefing above omits something\n// listed here, or cites a sender that is not listed here, the briefing is\n// wrong — and that is checkable in five seconds without re-reading the mail.\nconst briefing = $json.text || $json.output || '(model produced no output)';\nconst d = $('Build digest').first().json;\n\nconst report = [\n  briefing.trim(),\n  '',\n  '─'.repeat(52),\n  `Unfiltered list — built without the model. ${d.mailCount} message(s), ${d.eventCount} event(s).`,\n  '',\n  'MESSAGES',\n  d.manifest,\n  '',\n  'CALENDAR',\n  d.calendar,\n].join('\\n');\n\nreturn [{ json: { report, mailCount: d.mailCount, eventCount: d.eventCount } }];\n",
+        "mode": "runOnceForAllItems"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1676,
+        0
+      ],
+      "id": "assemble-report-0001",
+      "name": "Assemble report"
     }
   ],
   "pinData": {},
@@ -266,6 +280,17 @@
         [
           {
             "node": "Calendar events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Assemble report",
             "type": "main",
             "index": 0
           }
