@@ -169,7 +169,7 @@ If DNS is the issue, check `/etc/resolv.conf` is pointed at `192.168.86.28`. If 
 
 ### MA server image fails to pull on the Pi
 
-`COMPOSE_PROFILES=server` won't work on viking — Pi 3 B+ doesn't have the headroom to run Music Assistant. Stay on `client`. If the wrong profile sneaks into `.env`, `loft-ctl rebuild howlr` will try to pull `ghcr.io/music-assistant/server:latest` and either OOM or stall.
+`COMPOSE_PROFILES=server` won't work on viking — Pi 3 B+ doesn't have the headroom to run Music Assistant. Stay on `client`. If the wrong profile sneaks into `.env`, `loft-ctl rebuild howlr` will try to pull `ghcr.io/music-assistant/server:2.10.1` and either OOM or stall.
 
 ### OOM kills (exit code 137)
 

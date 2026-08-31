@@ -1,7 +1,7 @@
 services:
   # ── Server profile ──────────────────────────────────────────────
   music-assistant:
-    image: ghcr.io/music-assistant/server:2.9.9
+    image: ghcr.io/music-assistant/server:2.10.1
     container_name: howlr
     profiles:
       - server
