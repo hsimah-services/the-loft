@@ -14,8 +14,8 @@ Two services, picked per-host via `COMPOSE_PROFILES`:
 
 | Profile | Container | Image | Where it runs |
 |---------|-----------|-------|---------------|
-| `server` | `howlr` | `ghcr.io/music-assistant/server:latest` | space-needle only |
-| `client` | `howlr-snapclient` | `ivdata/snapclient:latest` | viking, calavera |
+| `server` | `howlr` | `ghcr.io/music-assistant/server:2.10.1` | space-needle only |
+| `client` | `howlr-snapclient` | `ivdata/snapclient` (digest-pinned) | viking, calavera |
 
 Both run with `network_mode: host` so mDNS / Bonjour / Snapcast multicast work without bridge translation.
 
