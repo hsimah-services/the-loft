@@ -1,6 +1,6 @@
 # `howlr`
 
-> Music Assistant on space-needle plus Snapcast clients on the fleet — whole-home audio with phone, Spotify, and AirPlay as sources.
+> Music Assistant on space-needle plus Snapcast clients on the fleet — whole-home audio with Spotify and Plex as sources.
 
 ## Overview
 
@@ -21,11 +21,10 @@ Both run with `network_mode: host` so mDNS / Bonjour / Snapcast multicast work w
 
 ### What Music Assistant does in the `howlr` container
 
-The MA image is the single brain — no separate snapserver, shairport-sync, or librespot containers (unlike the multi-container plan in [`plans/howlr.md`](../../plans/howlr.md), which predates MA having all of this built-in):
+The MA image is the single brain — there are no separate snapserver, shairport-sync, or librespot containers to look for:
 
 - **Embedded Snapcast server** on ports 1704 (stream), 1705 (control), 1780 (Snapweb UI + JSON-RPC). Players appear as `ma_<hostname>` (e.g. `ma_viking`).
-- **Source plugins**: Spotify (multiple accounts), Spotify Connect target ("The Loft"), AirPlay Receiver ("The Loft" on port 7589), Plex library on space-needle, plus standard MA providers (Tidal, local files, etc.).
-- **shairport-sync as a subprocess**: MA spawns it internally and writes config to `/tmp/ma_shairport_sync_airplay_receiver--<id>.conf` at runtime. Uses tinysvcmdns (no avahi-daemon). Do not hand-edit the generated config — MA rewrites it every start.
+- **Source plugins**: two Spotify music providers, one account each (see [Spotify accounts and per-user access](#spotify-accounts-and-per-user-access)); Plex library on space-needle; plus standard MA providers (Tidal, local files, etc.). AirPlay Receiver and Spotify Connect are both **disabled** — no players are exposed through either.
 - **Web UI** at `https://howlr.loft.hsimah.com` (proxied through [mushr](mushr.md)) and Snapweb at `http://snapweb.loft.hsimah.com` / `localhost:1780`.
 
 State persists in `/opt/howlr` (bind-mounted as `/data`).
@@ -42,7 +41,7 @@ The `All` group spans calavera + viking for whole-home playback. `ma_calavera` i
 ### Audio flow
 
 ```
-iPhone / Spotify / Plex / Tidal
+Spotify / Plex / Tidal
         │
         ▼
    Music Assistant (howlr container, space-needle)
@@ -68,7 +67,7 @@ Copy from [`services/howlr/.env.example`](../../services/howlr/.env.example).
 COMPOSE_PROFILES=server
 ```
 
-Nothing else — MA's source plugins, Spotify accounts, AirPlay name, and Snapcast groups are all configured through the web UI on first login.
+Nothing else — MA's source plugins, Spotify accounts, and Snapcast groups are all configured through the web UI on first login. See [Spotify accounts and per-user access](#spotify-accounts-and-per-user-access) for the account layout.
 
 **Each Pi / calavera (`client` profile):**
 
@@ -80,6 +79,34 @@ Nothing else — MA's source plugins, Spotify accounts, AirPlay name, and Snapca
 | `HOST_ID` | Bare hostname (e.g. `viking`) — stable client ID so MA remembers the player across restarts |
 
 Compose passes `EXTRA_ARGS="--soundcard ${SOUND_DEVICE:-default} --hostID ${HOST_ID}"` to snapclient.
+
+### Spotify accounts and per-user access
+
+Configured entirely in the MA web UI. None of this lives in git — it is state in
+`/opt/howlr`, so it survives `loft-ctl rebuild` but is invisible to the repo.
+
+Two Spotify **music provider** instances run side by side, one per person, both seats
+on the same Premium Family plan:
+
+| MA user | Spotify account | Notes |
+|---------|-----------------|-------|
+| `hsimah` | Hamish | Rarely used — Plexamp is the primary listening path |
+| `gemo` | Georgia | Primary Spotify user |
+| `calavera` | Georgia | Downstairs always-on client |
+
+Separation is enforced by MA's per-user music-source filter (Settings → Users), which
+is an **allowlist**: a provider a user has not been granted is invisible to them in
+both Browse and Library, with nothing logged.
+
+The playback engine is **Soloist** (Spotify's official engine for screenless devices),
+not librespot, on default settings. Each account needs its own API key from Spotify's
+Soloist dashboard — generated while signed in as that account, Premium required — plus
+a one-off pairing from that account's phone app. A personal developer Client ID is
+optional; without one the provider uses MA's shared API allowance.
+
+Soloist permits **one active player at a time per Spotify account**. Because
+`calavera` shares Georgia's account, the Downstairs client and Georgia's own playback
+contend for the same slot.
 
 ### Storage
 
@@ -118,15 +145,14 @@ sudo docker logs howlr-snapclient --tail 30 | grep -i 'connected\|ready'
 - [snoot](snoot.md) / [houstn](houstn.md) — health and container metrics
 - [viking](../hosts/viking.md), [calavera](../hosts/calavera.md) — client hosts
 - Blog: [Multi-room audio with Music Assistant and Snapcast](../../../hblake/posts/howlr.md)
-- Design notes: [`plans/howlr.md`](../../plans/howlr.md) — original multi-container plan, now superseded by MA's all-in-one image
 
 ## Debug & Troubleshooting
 
 ### No audio after a config change (stale FIFOs)
 
-**Symptom:** Snapclients log "connected" but play silence after editing snapserver or shairport-sync configuration (via MA UI or a compose edit).
+**Symptom:** Snapclients log "connected" but play silence after editing snapserver or source-plugin configuration (via MA UI or a compose edit).
 
-**Cause:** MA's internal pipeline uses named pipes (FIFOs) between shairport-sync / librespot / source plugins and the embedded snapserver. Just restarting the container leaves the FIFOs in a stale state — a full down/up is needed.
+**Cause:** MA's internal pipeline uses named pipes (FIFOs) between the source plugins and the embedded snapserver. Just restarting the container leaves the FIFOs in a stale state — a full down/up is needed.
 
 **Fix:**
 
@@ -154,27 +180,44 @@ If `SOUND_DEVICE=default` and the host has multiple cards (e.g. HDMI + USB), pic
 
 **Fix:** Set `HOST_ID=<bare-hostname>` in that host's `services/howlr/.env`, rebuild, and in MA delete the orphaned `ma_<random>` entry.
 
-### AirPlay session leaves Snapcast stuck on a silent stream
+### Spotify loads cleanly but is missing from Browse
 
-**Symptom:** Disconnecting an iPhone from "The Loft" AirPlay target leaves fjord/viking silent until MA is restarted. Tracked in [#62](https://github.com/hsimah-services/the-loft/issues/62).
+**Symptom:** `sudo docker logs howlr` shows `Loaded music provider Spotify` with no
+errors at all, but Spotify appears nowhere in Browse or Library for a given user.
 
-**Cause:** When a phone connects to AirPlay, MA's internal shairport-sync takes over the Snapcast session. On disconnect, the session is not cleanly restored.
+**Cause:** the per-user music-source filter is an allowlist keyed on **provider
+instance id**. Deleting a Spotify provider strips it from every user's filter:
 
-**Workaround:** `loft-ctl rebuild howlr` after AirPlay use, or switch the active group's source manually in MA.
+```
+Removed spotify--6Hc5Rmpt from the provider_filter of user 'hsimah'
+```
 
-**Eventual fix (per #62):** Run a standalone `shairport-sync` container with its own AirPlay name, feeding snapserver as an independent stream source, bypassing MA's AirPlay plugin.
+The replacement provider gets a *new* instance id and is never re-added, so it loads
+correctly server-side while staying invisible in the UI. MA's cleanup only rescues a
+user whose list is emptied entirely — anyone with another source (e.g. Plex) keeps a
+non-empty list that no longer mentions Spotify.
 
-### Spotify Connect / AirPlay startup latency on play/pause/skip
+**Fix:** Settings → Users → edit each affected user → add the new instance to their
+music sources (or clear the restriction altogether). Then trigger a library sync:
+removing the old provider purged its items from the library.
 
-Plugins are early-stage with 0.5–5s startup latency on play/pause/skip; ongoing playback is real-time and unaffected. This is upstream MA behavior, not a config issue. Spotify Connect also only allows one active target per Spotify account at a time — Family-plan members with separate logins can stream to different rooms simultaneously.
+Applies to any music provider, not just Spotify — re-check Settings → Users after
+deleting and re-adding one.
 
-### Snapweb crashes on AirPlay 2 stream
+### "Premium account required" when re-adding a Spotify account
 
-**Symptom:** The Snapweb browser client loads fine, but the audio playback element crashes/stutters specifically on AirPlay 2 streams.
+**Cause:** the Premium entitlement check runs at **authorization time only**. An
+existing provider keeps working indefinitely on its stored token, so a lapse goes
+unnoticed until the next re-add. Most often the browser was signed into a *different*
+Spotify account than the one on the Family plan; a failed Family address
+re-verification does the same thing.
 
-**Cause:** AirPlay 2 uses 48kHz/32-bit format (`sampleformat=48000:32:2`). Snapweb's in-browser decoder can't handle 32-bit samples.
+**Fix:** sign out of Spotify in the browser, re-run the OAuth step, and confirm the
+account MA reports:
 
-**Fix:** Use a native snapclient (viking, fjord, calavera) for AirPlay 2 playback. Spotify Connect (44100:16:2) works on Snapweb.
+```bash
+sudo docker logs howlr --since 15m 2>&1 | grep -i 'logged in to Spotify'
+```
 
 ### WiFi-related dropouts on a Pi
 
