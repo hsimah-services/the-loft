@@ -667,14 +667,6 @@ loft-ctl start mushr
 # Caddy will re-obtain certs via Cloudflare DNS-01 (takes ~30s)
 ```
 
-### Snapweb crashes on AirPlay stream
-
-**Symptom:** Snapweb browser client loads but audio playback crashes or stutters when playing AirPlay content.
-
-**Cause:** AirPlay 2 uses 48kHz/32-bit format (`sampleformat=48000:32:2`). Snapweb can't handle this format.
-
-**Fix:** Use native snapclient devices (viking, calavera) for AirPlay playback. Spotify Connect works on all clients including snapweb (uses 44100:16:2).
-
 ### Howlr no audio after config change (stale FIFOs)
 
 **Symptom:** After changing snapserver or shairport-sync config, audio stops working entirely. No errors in logs.
