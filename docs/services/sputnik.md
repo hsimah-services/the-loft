@@ -88,7 +88,7 @@ cp services/sputnik/.env.example services/sputnik/.env
 The full click-path is documented inline in [`services/sputnik/.env.example`](../../services/sputnik/.env.example). The parts that catch people out:
 
 1. **Publishing status must be "Production", not "Testing".** Google expires refresh tokens after 7 days while the consent screen is in Testing, so the assistant silently dies every week. Publishing shows an "unverified app" interstitial you click through as the developer; formal verification is only needed to distribute to other people.
-2. **The redirect URI is exact** — `https://n8n.loft.hsimah.com/rest/oauth2-credential/callback`, HTTPS, no trailing slash. This is why `N8N_EDITOR_BASE_URL` and `WEBHOOK_URL` must both be the public HTTPS origin.
+2. **The redirect URI is exact** — `https://n8n.loft.hsimah.com/rest/oauth2-credential/callback`, HTTPS, no trailing slash. This is why `N8N_EDITOR_BASE_URL` and `N8N_WEBHOOK_URL` must both be the public HTTPS origin.
 3. **The OAuth flow works LAN-only.** Google never fetches the redirect URI — your browser does. Complete the connection from a machine on the LAN and dnsmasq plus Caddy handle it locally.
 
 ### Scopes

@@ -121,11 +121,12 @@ services:
       - N8N_PROTOCOL=https
       # Both must be the public HTTPS origin — n8n builds the Google OAuth
       # redirect URI from these, and Google rejects http:// and bare hostnames.
+      # N8N_WEBHOOK_URL replaces the deprecated WEBHOOK_URL and covers both the
+      # test and production webhook base URLs.
       - N8N_EDITOR_BASE_URL=https://n8n.${LOFT_DOMAIN}
-      - WEBHOOK_URL=https://n8n.${LOFT_DOMAIN}
+      - N8N_WEBHOOK_URL=https://n8n.${LOFT_DOMAIN}
       - GENERIC_TIMEZONE=${TZ:-America/Los_Angeles}
       - TZ=${TZ:-America/Los_Angeles}
-      - N8N_RUNNERS_ENABLED=true
       - N8N_DIAGNOSTICS_ENABLED=false
       - N8N_PERSONALIZATION_SURVEY_ENABLED=false
     # The whole home, not just .n8n — see the environment comment above.
