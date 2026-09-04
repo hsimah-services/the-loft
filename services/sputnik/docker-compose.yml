@@ -129,6 +129,25 @@ services:
       - TZ=${TZ:-America/Los_Angeles}
       - N8N_DIAGNOSTICS_ENABLED=false
       - N8N_PERSONALIZATION_SURVEY_ENABLED=false
+      # ── Defaults pinned ahead of n8n changing them ────────────────────────
+      # n8n warns at startup about each of these because a future version
+      # ships a different default. Setting them explicitly makes the next
+      # major bump a no-op rather than a silent behaviour change, and keeps
+      # the startup log quiet enough that a NEW warning is worth reading.
+      #
+      # No community nodes are installed here, so adopt the stricter default
+      # early rather than keeping the door open.
+      - N8N_UNVERIFIED_PACKAGES_ENABLED=false
+      # Kept at today's 300s rather than the future 60s. The briefing's two
+      # Code nodes are string munging that finishes in milliseconds, so 60
+      # would be ample — but the LLM call is minutes long on CPU, and pinning
+      # the current value means an upgrade can never turn a slow run into a
+      # killed one. Lower it if a runner task ever hangs.
+      - N8N_RUNNERS_TASK_TIMEOUT=300
+      # The Compression node is unused by the briefing workflow, so adopt the
+      # future (smaller) limits now — they only cap unzip work we never do.
+      - N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES=268435456
+      - N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES=1000
     # The whole home, not just .n8n — see the environment comment above.
     # n8n's database therefore lands at /opt/sputnik/n8n/.n8n/ on the host.
     volumes:

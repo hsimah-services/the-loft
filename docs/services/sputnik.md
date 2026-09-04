@@ -83,6 +83,19 @@ cp services/sputnik/.env.example services/sputnik/.env
 
 > **`N8N_ENCRYPTION_KEY` is the one irreplaceable secret here.** n8n encrypts every stored credential with it, including the Google refresh token. Lose the key and `/opt/sputnik/n8n` becomes unreadable and every Google connection must be re-authorised from scratch.
 
+### Pinned n8n defaults
+
+n8n warns at startup about settings whose defaults change in a future version. Four are set explicitly in the compose file so that an upgrade is a no-op rather than a silent behaviour change — and so the startup log stays quiet enough that a *new* warning is worth reading:
+
+| Variable | Value | Why |
+|----------|-------|-----|
+| `N8N_UNVERIFIED_PACKAGES_ENABLED` | `false` | No community nodes are installed; adopt the stricter future default early |
+| `N8N_RUNNERS_TASK_TIMEOUT` | `300` | Today's value, kept. The Code nodes finish in milliseconds, but pinning it means an upgrade to 60s can never kill a slow run |
+| `N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES` | `268435456` | The Compression node is unused; take the future 256 MiB limit now |
+| `N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES` | `1000` | As above |
+
+`WEBHOOK_URL` was likewise replaced by `N8N_WEBHOOK_URL`, and `N8N_RUNNERS_ENABLED` removed — task runners are always on now.
+
 ### Google OAuth
 
 The full click-path is documented inline in [`services/sputnik/.env.example`](../../services/sputnik/.env.example). The parts that catch people out:
