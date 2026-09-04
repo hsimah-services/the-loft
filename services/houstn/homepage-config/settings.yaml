@@ -5,25 +5,40 @@ color: slate
 headerStyle: boxed
 useEqualHeights: true
 
+# Tabs activate as soon as any group declares one, so every group needs a tab
+# field — an undeclared group would vanish from the UI. Tab order follows the
+# order groups appear here, so Loft stays the landing view and the briefing is
+# one click (or /#briefing) away, deliberately not on the main dashboard.
 layout:
   Fleet:
+    tab: Loft
     style: row
     columns: 3
   Media:
+    tab: Loft
     style: row
     columns: 5
   Downloads:
+    tab: Loft
     style: row
     columns: 3
   Audio:
+    tab: Loft
     style: row
     columns: 3
   Monitoring:
+    tab: Loft
     style: row
     columns: 2
   Infrastructure:
+    tab: Loft
     style: row
     columns: 3
   Web:
+    tab: Loft
+    style: row
+    columns: 3
+  Assistant:
+    tab: Briefing
     style: row
     columns: 3

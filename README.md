@@ -108,6 +108,7 @@ For a fresh host, see the host-specific docs page and [`docs/scripts/setup.md`](
 - **Admin escalation**: You log in as `adminhabl` and use `sudo` for privileged actions; `loft-ctl` still auto-elevates to `adminhabl` via `su` if invoked by another user.
 - **External access**: Only Pawst (`hbla.ke` + `hsimah.com`) is exposed externally, via Cloudflare Tunnel — no open ports. Everything else is LAN-only. Sputnik's `n8n` holds a live Google OAuth refresh token, so keep it (and `sputnik`) out of the tunnel's public-hostname list in the Cloudflare dashboard.
 - **Unauthenticated services**: `ollama` has no auth of any kind — anything that reaches port 11434 can run inference and pull or delete models. It is published on `127.0.0.1` only and deliberately has no Caddy route.
+- **Static content with no app behind it**: `briefing.loft.hsimah.com` serves sputnik's inbox digest straight off disk, so there is no application login to rely on — the Caddy route carries `basic_auth` (`BRIEFING_*` in `services/mushr/.env`) and, like `n8n`, stays off the tunnel's public-hostname list.
 - **i3 desktop** (calavera): lightdm autologs the `rodnik` service account into an i3 session that auto-launches `firefox --kiosk` fullscreen as a Music Assistant touch dashboard (config in `hosts/calavera/i3/`, URL + HiDPI scaling from `host.conf`); `rodnik` has no sudo or docker.
 
 ## Debugging

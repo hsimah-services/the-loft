@@ -29,6 +29,12 @@ Both resolve to space-needle's LAN IP via `mushr-dns`:
 
 The full route table lives in [`Caddyfile`](../../services/mushr/Caddyfile). Bridge-networked services (radarr/sonarr/lidarr/bazarr/jackett, pupyrus, pawst, beszel, uptime, homepage) are reached by container name on `loft-proxy` (e.g. `reverse_proxy radarr:7878`). Host-network services (pawpcorn, howlr, transmission, slskd, snapweb) are reached via `host.docker.internal:<port>` thanks to the `extra_hosts: host.docker.internal:host-gateway` entry on `mushr`.
 
+### The one route that isn't a proxy
+
+`briefing.{$LOFT_DOMAIN}` is a `file_server`, not a `reverse_proxy` — it serves [sputnik](sputnik.md)'s briefing page from two read-only mounts stacked into one document root: the tracked renderer at `services/sputnik/briefing-web`, and n8n's output at `/opt/sputnik/briefing` underneath it as `data/`.
+
+It is also the only route carrying `basic_auth`. Everywhere else the application behind the proxy has its own login; static files have none, and this route serves summarised mail. There is deliberately **no** `http://briefing.space-needle` counterpart — basic auth over plain HTTP would put the password on the wire in cleartext. Keep it off the tunnel's public hostname list, like n8n.
+
 ### The `loft-proxy` bridge
 
 `loft-proxy` is declared `external: true` in this compose — it's pre-created by `setup.sh` so other services (pupyrus, pawst, stellarr's *arr, houstn's hub containers) can attach to it. Joining the bridge is how a service becomes reverse-proxyable.
@@ -52,6 +58,8 @@ Copy [`services/mushr/.env.example`](../../services/mushr/.env.example) to `serv
 | `LOFT_DOMAIN` | `loft.hsimah.com` — substituted into the Caddyfile as `{$LOFT_DOMAIN}` |
 | `CLOUDFLARE_API_TOKEN` | Used by the DNS-01 challenge to write `_acme-challenge` TXT records. Permissions: **Zone > Zone > Read** and **Zone > DNS > Edit** scoped to the loft.hsimah.com / hbla.ke / hsimah.com zones |
 | `TUNNEL_TOKEN` | `cloudflared`'s tunnel credential, generated when the tunnel is created in Cloudflare Zero Trust |
+| `BRIEFING_USER` | Username for `basic_auth` on the briefing route. Defaults to `loft` |
+| `BRIEFING_HASH` | bcrypt hash of that user's password — `sudo docker exec mushr caddy hash-password --plaintext '…'`. The plaintext also goes in `services/houstn/.env` so the Homepage tile can read the manifest |
 
 ### `dnsmasq.conf`
 
@@ -101,6 +109,13 @@ loft-ctl health mushr            # checks http://localhost:8880/config/
 
 # Validate Caddyfile before rebuilding
 sudo docker exec mushr caddy validate --config /etc/caddy/Caddyfile
+
+# ...but that validates against the RUNNING container's environment, so it
+# cannot see a variable you just added to .env. To check new values before
+# they reach the live proxy, validate in a throwaway container instead:
+sudo docker run --rm --env-file services/mushr/.env \
+  -v ./services/mushr/Caddyfile:/etc/caddy/Caddyfile:ro \
+  mushr-caddy:2.11.4 caddy validate --config /etc/caddy/Caddyfile
 
 # Hot reload Caddyfile (no container restart)
 sudo docker exec mushr caddy reload --config /etc/caddy/Caddyfile

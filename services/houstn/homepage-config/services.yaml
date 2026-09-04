@@ -215,3 +215,43 @@
         description: Personal blog
         container: pawst
         server: my-docker
+
+# Sputnik lives on its own tab (see the layout block in settings.yaml) so the
+# inbox digest is not sitting on the dashboard everyone else looks at.
+- Assistant:
+    # Counts come from the manifest n8n writes alongside the report — the
+    # briefing text itself is far too long for a tile, so this is the "is it
+    # fresh, how much is in it" glance and the href opens the full page.
+    # Credentials are the basic_auth pair on mushr's briefing route.
+    - Briefing:
+        icon: mdi-email-newspaper
+        href: https://briefing.loft.hsimah.com
+        description: Gmail + Calendar digest
+        widget:
+          type: customapi
+          url: https://briefing.loft.hsimah.com/data/latest.json
+          refreshInterval: 300000
+          username: "{{HOMEPAGE_VAR_BRIEFING_USER}}"
+          password: "{{HOMEPAGE_VAR_BRIEFING_PASSWORD}}"
+          mappings:
+            - field: mailCount
+              label: Mail
+              format: number
+            - field: eventCount
+              label: Events
+              format: number
+            - field: generatedAt
+              label: Updated
+              format: relativeDate
+    - Open WebUI:
+        icon: mdi-robot
+        href: https://sputnik.loft.hsimah.com
+        description: Local LLM chat
+        container: open-webui
+        server: my-docker
+    - n8n:
+        icon: n8n.svg
+        href: https://n8n.loft.hsimah.com
+        description: Workflow runner
+        container: n8n
+        server: my-docker

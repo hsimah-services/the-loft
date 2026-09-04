@@ -150,8 +150,14 @@ services:
       - N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES=1000
     # The whole home, not just .n8n — see the environment comment above.
     # n8n's database therefore lands at /opt/sputnik/n8n/.n8n/ on the host.
+    #
+    # /briefing is the drop point for the briefing workflow's output: the
+    # Read/Write Files node writes latest.json here and mushr serves it
+    # read-only. Owned littledog:pack-member (1003) by setup.sh, which is the
+    # uid this container runs as.
     volumes:
       - /opt/sputnik/n8n:/home/node
+      - /opt/sputnik/briefing:/briefing
     dns:
       - 192.168.86.28
     networks:

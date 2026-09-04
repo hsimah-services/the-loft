@@ -377,7 +377,17 @@ const report = [
   d.calendar,
 ].join('\n');
 
-return [{ json: { report, mailCount: d.mailCount, eventCount: d.eventCount } }];
+// payload is what gets written to disk for the briefing page and the Homepage
+// tile. Built here so there is exactly one place that decides what a briefing
+// is; the two nodes below only move bytes.
+const payload = JSON.stringify({
+  generatedAt: new Date().toISOString(),
+  mailCount: d.mailCount,
+  eventCount: d.eventCount,
+  report,
+}, null, 2);
+
+return [{ json: { report, payload, mailCount: d.mailCount, eventCount: d.eventCount } }];
 ```
 
 **Why this exists.** Read-only scopes and a tool-less model cap the worst case
@@ -396,20 +406,63 @@ It does not *prevent* a corrupted briefing; nothing at this layer can. It makes
 one detectable without re-reading the mail, which is the difference between
 being misled and noticing you were targeted.
 
+### 10. Convert to File — "Manifest to file"
+
+Operation: **Convert to Text File**. Text Input Field `payload`, File Name
+`latest.json`, MIME Type `application/json`, Put Output in Field `data`.
+
+The text operation rather than "Convert to JSON" is deliberate: the JSON
+operation wraps items in an array, which would make the file `[{…}]` and force
+both the page and the Homepage tile to index through element 0.
+
+### 11. Read/Write Files from Disk — "Publish briefing"
+
+Operation: **Write File to Disk**. File Path `/briefing/latest.json`, Input
+Binary Field `data`.
+
+`/briefing` is a bind mount to `/opt/sputnik/briefing` on space-needle, owned
+by `littledog:pack-member` — the uid the container runs as. It is mounted
+read-only into mushr, which serves it.
+
+The write is not atomic, so a reader that lands in the middle of one gets a
+truncated file. The window is milliseconds four times a day and a reload fixes
+it; the page reports a parse failure rather than rendering half a briefing.
+
 ## Where the output goes
 
-**The read-only scope means this workflow cannot email you the briefing.** Pick
-a delivery route:
+**The read-only scope means this workflow cannot email you the briefing.** It
+is published as a page instead:
+
+```
+n8n  ──writes──▶  /opt/sputnik/briefing/latest.json
+                             │ (read-only bind mount)
+                             ▼
+                  mushr ──▶ https://briefing.loft.hsimah.com
+                             │            (basic_auth)
+                 ┌───────────┴────────────┐
+                 ▼                        ▼
+         browser on blanco        Homepage "Briefing" tab
+        (full report page)      (counts + freshness tile)
+```
+
+The renderer is [`services/sputnik/briefing-web/index.html`](../briefing-web/index.html),
+a tracked repo file mounted alongside the data — so the page is version
+controlled and the workflow only ever writes JSON. It assigns the report with
+`textContent`, never `innerHTML`: the briefing is built from mail bodies that
+anyone can write to, and markup in an email should be *displayed*, not
+rendered.
+
+`briefing.loft.hsimah.com` is the only LAN route serving mail content without
+an application login behind it, so it carries `basic_auth`. Keep it off the
+Cloudflare Tunnel's public hostname list, exactly as for n8n.
+
+The alternatives, if this ever needs to become push rather than pull:
 
 | Option | Effort | Notes |
 |--------|--------|-------|
-| n8n execution log | none | Works today. Executions → read the last run. Fine for validating, tedious daily. |
-| ntfy | ~30 min | Self-hosted push to phone and desktop. Natural fit for this fleet — one container, an HTTP Request node, no third party, no new Google scope. |
-| Write to a file | ~15 min | Somewhere Homepage can render as a widget. |
+| n8n execution log | none | Always available. Executions → read the last run. Fine for debugging a bad briefing. |
+| ntfy | ~30 min | Self-hosted push to phone and desktop. One container, an HTTP Request node, no third party, no new Google scope. |
 | Separate SMTP credential | ~15 min | n8n's Send Email node with its own SMTP account is unrelated to the Gmail OAuth scope, so this does **not** widen the assistant's access. |
-
-Start with the execution log to prove the workflow, then choose. ntfy is the
-recommendation — stays on the LAN, adds no account surface.
 
 ## Validating it
 

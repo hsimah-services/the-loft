@@ -24,6 +24,11 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+      # Sputnik's briefing page. Two read-only mounts make one document root:
+      # the renderer is a tracked repo file, the data underneath it is written
+      # by n8n four times a day. Caddy only ever reads both.
+      - ../sputnik/briefing-web:/srv/briefing:ro
+      - /opt/sputnik/briefing:/srv/briefing/data:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
