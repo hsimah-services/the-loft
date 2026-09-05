@@ -69,10 +69,10 @@ Copy [`services/mushr/.env.example`](../../services/mushr/.env.example) to `serv
 | `BRIEFING_USER` | Username for `basic_auth` on the briefing route. Defaults to `loft` |
 | `BRIEFING_HASH` | bcrypt hash of that user's password — `sudo docker exec -it mushr caddy hash-password` (prompts, so it stays out of shell history). **Double every `$`** — see below. The plaintext also goes in `services/houstn/.env` so the Homepage tile can read the manifest |
 
-> **`$` in a `.env` value must be written `$$`.** Compose interpolates `.env` values, so a bcrypt hash like `$2a$14$dj7m…` is read as three variable references and each is substituted with a blank string. Caddy receives a mangled hash and rejects the correct password. The only warning is a line that is easy to lose in a rebuild's output:
+> **`$` in a `.env` value must be written `$$`.** Compose interpolates `.env` values, so a bcrypt hash like `$2a$14$xK9p…` is read as three variable references and each is substituted with a blank string. Caddy receives a mangled hash and rejects the correct password. The only warning is a line that is easy to lose in a rebuild's output:
 >
 > ```
-> WARN[0000] The "dj7m" variable is not set. Defaulting to a blank string.
+> WARN[0000] The "xK9p" variable is not set. Defaulting to a blank string.
 > ```
 >
 > Verify with `sudo docker exec mushr printenv BRIEFING_HASH` — it must print **single** dollars, matching what `hash-password` produced. This applies to any secret containing a literal `$`, not just this one.
