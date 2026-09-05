@@ -31,7 +31,15 @@ The full route table lives in [`Caddyfile`](../../services/mushr/Caddyfile). Bri
 
 ### The one route that isn't a proxy
 
-`briefing.{$LOFT_DOMAIN}` is a `file_server`, not a `reverse_proxy` — it serves [sputnik](sputnik.md)'s briefing page from two read-only mounts stacked into one document root: the tracked renderer at `services/sputnik/briefing-web`, and n8n's output at `/opt/sputnik/briefing` underneath it as `data/`.
+`briefing.{$LOFT_DOMAIN}` is a `file_server`, not a `reverse_proxy` — it serves [sputnik](sputnik.md)'s briefing page from two read-only mounts: the tracked renderer at `services/sputnik/briefing-web`, and n8n's output at `/opt/sputnik/briefing`.
+
+The two mounts are **siblings inside the container** (`/srv/briefing` and `/srv/briefing-data`), and a `handle_path /data/*` block stitches them into one URL space. Nesting them the obvious way — mounting the data at `/srv/briefing/data` — does not work, and fails the *container*, not just the route:
+
+```
+create mountpoint for /srv/briefing/data mount: mkdirat ...: read-only file system
+```
+
+Docker mounts the parent read-only first, then has to create the child mountpoint inside it. Since mushr is the front door, that failure takes every route in the fleet down with it. The general rule: never mount anything inside a `:ro` bind mount unless the directory already exists in the source.
 
 It is also the only route carrying `basic_auth`. Everywhere else the application behind the proxy has its own login; static files have none, and this route serves summarised mail. There is deliberately **no** `http://briefing.space-needle` counterpart — basic auth over plain HTTP would put the password on the wire in cleartext. Keep it off the tunnel's public hostname list, like n8n.
 

@@ -61,7 +61,7 @@ The read-only Gmail scope means the workflow **cannot email you its own output**
 | Piece | Lives in | Role |
 |-------|----------|------|
 | `latest.json` | `/opt/sputnik/briefing` (bind mount, n8n writes as uid 1003) | `generatedAt`, `mailCount`, `eventCount`, `report` |
-| `index.html` | [`services/sputnik/briefing-web/`](../../services/sputnik/briefing-web/index.html) | Renderer — version controlled, mounted read-only at the document root |
+| `index.html` | [`services/sputnik/briefing-web/`](../../services/sputnik/briefing-web/index.html) | Renderer — version controlled, mounted read-only at the document root. The data mount is a sibling served at `/data/`, not nested inside it; see [mushr](mushr.md) for why |
 | Caddy route | [`Caddyfile`](../../services/mushr/Caddyfile) | `file_server` + `basic_auth`, no proxy involved |
 | Homepage tile | `Assistant` group, `Briefing` tab | Counts and freshness only; the report is far too long for a tile |
 
