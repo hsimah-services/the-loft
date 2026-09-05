@@ -71,6 +71,8 @@ Three properties are deliberate:
 - **`textContent`, never `innerHTML`.** See the threat model — the report is built from mail bodies, and markup in one should be displayed rather than rendered.
 - **`basic_auth` on the route.** Every other LAN-only service has its own login in front of it; static files have none, and this is the fleet's most sensitive content. The Homepage tile passes the same credentials.
 
+`/briefing` is a mount of its own rather than a directory under `/home/node`, and n8n has to be told it is writable at all — `N8N_RESTRICT_FILE_ACCESS_TO=/briefing`. The file nodes refuse everything outside that allowlist, and `N8N_BLOCK_FILE_ACCESS_TO_N8N_FILES` stays at its default `true` so the `.n8n` tree — which holds the encrypted Google credential — remains unreachable from a workflow node.
+
 The write is not atomic, so a reader can catch a half-written file. The window is milliseconds, four times a day; the page reports a parse error and a reload fixes it.
 
 ### Storage layout
@@ -434,6 +436,27 @@ Mounting one level down (`/home/node/.n8n`) gets n8n's own database working but 
 Then `loft-ctl rebuild sputnik`.
 
 **The general trap:** any image built around its own baked-in user breaks when `user:` overrides it with a uid absent from the image's `/etc/passwd`. Two independent things go wrong — `$HOME` stops resolving, and paths owned by the image's user stop being writable. Ollama and Open WebUI are unaffected because they run as root and never consult `$HOME`. Treat this as the default suspicion whenever adding `user:` to a service that did not previously have one.
+
+### The briefing workflow fails with "Access to the file is not allowed"
+
+**Cause:** n8n's file nodes only write inside the `N8N_RESTRICT_FILE_ACCESS_TO`
+allowlist. Recent releases default it to `/home/node/.n8n-files`, so a path
+like `/briefing/latest.json` is refused even when the mount exists, is present
+in the container, and is owned by the right uid. The error names the node, not
+the setting, which makes it read like a permissions or path problem:
+
+```
+NodeApiError: Access to the file is not allowed.
+  at ExecuteContext.execute (.../ReadWriteFile/actions/write.operation.ts)
+```
+
+**Fix:** `N8N_RESTRICT_FILE_ACCESS_TO=/briefing` in the compose environment,
+then `loft-ctl rebuild sputnik`. Multiple paths are separated by semicolons.
+
+**Tell it apart from the two lookalikes:** an `ENOENT` means the bind mount is
+missing from the container (`docker inspect n8n --format '{{range .Mounts}}…'`
+lists only `/home/node`), and an `EACCES` means the directory exists but is
+root-owned because Docker auto-created it instead of `setup.sh`.
 
 ### Every request takes 60+ seconds even for a trivial prompt
 

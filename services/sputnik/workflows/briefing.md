@@ -424,6 +424,11 @@ Binary Field `data`.
 by `littledog:pack-member` — the uid the container runs as. It is mounted
 read-only into mushr, which serves it.
 
+The mount alone is not enough: n8n's file nodes refuse any path outside
+`N8N_RESTRICT_FILE_ACCESS_TO`, which the compose sets to `/briefing`. Without
+it the node fails with "Access to the file is not allowed" even though the
+directory exists and is writable.
+
 The write is not atomic, so a reader that lands in the middle of one gets a
 truncated file. The window is milliseconds four times a day and a reload fixes
 it; the page reports a parse failure rather than rendering half a briefing.

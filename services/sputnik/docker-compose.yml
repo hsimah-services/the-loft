@@ -156,6 +156,17 @@ services:
       # future (smaller) limits now — they only cap unzip work we never do.
       - N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES=268435456
       - N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES=1000
+      # The file nodes refuse any path outside an allowlist — recent releases
+      # default it to /home/node/.n8n-files — and fail with a bare
+      # "Access to the file is not allowed". The briefing drop point has to be
+      # named here or the workflow's last node cannot write. Semicolon-
+      # separated if this ever needs more than one path.
+      #
+      # N8N_BLOCK_FILE_ACCESS_TO_N8N_FILES stays at its default of true, which
+      # is why /briefing is a mount of its own rather than a directory under
+      # /home/node: the .n8n tree holds the encrypted Google credential and
+      # should stay unreachable from a workflow node.
+      - N8N_RESTRICT_FILE_ACCESS_TO=/briefing
     # The whole home, not just .n8n — see the environment comment above.
     # n8n's database therefore lands at /opt/sputnik/n8n/.n8n/ on the host.
     #
