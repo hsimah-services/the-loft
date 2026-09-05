@@ -54,6 +54,10 @@ services:
     # ollama over the bridge and tolerate it arriving late or living elsewhere.
     depends_on:
       ollama:
+        # condition is mandatory in the long form — Compose rejects the file
+        # with "depends_on.ollama condition is required" without it. Older
+        # versions defaulted it silently.
+        condition: service_started
         required: false
     logging:
       driver: json-file
@@ -92,6 +96,10 @@ services:
     # ollama over the bridge and tolerate it arriving late or living elsewhere.
     depends_on:
       ollama:
+        # condition is mandatory in the long form — Compose rejects the file
+        # with "depends_on.ollama condition is required" without it. Older
+        # versions defaulted it silently.
+        condition: service_started
         required: false
     logging:
       driver: json-file

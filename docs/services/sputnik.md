@@ -386,10 +386,19 @@ it does not:
 ```yaml
 depends_on:
   ollama:
+    condition: service_started
     required: false
 ```
 
-Needs Compose v2.20 or newer. Removing `depends_on` entirely also works and
+Needs Compose v2.20 or newer. **`condition` is not optional** — the long form
+without it is rejected outright:
+
+```
+validating services/sputnik/docker-compose.yml: services.open-webui.depends_on.ollama condition is required
+```
+
+Older Compose releases defaulted it and accepted the file, so this surfaces
+as a working stack that suddenly refuses to come up after a Docker upgrade. Removing `depends_on` entirely also works and
 costs almost nothing here: both consumers reach Ollama over the bridge and
 tolerate it starting late.
 
