@@ -49,10 +49,17 @@ working. Widen the workflow, not the scopes.
 
 - Trigger Interval **Hours**, Hours Between Triggers `6`
 
-Runs at 00:00, 06:00, 12:00 and 18:00. Remember to toggle the workflow
-**Active** (top right) — an inactive workflow never fires regardless of how the
-trigger is configured, and that is the usual reason a scheduled job silently
-never runs.
+Runs at 00:00, 06:00, 12:00 and 18:00 — but only once the workflow is
+**published**. n8n 2.0 replaced the old Active/Inactive toggle with a
+**Publish** button (top right): edits autosave as a *draft*, and publishing is
+what makes a version live and schedulable. Saving alone does nothing for the
+schedule.
+
+An unpublished workflow never fires regardless of how the trigger is
+configured, and that is the usual reason a scheduled job silently never runs.
+It is invisible from the outside — a stale briefing page looks identical
+whether the schedule is off or the workflow is failing. `"active": false` in an
+exported JSON is the tell.
 
 **The trigger interval and both query windows must be changed together.** They
 are three separate settings that encode the same number, and n8n will not warn
