@@ -29,6 +29,20 @@ Both resolve to space-needle's LAN IP via `mushr-dns`:
 
 The full route table lives in [`Caddyfile`](../../services/mushr/Caddyfile). Bridge-networked services (radarr/sonarr/lidarr/bazarr/jackett, pupyrus, pawst, beszel, uptime, homepage) are reached by container name on `loft-proxy` (e.g. `reverse_proxy radarr:7878`). Host-network services (pawpcorn, howlr, transmission, slskd, snapweb) are reached via `host.docker.internal:<port>` thanks to the `extra_hosts: host.docker.internal:host-gateway` entry on `mushr`.
 
+### The one route that isn't a proxy
+
+`briefing.{$LOFT_DOMAIN}` is a `file_server`, not a `reverse_proxy` — it serves [sputnik](sputnik.md)'s briefing page from two read-only mounts: the tracked renderer at `services/sputnik/briefing-web`, and n8n's output at `/opt/sputnik/briefing`.
+
+The two mounts are **siblings inside the container** (`/srv/briefing` and `/srv/briefing-data`), and a `handle_path /data/*` block stitches them into one URL space. Nesting them the obvious way — mounting the data at `/srv/briefing/data` — does not work, and fails the *container*, not just the route:
+
+```
+create mountpoint for /srv/briefing/data mount: mkdirat ...: read-only file system
+```
+
+Docker mounts the parent read-only first, then has to create the child mountpoint inside it. Since mushr is the front door, that failure takes every route in the fleet down with it. The general rule: never mount anything inside a `:ro` bind mount unless the directory already exists in the source.
+
+It is also the only route carrying `basic_auth`. Everywhere else the application behind the proxy has its own login; static files have none, and this route serves summarised mail. There is deliberately **no** `http://briefing.space-needle` counterpart — basic auth over plain HTTP would put the password on the wire in cleartext. Keep it off the tunnel's public hostname list, like n8n.
+
 ### The `loft-proxy` bridge
 
 `loft-proxy` is declared `external: true` in this compose — it's pre-created by `setup.sh` so other services (pupyrus, pawst, stellarr's *arr, houstn's hub containers) can attach to it. Joining the bridge is how a service becomes reverse-proxyable.
@@ -52,6 +66,16 @@ Copy [`services/mushr/.env.example`](../../services/mushr/.env.example) to `serv
 | `LOFT_DOMAIN` | `loft.hsimah.com` — substituted into the Caddyfile as `{$LOFT_DOMAIN}` |
 | `CLOUDFLARE_API_TOKEN` | Used by the DNS-01 challenge to write `_acme-challenge` TXT records. Permissions: **Zone > Zone > Read** and **Zone > DNS > Edit** scoped to the loft.hsimah.com / hbla.ke / hsimah.com zones |
 | `TUNNEL_TOKEN` | `cloudflared`'s tunnel credential, generated when the tunnel is created in Cloudflare Zero Trust |
+| `BRIEFING_USER` | Username for `basic_auth` on the briefing route. Defaults to `loft` |
+| `BRIEFING_HASH` | bcrypt hash of that user's password — `sudo docker exec -it mushr caddy hash-password` (prompts, so it stays out of shell history). **Double every `$`** — see below. The plaintext also goes in `services/houstn/.env` so the Homepage tile can read the manifest |
+
+> **`$` in a `.env` value must be written `$$`.** Compose interpolates `.env` values, so a bcrypt hash like `$2a$14$xK9p…` is read as three variable references and each is substituted with a blank string. Caddy receives a mangled hash and rejects the correct password. The only warning is a line that is easy to lose in a rebuild's output:
+>
+> ```
+> WARN[0000] The "xK9p" variable is not set. Defaulting to a blank string.
+> ```
+>
+> Verify with `sudo docker exec mushr printenv BRIEFING_HASH` — it must print **single** dollars, matching what `hash-password` produced. This applies to any secret containing a literal `$`, not just this one.
 
 ### `dnsmasq.conf`
 
@@ -101,6 +125,13 @@ loft-ctl health mushr            # checks http://localhost:8880/config/
 
 # Validate Caddyfile before rebuilding
 sudo docker exec mushr caddy validate --config /etc/caddy/Caddyfile
+
+# ...but that validates against the RUNNING container's environment, so it
+# cannot see a variable you just added to .env. To check new values before
+# they reach the live proxy, validate in a throwaway container instead:
+sudo docker run --rm --env-file services/mushr/.env \
+  -v ./services/mushr/Caddyfile:/etc/caddy/Caddyfile:ro \
+  mushr-caddy:2.11.4 caddy validate --config /etc/caddy/Caddyfile
 
 # Hot reload Caddyfile (no container restart)
 sudo docker exec mushr caddy reload --config /etc/caddy/Caddyfile

@@ -24,6 +24,7 @@ Every page follows [`_template.md`](_template.md): Overview · Architecture · C
 | [pawst](services/pawst.md) | Static blogs `hbla.ke` and `hsimah.com` |
 | [pupyrus](services/pupyrus.md) | WordPress (+ MariaDB + Redis) |
 | [snoot](services/snoot.md) | Beszel agent on every host |
+| [sputnik](services/sputnik.md) | Local LLM — Ollama + Open WebUI + n8n, read-only Gmail/Calendar assistant |
 | [stellarr](services/stellarr.md) | *arr stack + Transmission + slskd, all behind NordVPN |
 
 ## Scripts

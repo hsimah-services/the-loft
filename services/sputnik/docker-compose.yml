@@ -1,0 +1,187 @@
+services:
+  # ── Engine profile ──────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:0.32.5
+    container_name: ollama
+    restart: unless-stopped
+    profiles:
+      - engine
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Bulk model weights live on /mammoth — a Q4 30B MoE is ~20 GB and the
+    # root disk also holds every other service's /opt config.
+    volumes:
+      - /mammoth/sputnik/models:/root/.ollama
+    # Loopback only. Ollama has NO authentication of any kind — anything that
+    # can reach 11434 can run inference, pull models, and delete them. It is
+    # deliberately absent from the Caddyfile; the only consumers are
+    # open-webui and n8n over the loft-proxy bridge (by container name), plus
+    # the host itself for `loft-ctl health` and CLI use.
+    ports:
+      - "127.0.0.1:11434:11434"
+    environment:
+      # Bind inside the container; the ports mapping above is the real boundary.
+      - OLLAMA_HOST=0.0.0.0
+      # Never evict the model. On CPU a cold load of a 20 GB MoE costs ~30-60s,
+      # which would be paid on every idle n8n cron tick with the 5m default.
+      - OLLAMA_KEEP_ALIVE=-1
+      # One model, one request at a time — parallelism just splits scarce cores
+      # and makes every request slower on a CPU-bound host.
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_FLASH_ATTENTION=1
+      # Agent turns carry tool schemas + mail bodies; the 4096 default truncates
+      # them silently. Raise only with RAM headroom — KV cache grows with this.
+      - OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH:-16384}
+    networks:
+      - loft-proxy
+
+  # ── Chat profile ────────────────────────────────────────────────────────────
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:0.11.0
+    container_name: open-webui
+    restart: unless-stopped
+    profiles:
+      - chat
+    # required:false because ollama lives in a different profile. The short
+    # form (`depends_on: [ollama]`) makes it a hard reference, so validating or
+    # running this profile alone fails with "depends on undefined service".
+    # This keeps the start ordering when engine runs on the same host, and is a
+    # no-op when it does not — which is the actual relationship: these consume
+    # ollama over the bridge and tolerate it arriving late or living elsewhere.
+    depends_on:
+      ollama:
+        # condition is mandatory in the long form — Compose rejects the file
+        # with "depends_on.ollama condition is required" without it. Older
+        # versions defaulted it silently.
+        condition: service_started
+        required: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    env_file: .env
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_AUTH=true
+      - WEBUI_URL=https://sputnik.${LOFT_DOMAIN}
+    volumes:
+      - /opt/sputnik/open-webui:/app/backend/data
+    # Needs to resolve n8n's own external hostname when calling it as a tool
+    # server; see the space-needle container DNS quirk in docs/hosts.
+    dns:
+      - 192.168.86.28
+    networks:
+      - loft-proxy
+
+  # ── Agent profile ───────────────────────────────────────────────────────────
+  n8n:
+    # Held on the 2.32 line — 2.33 shipped the same day and is not yet the
+    # GitHub "latest release". n8n encrypts stored credentials with
+    # N8N_ENCRYPTION_KEY; back that key up before any major-version bump.
+    image: n8nio/n8n:2.32.7
+    container_name: n8n
+    restart: unless-stopped
+    profiles:
+      - agent
+    # required:false because ollama lives in a different profile. The short
+    # form (`depends_on: [ollama]`) makes it a hard reference, so validating or
+    # running this profile alone fails with "depends on undefined service".
+    # This keeps the start ordering when engine runs on the same host, and is a
+    # no-op when it does not — which is the actual relationship: these consume
+    # ollama over the bridge and tolerate it arriving late or living elsewhere.
+    depends_on:
+      ollama:
+        # condition is mandatory in the long form — Compose rejects the file
+        # with "depends_on.ollama condition is required" without it. Older
+        # versions defaulted it silently.
+        condition: service_started
+        required: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    env_file: .env
+    # n8n's image runs as uid 1000; /opt is owned littledog:pack-member (1003).
+    user: "1003:1003"
+    environment:
+      # The image is built around the "node" user (uid 1000) and assumes its
+      # home is writable. uid 1003 has no /etc/passwd entry here, so Node's
+      # os.homedir() cannot resolve it, and 1003 cannot write /home/node.
+      #
+      # Mounting the whole home (see volumes) rather than just .n8n underneath
+      # it is what makes this work: n8n writes .n8n, but other code reaches for
+      # /home/node/.cache and similar directly, and a mount one level down
+      # leaves those unwritable. Fixing them one EACCES at a time does not
+      # converge — the home itself has to be the mount.
+      #
+      # N8N_USER_FOLDER is explicit so the data path never depends on $HOME
+      # resolving for an unknown uid: n8n appends ".n8n" → /home/node/.n8n.
+      - N8N_USER_FOLDER=/home/node
+      - HOME=/home/node
+      - N8N_HOST=n8n.${LOFT_DOMAIN}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      # Both must be the public HTTPS origin — n8n builds the Google OAuth
+      # redirect URI from these, and Google rejects http:// and bare hostnames.
+      # N8N_WEBHOOK_URL replaces the deprecated WEBHOOK_URL and covers both the
+      # test and production webhook base URLs.
+      - N8N_EDITOR_BASE_URL=https://n8n.${LOFT_DOMAIN}
+      - N8N_WEBHOOK_URL=https://n8n.${LOFT_DOMAIN}
+      - GENERIC_TIMEZONE=${TZ:-America/Los_Angeles}
+      - TZ=${TZ:-America/Los_Angeles}
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_PERSONALIZATION_SURVEY_ENABLED=false
+      # ── Defaults pinned ahead of n8n changing them ────────────────────────
+      # n8n warns at startup about each of these because a future version
+      # ships a different default. Setting them explicitly makes the next
+      # major bump a no-op rather than a silent behaviour change, and keeps
+      # the startup log quiet enough that a NEW warning is worth reading.
+      #
+      # No community nodes are installed here, so adopt the stricter default
+      # early rather than keeping the door open.
+      - N8N_UNVERIFIED_PACKAGES_ENABLED=false
+      # Kept at today's 300s rather than the future 60s. The briefing's two
+      # Code nodes are string munging that finishes in milliseconds, so 60
+      # would be ample — but the LLM call is minutes long on CPU, and pinning
+      # the current value means an upgrade can never turn a slow run into a
+      # killed one. Lower it if a runner task ever hangs.
+      - N8N_RUNNERS_TASK_TIMEOUT=300
+      # The Compression node is unused by the briefing workflow, so adopt the
+      # future (smaller) limits now — they only cap unzip work we never do.
+      - N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES=268435456
+      - N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES=1000
+      # The file nodes refuse any path outside an allowlist — recent releases
+      # default it to /home/node/.n8n-files — and fail with a bare
+      # "Access to the file is not allowed". The briefing drop point has to be
+      # named here or the workflow's last node cannot write. Semicolon-
+      # separated if this ever needs more than one path.
+      #
+      # N8N_BLOCK_FILE_ACCESS_TO_N8N_FILES stays at its default of true, which
+      # is why /briefing is a mount of its own rather than a directory under
+      # /home/node: the .n8n tree holds the encrypted Google credential and
+      # should stay unreachable from a workflow node.
+      - N8N_RESTRICT_FILE_ACCESS_TO=/briefing
+    # The whole home, not just .n8n — see the environment comment above.
+    # n8n's database therefore lands at /opt/sputnik/n8n/.n8n/ on the host.
+    #
+    # /briefing is the drop point for the briefing workflow's output: the
+    # Read/Write Files node writes latest.json here and mushr serves it
+    # read-only. Owned littledog:pack-member (1003) by setup.sh, which is the
+    # uid this container runs as.
+    volumes:
+      - /opt/sputnik/n8n:/home/node
+      - /opt/sputnik/briefing:/briefing
+    dns:
+      - 192.168.86.28
+    networks:
+      - loft-proxy
+
+networks:
+  loft-proxy:
+    external: true

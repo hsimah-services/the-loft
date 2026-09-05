@@ -24,6 +24,16 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+      # Sputnik's briefing page: a tracked renderer, and the data n8n writes
+      # four times a day. Caddy only ever reads both.
+      #
+      # These are siblings, NOT nested. Mounting the data at
+      # /srv/briefing/data would need Docker to mkdir a mountpoint inside a
+      # mount it has just made read-only, which fails the container:
+      #   create mountpoint for /srv/briefing/data mount: ... read-only file system
+      # The Caddyfile stitches them back together with handle_path /data/*.
+      - ../sputnik/briefing-web:/srv/briefing:ro
+      - /opt/sputnik/briefing:/srv/briefing-data:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

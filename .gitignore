@@ -1,2 +1,13 @@
 **/.env
 .deployed-version
+
+# Homepage writes these into its bind-mounted config directory on first run:
+# scaffolding for features the fleet does not use, plus a growing log dir.
+# The five tracked YAML files are the real config; everything else here is
+# generated, so ignore by exception rather than listing each new file.
+services/houstn/homepage-config/*
+!services/houstn/homepage-config/bookmarks.yaml
+!services/houstn/homepage-config/docker.yaml
+!services/houstn/homepage-config/services.yaml
+!services/houstn/homepage-config/settings.yaml
+!services/houstn/homepage-config/widgets.yaml

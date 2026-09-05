@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sputnik — Briefing</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 1.5rem 1rem 3rem;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 52rem; margin: 0 auto; }
+  header {
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: 0.75rem; margin-bottom: 1.25rem;
+  }
+  h1 { font-size: 1.5rem; margin: 0; letter-spacing: -0.01em; }
+  h1 span { color: var(--accent); }
+  #generated { color: var(--muted); font-size: 0.875rem; }
+  #stale { color: var(--warn); font-size: 0.875rem; display: none; }
+  .counts { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+  .count {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 0.5rem; padding: 0.5rem 0.9rem;
+  }
+  .count b { font-size: 1.25rem; font-weight: 600; display: block; }
+  .count span { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  #report {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 0.75rem; padding: 1.25rem;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+    font: inherit; margin: 0;
+  }
+  #error { color: var(--warn); }
+  footer { color: var(--muted); font-size: 0.8125rem; margin-top: 1.5rem; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Sputnik <span>briefing</span></h1>
+    <span id="generated"></span>
+    <span id="stale">stale — the schedule may not have run</span>
+  </header>
+
+  <div class="counts" id="counts"></div>
+  <pre id="report">Loading…</pre>
+
+  <footer>
+    Written by the <code>briefing</code> workflow in n8n, four times a day.
+    The manifest at the end of the report is built from the Gmail API response
+    and never passes through the model — check it against the summary to spot
+    an omitted or invented item.
+  </footer>
+</main>
+
+<script>
+// The report is attacker-influenced text: every line of it derives from mail
+// bodies that anyone can write to. It is assigned with textContent, never
+// innerHTML, so markup in an email is displayed rather than rendered.
+const STALE_AFTER_MS = 8 * 60 * 60 * 1000; // schedule is 6-hourly; flag a missed run
+
+function count(value, label) {
+  const el = document.createElement("div");
+  el.className = "count";
+  const b = document.createElement("b");
+  b.textContent = value ?? "—";
+  const s = document.createElement("span");
+  s.textContent = label;
+  el.append(b, s);
+  return el;
+}
+
+fetch("data/latest.json", { cache: "no-store" })
+  .then((r) => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  })
+  .then((d) => {
+    document.getElementById("report").textContent = d.report || "(empty report)";
+
+    const counts = document.getElementById("counts");
+    counts.append(count(d.mailCount, "messages"), count(d.eventCount, "events"));
+
+    if (d.generatedAt) {
+      const when = new Date(d.generatedAt);
+      document.getElementById("generated").textContent = when.toLocaleString();
+      document.title = `Sputnik — briefing ${when.toLocaleDateString()}`;
+      if (Date.now() - when.getTime() > STALE_AFTER_MS) {
+        document.getElementById("stale").style.display = "inline";
+      }
+    }
+  })
+  .catch((e) => {
+    const el = document.getElementById("report");
+    el.id = "error";
+    el.textContent =
+      `Could not load data/latest.json — ${e.message}.\n\n` +
+      "If this is a 404 the workflow has not written a briefing yet: run it " +
+      "manually in n8n (Executions → the briefing workflow → Test workflow).";
+  });
+</script>
+</body>
+</html>

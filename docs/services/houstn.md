@@ -42,6 +42,7 @@ The three hub containers join the [`loft-proxy`](mushr.md) bridge so [mushr](mus
 | `HOMEPAGE_VAR_TRANSMISSION_USERNAME` / `_PASSWORD` | space-needle | Blank if no auth set in Transmission |
 | `HOMEPAGE_VAR_SLSKD_API_KEY` | space-needle | slskd → Settings → Security → API Keys |
 | `HOMEPAGE_VAR_UPTIME_KUMA_SLUG` | space-needle | Public Status Page slug for the Uptime widget |
+| `HOMEPAGE_VAR_BRIEFING_USER` / `_PASSWORD` | space-needle | Plaintext pair matching `BRIEFING_USER`/`BRIEFING_HASH` in `services/mushr/.env`, so the Briefing tile can read sputnik's manifest through `basic_auth` |
 
 Homepage substitutes `{{HOMEPAGE_VAR_*}}` placeholders in `homepage-config/*.yaml` at startup, so secrets stay out of the version-controlled YAML.
 
@@ -51,8 +52,8 @@ Homepage substitutes `{{HOMEPAGE_VAR_*}}` placeholders in `homepage-config/*.yam
 
 | File | Purpose |
 |------|---------|
-| `settings.yaml` | Theme, layout (group → columns), `useEqualHeights` |
-| `services.yaml` | Service groups (Media, Downloads, Audio, Monitoring, Infrastructure, Web), each with `widget:` blocks |
+| `settings.yaml` | Theme, layout (group → tab, columns), `useEqualHeights` |
+| `services.yaml` | Service groups (Media, Downloads, Audio, Monitoring, Infrastructure, Web, Assistant), each with `widget:` blocks |
 | `widgets.yaml` | Top bar — greeting, datetime, four Glances widgets (one per host) |
 | `bookmarks.yaml` | Bookmark groups (currently empty) |
 | `docker.yaml` | Docker socket reference — `my-docker: socket: /var/run/docker.sock` |
@@ -93,6 +94,17 @@ loft-ctl health houstn
 ### Editing the Homepage dashboard
 
 `services/houstn/homepage-config/*.yaml` is bind-mounted, so Homepage hot-reloads on save when edited in-repo on space-needle. For changes made elsewhere, commit and `loft-ctl update houstn` (or `loft-ctl rebuild houstn` for a clean reload).
+
+### Tabs
+
+The dashboard is split into two tabs by the `tab:` field on each layout group in `settings.yaml`:
+
+| Tab | Groups | Why |
+|-----|--------|-----|
+| `Loft` | Fleet, Media, Downloads, Audio, Monitoring, Infrastructure, Web | The fleet dashboard, unchanged — it is the first tab, so it stays the landing view |
+| `Briefing` | Assistant | [sputnik](sputnik.md)'s inbox digest, plus the n8n and Open WebUI tiles. Off the main dashboard on purpose — it summarises personal mail |
+
+Two things to know before adding a group. **Tabs are all-or-nothing**: they activate as soon as any group declares `tab:`, and a group without one disappears from the UI — so every group in the layout block needs the field. And each tab is directly addressable by anchor, lowercased: `https://homepage.loft.hsimah.com/#briefing`.
 
 ### Adding a new fleet-wide agent/exporter
 
