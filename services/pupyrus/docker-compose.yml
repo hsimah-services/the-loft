@@ -61,6 +61,7 @@ services:
         define('WP_REDIS_PORT', 6379);
         define('WP_CACHE', true);
         define('GRAPHQL_JWT_AUTH_SECRET_KEY', '${GRAPHQL_JWT_AUTH_SECRET_KEY}');
+        define('FS_METHOD', 'direct');
     volumes:
       - /opt/pupyrus/html:/var/www/html
     restart: unless-stopped

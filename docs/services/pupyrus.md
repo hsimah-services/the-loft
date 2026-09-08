@@ -25,6 +25,7 @@ The build is set up to serve a headless GraphQL endpoint alongside the standard 
 
 - `WP_REDIS_HOST=redis` / `WP_REDIS_PORT=6379` / `WP_CACHE=true` — connects WordPress to the Redis Object Cache plugin
 - `GRAPHQL_JWT_AUTH_SECRET_KEY=${GRAPHQL_JWT_AUTH_SECRET_KEY}` — read by the [WPGraphQL JWT Authentication](https://github.com/wp-graphql/wp-graphql-jwt-authentication) plugin
+- `FS_METHOD=direct` — WordPress writes plugin/theme files itself instead of prompting for FTP credentials. Only safe because `/opt/pupyrus/html` is owned by the same user (`www-data`, UID 33) the `wordpress` container runs as — see the permissions note below.
 
 The plugins themselves are installed inside `/opt/pupyrus/html/wp-content/plugins/` and activated through wp-admin, not the compose.
 
@@ -171,6 +172,20 @@ sudo chown -R 33:33 /opt/pupyrus/html    # www-data inside the wordpress image
 # because the WordPress image runs as www-data (UID 33). If you reset the
 # whole repo with chown -R littledog:pack-member, expect to redo this step.
 ```
+
+If `/var/www/html/wp-content/upgrade` doesn't exist yet (fresh install, or a
+plugin update that never got the chance to create it), a plugin install/update
+can fail before WordPress even gets to the permission check:
+
+```bash
+sudo docker exec -u root pupyrus mkdir -p /var/www/html/wp-content/upgrade
+sudo docker exec -u root pupyrus chown -R www-data:www-data /var/www/html/wp-content
+```
+
+Wrong ownership here is also what makes WordPress fall back to prompting for
+FTP credentials (or silently no-op) instead of writing plugin files directly —
+`FS_METHOD=direct` in the compose file's `WORDPRESS_CONFIG_EXTRA` only works
+once ownership is correct; it doesn't fix a permission problem by itself.
 
 ### `pupyrus-db` won't start — InnoDB corruption / version mismatch
 
